@@ -2,8 +2,12 @@ import { useState } from "react"
 import { useCustomer, usePricingTable } from "autumn-js/react"
 import { toast } from "sonner"
 
+type Product = NonNullable<
+  ReturnType<typeof usePricingTable>["products"]
+>[number]
+type ProductItem = Product["items"][number]
+
 import { cn } from "@/lib/utils"
-import { PLAN_LIMITS, type PlanLimits } from "@/lib/billing/plans"
 import {
   Card,
   CardContent,
@@ -29,79 +33,122 @@ import {
   FileIcon,
   PulseIcon,
   ChartLineIcon,
-  ClockIcon,
 } from "@/components/icons"
 import type { IconComponent } from "@/components/icons"
 
-const PLAN_META: Record<
-  string,
-  { price: string; interval?: string; description: string }
-> = {
-  free: { price: "$0", description: "For hobby projects and evaluation" },
-  pro: {
-    price: "$49",
-    interval: "/mo",
-    description: "For production workloads",
-  },
-  enterprise: {
-    price: "Custom",
-    description: "For teams with advanced needs",
-  },
+const FEATURE_ICONS: Record<string, IconComponent> = {
+  logs: FileIcon,
+  traces: PulseIcon,
+  metrics: ChartLineIcon,
 }
 
-function formatLimit(value: number): string {
-  if (!isFinite(value)) return "Unlimited"
-  return `${value} GB`
+function getProductPrice(product: Product): {
+  price: string
+  interval?: string
+} {
+  if (product.properties.is_free) return { price: "$0" }
+  const baseItem = product.items.find(
+    (i) => !i.feature_id && i.price != null,
+  )
+  if (baseItem?.price != null) {
+    return {
+      price: `$${baseItem.price}`,
+      interval: baseItem.interval ? `/${baseItem.interval}` : undefined,
+    }
+  }
+  return { price: product.display?.name ?? product.name }
 }
 
-const PLAN_FEATURES: {
-  icon: IconComponent
-  label: string
-  getValue: (limits: PlanLimits) => string
-}[] = [
-  { icon: FileIcon, label: "Logs", getValue: (l) => formatLimit(l.logsGB) },
-  {
-    icon: PulseIcon,
-    label: "Traces",
-    getValue: (l) => formatLimit(l.tracesGB),
-  },
-  {
-    icon: ChartLineIcon,
-    label: "Metrics",
-    getValue: (l) => formatLimit(l.metricsGB),
-  },
-  {
-    icon: ClockIcon,
-    label: "Retention",
-    getValue: (l) => `${l.retentionDays}d`,
-  },
-]
+function formatIncludedUsage(item: ProductItem): string {
+  if (item.included_usage === "inf") return "Unlimited"
+  if (item.included_usage != null) return `${item.included_usage} GB`
+  return ""
+}
 
-function formatCurrency(amountCents: number, currency: string): string {
+function normalizeDetailText(text: string): string {
+  return text.replace(/\bper\s+(Logs|Traces|Metrics)\b/i, "per GB")
+}
+
+function getFeatureRows(product: Product) {
+  return product.items
+    .filter((item) => item.feature_id)
+    .map((item) => ({
+      featureId: item.feature_id ?? "",
+      label: item.feature?.name ?? item.feature_id ?? "",
+      value: formatIncludedUsage(item),
+      detail: item.display?.secondary_text
+        ? normalizeDetailText(item.display.secondary_text)
+        : undefined,
+    }))
+}
+
+function getButtonConfig(product: Product) {
+  const { scenario, properties } = product
+
+  if (product.display?.button_text) {
+    const disabled = scenario === "active" && !properties.updateable
+    return {
+      label: product.display.button_text,
+      variant: (scenario === "active" ? "secondary" : "default") as
+        | "default"
+        | "secondary"
+        | "outline",
+      disabled,
+    }
+  }
+
+  if (properties.has_trial) {
+    return { label: "Start trial", variant: "default" as const, disabled: false }
+  }
+
+  switch (scenario) {
+    case "active":
+      return {
+        label: "Current plan",
+        variant: "secondary" as const,
+        disabled: true,
+      }
+    case "scheduled":
+      return {
+        label: "Scheduled",
+        variant: "secondary" as const,
+        disabled: true,
+      }
+    case "upgrade":
+      return {
+        label: "Upgrade",
+        variant: "default" as const,
+        disabled: false,
+      }
+    case "downgrade":
+      return {
+        label: "Downgrade",
+        variant: "outline" as const,
+        disabled: false,
+      }
+    case "cancel":
+      return {
+        label: "Resubscribe",
+        variant: "outline" as const,
+        disabled: false,
+      }
+    case "new":
+    case "renew":
+    default:
+      return {
+        label: "Subscribe",
+        variant: "outline" as const,
+        disabled: false,
+      }
+  }
+}
+
+function formatCurrency(amount: number, currency: string): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: currency.toUpperCase(),
     minimumFractionDigits: 2,
-  }).format(amountCents / 100)
-}
-
-function getButtonConfig(scenario: string | undefined) {
-  switch (scenario) {
-    case "active":
-      return { label: "Current plan", variant: "secondary" as const, disabled: true }
-    case "scheduled":
-      return { label: "Scheduled", variant: "secondary" as const, disabled: true }
-    case "upgrade":
-      return { label: "Upgrade", variant: "default" as const, disabled: false }
-    case "downgrade":
-      return { label: "Downgrade", variant: "outline" as const, disabled: false }
-    case "cancel":
-      return { label: "Resubscribe", variant: "outline" as const, disabled: false }
-    case "new":
-    case "renew":
-    default:
-      return { label: "Subscribe", variant: "outline" as const, disabled: false }
-  }
+  }).format(amount)
 }
 
 interface CheckoutPreview {
@@ -124,8 +171,8 @@ export function PricingCards() {
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, i) => (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {Array.from({ length: 2 }).map((_, i) => (
           <Card key={i}>
             <CardHeader>
               <Skeleton className="h-3 w-16" />
@@ -133,7 +180,7 @@ export function PricingCards() {
               <Skeleton className="mt-1 h-3 w-32" />
             </CardHeader>
             <CardContent className="space-y-3">
-              {Array.from({ length: 4 }).map((_, j) => (
+              {Array.from({ length: 3 }).map((_, j) => (
                 <Skeleton key={j} className="h-4 w-full" />
               ))}
             </CardContent>
@@ -213,20 +260,24 @@ export function PricingCards() {
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div
+        className={cn(
+          "grid grid-cols-1 gap-4",
+          products.length === 2 && "sm:grid-cols-2",
+          products.length >= 3 && "sm:grid-cols-3",
+        )}
+      >
         {products.map((product) => {
           const isActive = product.scenario === "active"
-          const limits = PLAN_LIMITS[product.id]
-          const meta = PLAN_META[product.id]
-          const btn = getButtonConfig(product.scenario)
+          const { price, interval } = getProductPrice(product)
+          const features = getFeatureRows(product)
+          const btn = getButtonConfig(product)
           const trialAvailable = product.free_trial?.trial_available
 
           return (
             <Card
               key={product.id}
-              className={cn(
-                isActive && "ring-primary/40",
-              )}
+              className={cn(isActive && "ring-primary/40")}
             >
               <CardHeader>
                 <div className="flex items-center gap-2">
@@ -245,17 +296,17 @@ export function PricingCards() {
                   )}
                 </div>
                 <div className="mt-1 flex items-baseline gap-0.5">
-                  <span className="text-lg font-medium">
-                    {meta?.price ?? product.display?.name ?? product.name}
-                  </span>
-                  {meta?.interval && (
+                  <span className="text-lg font-medium">{price}</span>
+                  {interval && (
                     <span className="text-muted-foreground text-xs">
-                      {meta.interval}
+                      {interval}
                     </span>
                   )}
                 </div>
-                {meta?.description && (
-                  <CardDescription>{meta.description}</CardDescription>
+                {product.display?.description && (
+                  <CardDescription>
+                    {product.display.description}
+                  </CardDescription>
                 )}
                 {product.display?.everything_from && (
                   <p className="text-muted-foreground text-xs">
@@ -264,24 +315,31 @@ export function PricingCards() {
                 )}
               </CardHeader>
 
-              {limits && (
+              {features.length > 0 && (
                 <CardContent>
                   <Separator className="mb-3" />
                   <div className="space-y-2">
-                    {PLAN_FEATURES.map((feature) => {
-                      const Icon = feature.icon
+                    {features.map((feature) => {
+                      const Icon = FEATURE_ICONS[feature.featureId]
                       return (
                         <div
-                          key={feature.label}
+                          key={feature.featureId}
                           className="flex items-center justify-between"
                         >
                           <div className="text-muted-foreground flex items-center gap-2">
-                            <Icon className="size-3.5" />
+                            {Icon && <Icon className="size-3.5" />}
                             <span>{feature.label}</span>
                           </div>
-                          <span className="tabular-nums">
-                            {feature.getValue(limits)}
-                          </span>
+                          <div className="text-right">
+                            <span className="tabular-nums">
+                              {feature.value}
+                            </span>
+                            {feature.detail && (
+                              <p className="text-muted-foreground text-[10px]">
+                                {feature.detail}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       )
                     })}
@@ -289,7 +347,7 @@ export function PricingCards() {
                 </CardContent>
               )}
 
-              <CardFooter>
+              <CardFooter className="mt-auto">
                 <Button
                   variant={btn.variant}
                   disabled={btn.disabled || loadingProductId === product.id}

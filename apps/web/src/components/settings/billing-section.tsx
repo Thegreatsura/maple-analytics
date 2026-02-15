@@ -83,21 +83,17 @@ export function BillingSection() {
         })
         .render()}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Plans</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isCustomerLoading ? (
-            <div className="space-y-4">
-              <Skeleton className="h-32 w-full" />
-              <Skeleton className="h-32 w-full" />
-            </div>
-          ) : (
-            <PricingCards />
-          )}
-        </CardContent>
-      </Card>
+      <div className="space-y-3">
+        <h3 className="text-sm font-medium">Plans</h3>
+        {isCustomerLoading ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Skeleton className="h-48 w-full rounded-lg" />
+            <Skeleton className="h-48 w-full rounded-lg" />
+          </div>
+        ) : (
+          <PricingCards />
+        )}
+      </div>
     </div>
   )
 }
