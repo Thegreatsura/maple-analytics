@@ -6,7 +6,7 @@ use std::time::Duration;
 use axum::body::Bytes;
 use axum::extract::DefaultBodyLimit;
 use axum::extract::State;
-use axum::http::header::{AUTHORIZATION, CONTENT_ENCODING, CONTENT_TYPE};
+use axum::http::header::{HeaderName, AUTHORIZATION, CONTENT_ENCODING, CONTENT_TYPE};
 use axum::http::{HeaderMap, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -27,6 +27,7 @@ use prost::Message;
 use reqwest::Client;
 use serde::Serialize;
 use sha2::Sha256;
+use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info};
 
 const INGEST_SOURCE: &str = "maple-ingest-gateway";
@@ -271,11 +272,22 @@ async fn main() {
         config: config.clone(),
     });
 
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers([
+            AUTHORIZATION,
+            CONTENT_TYPE,
+            CONTENT_ENCODING,
+            HeaderName::from_static("x-maple-ingest-key"),
+        ]);
+
     let app = Router::new()
         .route("/health", get(health))
         .route("/v1/traces", post(handle_traces))
         .route("/v1/logs", post(handle_logs))
         .route("/v1/metrics", post(handle_metrics))
+        .layer(cors)
         .layer(DefaultBodyLimit::max(config.max_request_body_bytes))
         .with_state(state);
 
