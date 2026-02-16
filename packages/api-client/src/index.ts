@@ -9,6 +9,9 @@ import type {
   DashboardDocument,
   DashboardsListResponse,
   IngestKeysResponse,
+  ScrapeTargetDeleteResponse,
+  ScrapeTargetResponse,
+  ScrapeTargetsListResponse,
   SelfHostedLoginResponse,
 } from "@maple/domain/http"
 import * as Atom from "@effect-atom/atom/Atom"
@@ -48,6 +51,29 @@ export interface DashboardDeleteInput {
 
 export interface SelfHostedLoginInput {
   readonly password: string
+}
+
+export interface CreateScrapeTargetInput {
+  readonly name: string
+  readonly url: string
+  readonly scrapeIntervalSeconds?: number
+  readonly labelsJson?: string | null
+  readonly authType?: string
+  readonly enabled?: boolean
+}
+
+export interface UpdateScrapeTargetInput {
+  readonly targetId: string
+  readonly name?: string
+  readonly url?: string
+  readonly scrapeIntervalSeconds?: number
+  readonly labelsJson?: string | null
+  readonly authType?: string
+  readonly enabled?: boolean
+}
+
+export interface DeleteScrapeTargetInput {
+  readonly targetId: string
 }
 
 const runAtomMutation = <Arg, A, E>(
@@ -106,7 +132,7 @@ export function createMapleApiClient(config: MapleApiClientConfig) {
   const queryEngineExecuteMutation = MapleApiAtomClient.mutation("queryEngine", "execute")
 
   const requestJson = async <T>(
-    method: "GET" | "POST" | "PUT" | "DELETE",
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     path: string,
     body?: unknown,
   ): Promise<T> => {
@@ -174,6 +200,22 @@ export function createMapleApiClient(config: MapleApiClientConfig) {
     return requestJson<CurrentTenant.TenantSchema>("GET", "/api/auth/session")
   }
 
+  const listScrapeTargets = (): Promise<ScrapeTargetsListResponse> => {
+    return requestJson<ScrapeTargetsListResponse>("GET", "/api/scrape-targets")
+  }
+
+  const createScrapeTarget = (input: CreateScrapeTargetInput): Promise<ScrapeTargetResponse> => {
+    return requestJson<ScrapeTargetResponse>("POST", "/api/scrape-targets", input)
+  }
+
+  const updateScrapeTarget = ({ targetId, ...body }: UpdateScrapeTargetInput): Promise<ScrapeTargetResponse> => {
+    return requestJson<ScrapeTargetResponse>("PATCH", `/api/scrape-targets/${encodeURIComponent(targetId)}`, body)
+  }
+
+  const deleteScrapeTarget = ({ targetId }: DeleteScrapeTargetInput): Promise<ScrapeTargetDeleteResponse> => {
+    return requestJson<ScrapeTargetDeleteResponse>("DELETE", `/api/scrape-targets/${encodeURIComponent(targetId)}`)
+  }
+
   return {
     queryTinybird,
     executeQueryEngine,
@@ -185,5 +227,9 @@ export function createMapleApiClient(config: MapleApiClientConfig) {
     rerollPrivateIngestKey,
     loginSelfHosted,
     getCurrentSession,
+    listScrapeTargets,
+    createScrapeTarget,
+    updateScrapeTarget,
+    deleteScrapeTarget,
   }
 }

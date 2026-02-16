@@ -12,6 +12,7 @@ import { DashboardPersistenceService } from "./services/DashboardPersistenceServ
 import { Env } from "./services/Env"
 import { OrgIngestKeysService } from "./services/OrgIngestKeysService"
 import { QueryEngineService } from "./services/QueryEngineService"
+import { ScrapeTargetsService } from "./services/ScrapeTargetsService"
 import { TinybirdService } from "./services/TinybirdService"
 import { AuthService } from "./services/AuthService"
 
@@ -28,7 +29,7 @@ const AllRoutes = Layer.mergeAll(HttpApiRoutes, HealthRouter, DocsRoute, AutumnR
   Layer.provideMerge(
     HttpLayerRouter.cors({
       allowedOrigins: ["*"],
-      allowedMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      allowedMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: ["*"],
       exposedHeaders: [],
     }),
@@ -42,6 +43,7 @@ const MainLive = Layer.mergeAll(
   AuthService.Default,
   DashboardPersistenceService.Live,
   OrgIngestKeysService.Live,
+  ScrapeTargetsService.Live,
 )
 
 const mcpPort = await ManagedRuntime.make(Env.Default).runPromise(

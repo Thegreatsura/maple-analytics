@@ -3,6 +3,8 @@ import { AuthApiGroup, AuthPublicApiGroup } from "./auth"
 import { DashboardsApiGroup } from "./dashboards"
 import { IngestKeysApiGroup } from "./ingest-keys"
 import { QueryEngineApiGroup } from "./query-engine"
+import { ScrapeTargetsApiGroup } from "./scrape-targets"
+import { ServiceDiscoveryApiGroup } from "./service-discovery"
 import { TinybirdApiGroup } from "./tinybird"
 
 export class MapleApi extends HttpApi.make("MapleApi")
@@ -11,6 +13,8 @@ export class MapleApi extends HttpApi.make("MapleApi")
   .add(DashboardsApiGroup)
   .add(IngestKeysApiGroup)
   .add(QueryEngineApiGroup)
+  .add(ScrapeTargetsApiGroup)
+  .add(ServiceDiscoveryApiGroup)
   .add(TinybirdApiGroup)
   .annotateContext(
     OpenApi.annotations({

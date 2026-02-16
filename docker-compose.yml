@@ -53,3 +53,10 @@ services:
       - "4318:4318"
       - "13133:13133"
     env_file: .env
+    environment:
+      SD_API_HOST: api
+      SD_API_PORT: 3472
+      SD_INTERNAL_TOKEN: ${SD_INTERNAL_TOKEN:-maple-sd-dev-token}
+    depends_on:
+      api:
+        condition: service_healthy

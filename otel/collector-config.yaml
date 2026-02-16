@@ -9,6 +9,16 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
 
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'maple-managed-scrape'
+          http_sd_configs:
+            - url: 'http://${env:SD_API_HOST}:${env:SD_API_PORT}/api/internal/sd/prometheus'
+              authorization:
+                credentials: '${env:SD_INTERNAL_TOKEN}'
+              refresh_interval: 30s
+
 processors:
   batch:
     timeout: 1s
@@ -19,6 +29,19 @@ processors:
     check_interval: 1s
     limit_mib: 512
     spike_limit_mib: 128
+
+  groupbyattrs/prometheus:
+    keys:
+      - maple_org_id
+
+  resource/prometheus:
+    attributes:
+      - key: maple_ingest_source
+        value: "prometheus-scrape"
+        action: upsert
+      - key: maple_ingest_key_type
+        value: "internal"
+        action: upsert
 
 exporters:
   tinybird:
@@ -68,6 +91,11 @@ service:
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
+      exporters: [tinybird]
+
+    metrics/prometheus:
+      receivers: [prometheus]
+      processors: [memory_limiter, groupbyattrs/prometheus, resource/prometheus, batch]
       exporters: [tinybird]
 
   telemetry:

@@ -35,6 +35,7 @@ function AutumnProviderWithClerk({ children }: { children: React.ReactNode }) {
   const { getToken } = useAuth()
   return (
     <AutumnProvider
+      includeCredentials={false}
       backendUrl={apiBaseUrl}
       getBearerToken={() => getToken().then((t) => t ?? "")}
     >

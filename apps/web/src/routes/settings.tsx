@@ -44,9 +44,10 @@ import { getMapleAuthHeaders } from "@/lib/services/common/auth-headers"
 import { ingestUrl } from "@/lib/services/common/ingest-url"
 import { isClerkAuthEnabled } from "@/lib/services/common/auth-mode"
 import { BillingSection } from "@/components/settings/billing-section"
+import { ScrapeTargetsSection } from "@/components/settings/scrape-targets-section"
 
 const settingsSearchSchema = z.object({
-  tab: z.enum(["general", "billing"]).optional().default("general"),
+  tab: z.enum(["general", "connectors", "billing"]).optional().default("general"),
 })
 
 export const Route = createFileRoute("/settings")({
@@ -444,22 +445,54 @@ function SettingsPage() {
         <Tabs
           value={search.tab}
           onValueChange={(tab) =>
-            navigate({ search: { tab: tab as "general" | "billing" } })
+            navigate({ search: { tab: tab as "general" | "connectors" | "billing" } })
           }
         >
           <TabsList variant="line">
             <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="connectors">Connectors</TabsTrigger>
             <TabsTrigger value="billing">Usage & Billing</TabsTrigger>
           </TabsList>
           <TabsContent value="general" className="pt-4">
             <GeneralSettings {...generalSettingsProps} />
+          </TabsContent>
+          <TabsContent value="connectors" className="pt-4">
+            <div className="max-w-2xl space-y-6">
+              <p className="text-muted-foreground text-sm">
+                Connect external data sources to ingest metrics alongside your
+                OpenTelemetry data.
+              </p>
+              <ScrapeTargetsSection />
+            </div>
           </TabsContent>
           <TabsContent value="billing" className="pt-4">
             <BillingSection />
           </TabsContent>
         </Tabs>
       ) : (
-        <GeneralSettings {...generalSettingsProps} />
+        <Tabs
+          value={search.tab}
+          onValueChange={(tab) =>
+            navigate({ search: { tab: tab as "general" | "connectors" } })
+          }
+        >
+          <TabsList variant="line">
+            <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="connectors">Connectors</TabsTrigger>
+          </TabsList>
+          <TabsContent value="general" className="pt-4">
+            <GeneralSettings {...generalSettingsProps} />
+          </TabsContent>
+          <TabsContent value="connectors" className="pt-4">
+            <div className="max-w-2xl space-y-6">
+              <p className="text-muted-foreground text-sm">
+                Connect external data sources to ingest metrics alongside your
+                OpenTelemetry data.
+              </p>
+              <ScrapeTargetsSection />
+            </div>
+          </TabsContent>
+        </Tabs>
       )}
 
       <AlertDialog

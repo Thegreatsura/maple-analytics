@@ -121,6 +121,8 @@ export async function provisionRailwayStack(
     watchPatterns: ["otel/**"],
   })
 
+  const apiPrivateHost = `${serviceNames.api}.railway.internal`
+
   await Variable("otel-service-variables", {
     project,
     environment: environmentId,
@@ -128,6 +130,9 @@ export async function provisionRailwayStack(
     variables: {
       TINYBIRD_HOST: reqEnv("TINYBIRD_HOST"),
       TINYBIRD_TOKEN: reqEnv("TINYBIRD_TOKEN"),
+      SD_API_HOST: apiPrivateHost,
+      SD_API_PORT: "3472",
+      SD_INTERNAL_TOKEN: env.SD_INTERNAL_TOKEN?.trim() || "",
     },
   })
 
@@ -146,6 +151,7 @@ export async function provisionRailwayStack(
       : {}),
     adopt: true,
   })
+
 
   await updateServiceInstanceMonorepoConfig({
     serviceId: apiService.serviceId,
@@ -177,6 +183,7 @@ export async function provisionRailwayStack(
       CLERK_SECRET_KEY: env.CLERK_SECRET_KEY?.trim() || "",
       CLERK_PUBLISHABLE_KEY: env.CLERK_PUBLISHABLE_KEY?.trim() || "",
       CLERK_JWT_KEY: env.CLERK_JWT_KEY?.trim() || "",
+      SD_INTERNAL_TOKEN: env.SD_INTERNAL_TOKEN?.trim() || "",
     },
   })
 
