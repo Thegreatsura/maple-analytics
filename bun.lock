@@ -70,7 +70,6 @@
         "@effect-atom/atom-react": "^0.5.0",
         "@effect/platform": "^0.94.4",
         "@fontsource-variable/geist-mono": "^5.2.7",
-        "@maple/api-client": "workspace:*",
         "@maple/domain": "workspace:*",
         "@maple/infra": "workspace:*",
         "@tailwindcss/vite": "^4.1.18",
@@ -119,19 +118,6 @@
         "vite": "^7.3.1",
         "vite-tsconfig-paths": "^6.0.5",
         "vitest": "^4.0.18",
-      },
-    },
-    "packages/api-client": {
-      "name": "@maple/api-client",
-      "dependencies": {
-        "@effect-atom/atom": "^0.5.0",
-        "@effect/platform": "^0.94.4",
-        "@maple/domain": "workspace:*",
-        "effect": "^3.19.16",
-      },
-      "devDependencies": {
-        "@effect/language-service": "^0.73.0",
-        "typescript": "^5.9.3",
       },
     },
     "packages/db": {
@@ -556,8 +542,6 @@
     "@libsql/win32-x64-msvc": ["@libsql/win32-x64-msvc@0.5.22", "", { "os": "win32", "cpu": "x64" }, "sha512-Fj0j8RnBpo43tVZUVoNK6BV/9AtDUM5S7DF3LB4qTYg1LMSZqi3yeCneUTLJD6XomQJlZzbI4mst89yspVSAnA=="],
 
     "@maple/api": ["@maple/api@workspace:apps/api"],
-
-    "@maple/api-client": ["@maple/api-client@workspace:packages/api-client"],
 
     "@maple/db": ["@maple/db@workspace:packages/db"],
 

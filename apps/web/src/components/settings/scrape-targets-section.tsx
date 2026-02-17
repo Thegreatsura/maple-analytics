@@ -1,5 +1,6 @@
-import { createMapleApiClient } from "@maple/api-client"
+import { useAtomSet } from "@effect-atom/atom-react"
 import { useCallback, useEffect, useState } from "react"
+import { Exit } from "effect"
 import { toast } from "sonner"
 
 import {
@@ -46,22 +47,10 @@ import {
   LoaderIcon,
   PencilIcon,
   PlusIcon,
+  PulseIcon,
   TrashIcon,
 } from "@/components/icons"
-import { apiBaseUrl } from "@/lib/services/common/api-base-url"
-import { getMapleAuthHeaders } from "@/lib/services/common/auth-headers"
-
-const mapleApiClient = createMapleApiClient({
-  baseUrl: apiBaseUrl,
-  fetch: async (input, init) => {
-    const headers = new Headers(init?.headers)
-    const authHeaders = await getMapleAuthHeaders()
-    for (const [name, value] of Object.entries(authHeaders)) {
-      headers.set(name, value)
-    }
-    return globalThis.fetch(input, { ...init, headers })
-  },
-})
+import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 
 interface ScrapeTarget {
   id: string
@@ -106,6 +95,7 @@ export function ScrapeTargetsSection() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<ScrapeTarget | null>(null)
+  const [probingId, setProbingId] = useState<string | null>(null)
 
   // Form state — used for both create and edit
   const [editingTarget, setEditingTarget] = useState<ScrapeTarget | null>(null)
@@ -118,22 +108,47 @@ export function ScrapeTargetsSection() {
   const [formAuthUsername, setFormAuthUsername] = useState("")
   const [formAuthPassword, setFormAuthPassword] = useState("")
 
+  const listMutation = useAtomSet(MapleApiAtomClient.mutation("scrapeTargets", "list"), { mode: "promiseExit" })
+  const createMutation = useAtomSet(MapleApiAtomClient.mutation("scrapeTargets", "create"), { mode: "promiseExit" })
+  const updateMutation = useAtomSet(MapleApiAtomClient.mutation("scrapeTargets", "update"), { mode: "promiseExit" })
+  const deleteMutation = useAtomSet(MapleApiAtomClient.mutation("scrapeTargets", "delete"), { mode: "promiseExit" })
+  const probeMutation = useAtomSet(MapleApiAtomClient.mutation("scrapeTargets", "probe"), { mode: "promiseExit" })
+
   const loadTargets = useCallback(async () => {
-    try {
-      const response = await mapleApiClient.listScrapeTargets()
-      setTargets([...response.targets] as ScrapeTarget[])
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to load scrape targets",
-      )
-    } finally {
-      setIsLoading(false)
+    const result = await listMutation({})
+    if (Exit.isSuccess(result)) {
+      setTargets([...result.value.targets] as ScrapeTarget[])
+    } else {
+      toast.error("Failed to load scrape targets")
     }
-  }, [])
+    setIsLoading(false)
+  }, [listMutation])
 
   useEffect(() => {
     void loadTargets()
   }, [loadTargets])
+
+  async function handleProbe(target: ScrapeTarget) {
+    setProbingId(target.id)
+    const result = await probeMutation({ path: { targetId: target.id } })
+    if (Exit.isSuccess(result)) {
+      setTargets((prev) =>
+        prev.map((t) =>
+          t.id === target.id
+            ? { ...t, lastScrapeAt: result.value.lastScrapeAt, lastScrapeError: result.value.lastScrapeError }
+            : t,
+        ),
+      )
+      if (result.value.success) {
+        toast.success("Connection successful")
+      } else {
+        toast.error(`Connection failed: ${result.value.lastScrapeError}`)
+      }
+    } else {
+      toast.error("Failed to test connection")
+    }
+    setProbingId(null)
+  }
 
   function openAddDialog() {
     setEditingTarget(null)
@@ -193,79 +208,78 @@ export function ScrapeTargetsSection() {
     }
 
     setIsSaving(true)
-    try {
-      const authCredentials = buildAuthCredentials()
+    const authCredentials = buildAuthCredentials()
 
-      if (editingTarget) {
-        await mapleApiClient.updateScrapeTarget({
-          targetId: editingTarget.id,
+    if (editingTarget) {
+      const result = await updateMutation({
+        path: { targetId: editingTarget.id },
+        payload: {
           name: formName.trim(),
           url: formUrl.trim(),
           scrapeIntervalSeconds: Number.parseInt(formInterval, 10) || 15,
           serviceName: formServiceName.trim() || null,
           authType: formAuthType,
           ...(authCredentials !== null ? { authCredentials } : {}),
-        })
+        },
+      })
+      if (Exit.isSuccess(result)) {
         toast.success("Scrape target updated")
+        setDialogOpen(false)
+        await loadTargets()
       } else {
-        await mapleApiClient.createScrapeTarget({
+        toast.error("Failed to update scrape target")
+      }
+    } else {
+      const result = await createMutation({
+        payload: {
           name: formName.trim(),
           url: formUrl.trim(),
           scrapeIntervalSeconds: Number.parseInt(formInterval, 10) || 15,
           serviceName: formServiceName.trim() || null,
           authType: formAuthType,
           ...(authCredentials !== null ? { authCredentials } : {}),
-        })
+        },
+      })
+      if (Exit.isSuccess(result)) {
         toast.success("Scrape target created")
+        setDialogOpen(false)
+        await loadTargets()
+      } else {
+        toast.error("Failed to create scrape target")
       }
-      setDialogOpen(false)
-      await loadTargets()
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : `Failed to ${editingTarget ? "update" : "create"} scrape target`,
-      )
-    } finally {
-      setIsSaving(false)
     }
+    setIsSaving(false)
   }
 
   async function handleDelete(targetId: string) {
     setDeleteConfirmTarget(null)
     setDeletingId(targetId)
-    try {
-      await mapleApiClient.deleteScrapeTarget({ targetId })
+    const result = await deleteMutation({ path: { targetId } })
+    if (Exit.isSuccess(result)) {
       toast.success("Scrape target deleted")
       setTargets((prev) => prev.filter((t) => t.id !== targetId))
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to delete scrape target",
-      )
-    } finally {
-      setDeletingId(null)
+    } else {
+      toast.error("Failed to delete scrape target")
     }
+    setDeletingId(null)
   }
 
   async function handleToggleEnabled(target: ScrapeTarget) {
     setTogglingId(target.id)
-    try {
-      await mapleApiClient.updateScrapeTarget({
-        targetId: target.id,
-        enabled: !target.enabled,
-      })
+    const result = await updateMutation({
+      path: { targetId: target.id },
+      payload: { enabled: !target.enabled },
+    })
+    if (Exit.isSuccess(result)) {
       setTargets((prev) =>
         prev.map((t) =>
           t.id === target.id ? { ...t, enabled: !t.enabled } : t,
         ),
       )
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to update scrape target",
-      )
-    } finally {
-      setTogglingId(null)
+    } else {
+      toast.error("Failed to update scrape target")
     }
+    setTogglingId(null)
   }
 
   return (
@@ -358,6 +372,20 @@ export function ScrapeTargetsSection() {
                     </div>
                   )}
                 </div>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => handleProbe(target)}
+                  disabled={probingId === target.id}
+                  className="text-muted-foreground hover:text-foreground shrink-0"
+                  title="Test connection"
+                >
+                  {probingId === target.id ? (
+                    <LoaderIcon size={14} className="animate-spin" />
+                  ) : (
+                    <PulseIcon size={14} />
+                  )}
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon-sm"

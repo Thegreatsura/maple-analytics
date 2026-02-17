@@ -1,7 +1,7 @@
-import { createMapleApiClient } from "@maple/api-client"
+import { useAtomSet } from "@effect-atom/atom-react"
 import { useCallback, useEffect, useState } from "react"
-import { apiBaseUrl } from "@/lib/services/common/api-base-url"
-import { getMapleAuthHeaders } from "@/lib/services/common/auth-headers"
+import { Exit } from "effect"
+import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import type {
   Dashboard,
   DashboardVariable,
@@ -11,23 +11,6 @@ import type {
   WidgetDataSource,
   WidgetDisplayConfig,
 } from "@/components/dashboard-builder/types"
-
-const mapleApiClient = createMapleApiClient({
-  baseUrl: apiBaseUrl,
-  fetch: async (input, init) => {
-    const headers = new Headers(init?.headers)
-    const authHeaders = await getMapleAuthHeaders()
-
-    for (const [name, value] of Object.entries(authHeaders)) {
-      headers.set(name, value)
-    }
-
-    return globalThis.fetch(input, {
-      ...init,
-      headers,
-    })
-  },
-})
 
 const GRID_COLS = 12
 
@@ -95,6 +78,10 @@ export function useDashboardStore() {
   const [readOnly, setReadOnly] = useState(false)
   const [persistenceError, setPersistenceError] = useState<string | null>(null)
 
+  const listMutation = useAtomSet(MapleApiAtomClient.mutation("dashboards", "list"), { mode: "promiseExit" })
+  const upsertMutation = useAtomSet(MapleApiAtomClient.mutation("dashboards", "upsert"), { mode: "promiseExit" })
+  const deleteMutation = useAtomSet(MapleApiAtomClient.mutation("dashboards", "delete"), { mode: "promiseExit" })
+
   const setPersistenceFailure = useCallback((error: unknown) => {
     setReadOnly(true)
     setPersistenceError(getErrorMessage(error))
@@ -102,27 +89,29 @@ export function useDashboardStore() {
 
   const persistUpsert = useCallback(
     (rollback: Dashboard[], dashboard: Dashboard) => {
-      void mapleApiClient
-        .upsertDashboard({
-          dashboardId: dashboard.id,
-          dashboard,
-        })
-        .catch((error) => {
+      void upsertMutation({
+        path: { dashboardId: dashboard.id },
+        payload: { dashboard },
+      }).then((result) => {
+        if (Exit.isFailure(result)) {
           setDashboards(rollback)
-          setPersistenceFailure(error)
-        })
+          setPersistenceFailure(result)
+        }
+      })
     },
-    [setPersistenceFailure],
+    [upsertMutation, setPersistenceFailure],
   )
 
   const persistDelete = useCallback(
     (rollback: Dashboard[], dashboardId: string) => {
-      void mapleApiClient.deleteDashboard({ dashboardId }).catch((error) => {
-        setDashboards(rollback)
-        setPersistenceFailure(error)
+      void deleteMutation({ path: { dashboardId } }).then((result) => {
+        if (Exit.isFailure(result)) {
+          setDashboards(rollback)
+          setPersistenceFailure(result)
+        }
       })
     },
-    [setPersistenceFailure],
+    [deleteMutation, setPersistenceFailure],
   )
 
   const mutateDashboard = useCallback(
@@ -154,24 +143,23 @@ export function useDashboardStore() {
     const loadDashboards = async () => {
       setIsLoading(true)
 
-      try {
-        const response = await mapleApiClient.listDashboards()
-        if (cancelled) return
+      const result = await listMutation({})
+      if (cancelled) return
 
-        const nextDashboards = response.dashboards
+      if (Exit.isSuccess(result)) {
+        const nextDashboards = result.value.dashboards
           .map((dashboard) => ensureDashboard(dashboard))
           .filter((dashboard): dashboard is Dashboard => dashboard !== null)
 
         setDashboards(nextDashboards)
         setReadOnly(false)
         setPersistenceError(null)
-      } catch (error) {
-        if (cancelled) return
-        setPersistenceFailure(error)
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false)
-        }
+      } else {
+        setPersistenceFailure(result)
+      }
+
+      if (!cancelled) {
+        setIsLoading(false)
       }
     }
 
@@ -180,7 +168,7 @@ export function useDashboardStore() {
     return () => {
       cancelled = true
     }
-  }, [setPersistenceFailure])
+  }, [listMutation, setPersistenceFailure])
 
   const createDashboard = useCallback(
     (name: string): Dashboard => {

@@ -1,5 +1,6 @@
+import { useAtomSet } from "@effect-atom/atom-react"
 import { useCallback, useEffect, useState } from "react"
-import { createMapleApiClient } from "@maple/api-client"
+import { Exit } from "effect"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -53,25 +54,7 @@ import {
   KeyIcon,
   PlusIcon,
 } from "@/components/icons"
-import { apiBaseUrl } from "@/lib/services/common/api-base-url"
-import { getMapleAuthHeaders } from "@/lib/services/common/auth-headers"
-
-const mapleApiClient = createMapleApiClient({
-  baseUrl: apiBaseUrl,
-  fetch: async (input, init) => {
-    const headers = new Headers(init?.headers)
-    const authHeaders = await getMapleAuthHeaders()
-
-    for (const [name, value] of Object.entries(authHeaders)) {
-      headers.set(name, value)
-    }
-
-    return globalThis.fetch(input, {
-      ...init,
-      headers,
-    })
-  },
-})
+import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 
 interface ApiKey {
   id: string
@@ -109,11 +92,15 @@ export function ApiKeysSection() {
   const [revokingKeyId, setRevokingKeyId] = useState<string | null>(null)
   const [isRevoking, setIsRevoking] = useState(false)
 
+  const listMutation = useAtomSet(MapleApiAtomClient.mutation("apiKeys", "list"), { mode: "promiseExit" })
+  const createMutation = useAtomSet(MapleApiAtomClient.mutation("apiKeys", "create"), { mode: "promiseExit" })
+  const revokeMutation = useAtomSet(MapleApiAtomClient.mutation("apiKeys", "revoke"), { mode: "promiseExit" })
+
   const fetchKeys = useCallback(async () => {
-    try {
-      const result = await mapleApiClient.listApiKeys()
+    const result = await listMutation({})
+    if (Exit.isSuccess(result)) {
       setKeys(
-        result.keys.map((k) => ({
+        result.value.keys.map((k) => ({
           id: k.id,
           name: k.name,
           description: k.description,
@@ -123,12 +110,11 @@ export function ApiKeysSection() {
           lastUsedAt: k.lastUsedAt,
         })),
       )
-    } catch {
+    } else {
       toast.error("Failed to load API keys")
-    } finally {
-      setIsLoading(false)
     }
-  }, [])
+    setIsLoading(false)
+  }, [listMutation])
 
   useEffect(() => {
     void fetchKeys()
@@ -137,18 +123,19 @@ export function ApiKeysSection() {
   async function handleCreate() {
     if (!newName.trim()) return
     setIsCreating(true)
-    try {
-      const result = await mapleApiClient.createApiKey({
+    const result = await createMutation({
+      payload: {
         name: newName.trim(),
         description: newDescription.trim() || undefined,
-      })
-      setNewSecret(result.secret)
+      },
+    })
+    if (Exit.isSuccess(result)) {
+      setNewSecret(result.value.secret)
       await fetchKeys()
-    } catch {
+    } else {
       toast.error("Failed to create API key")
-    } finally {
-      setIsCreating(false)
     }
+    setIsCreating(false)
   }
 
   function handleCreateDialogClose(open: boolean) {
@@ -183,17 +170,16 @@ export function ApiKeysSection() {
   async function handleRevoke() {
     if (!revokingKeyId) return
     setIsRevoking(true)
-    try {
-      await mapleApiClient.revokeApiKey({ keyId: revokingKeyId })
+    const result = await revokeMutation({ path: { keyId: revokingKeyId } })
+    if (Exit.isSuccess(result)) {
       toast.success("API key revoked")
       await fetchKeys()
-    } catch {
+    } else {
       toast.error("Failed to revoke API key")
-    } finally {
-      setIsRevoking(false)
-      setRevokeOpen(false)
-      setRevokingKeyId(null)
     }
+    setIsRevoking(false)
+    setRevokeOpen(false)
+    setRevokingKeyId(null)
   }
 
   const activeKeys = keys.filter((k) => !k.revoked)

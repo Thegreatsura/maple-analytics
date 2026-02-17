@@ -1,4 +1,4 @@
-import { createCipheriv, randomBytes } from "node:crypto"
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto"
 import { randomUUID } from "node:crypto"
 import { SqliteDrizzle } from "@effect/sql-drizzle/Sqlite"
 import {
@@ -73,6 +73,27 @@ const encryptCredentials = (
       toEncryptionError(
         error instanceof Error ? error.message : "Failed to encrypt credentials",
       ),
+  })
+
+const decryptCredentials = (
+  row: { authCredentialsCiphertext: string; authCredentialsIv: string; authCredentialsTag: string },
+  encryptionKey: Buffer,
+): Effect.Effect<string, ScrapeTargetEncryptionError> =>
+  Effect.try({
+    try: () => {
+      const decipher = createDecipheriv(
+        "aes-256-gcm",
+        encryptionKey,
+        Buffer.from(row.authCredentialsIv, "base64"),
+      )
+      decipher.setAuthTag(Buffer.from(row.authCredentialsTag, "base64"))
+      const plaintext = Buffer.concat([
+        decipher.update(Buffer.from(row.authCredentialsCiphertext, "base64")),
+        decipher.final(),
+      ])
+      return plaintext.toString("utf8")
+    },
+    catch: () => toEncryptionError("Failed to decrypt auth credentials"),
   })
 
 const VALID_AUTH_TYPES = ["none", "bearer", "basic"] as const
@@ -295,6 +316,10 @@ export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()
           )
         }
 
+        yield* Effect.fork(
+          probe(orgId, id).pipe(Effect.catchAll(() => Effect.void)),
+        )
+
         return rowToResponse(rows[0])
       })
 
@@ -440,12 +465,118 @@ export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()
         return rows
       })
 
+      const probe = Effect.fn("ScrapeTargetsService.probe")(function* (
+        orgId: string,
+        targetId: string,
+      ) {
+        const rows = yield* db
+          .select()
+          .from(scrapeTargets)
+          .where(
+            and(
+              eq(scrapeTargets.orgId, orgId),
+              eq(scrapeTargets.id, targetId),
+            ),
+          )
+          .limit(1)
+          .pipe(Effect.mapError(toPersistenceError))
+
+        const row = rows[0]
+        if (!row) {
+          return yield* Effect.fail(
+            new ScrapeTargetNotFoundError({ targetId, message: "Scrape target not found" }),
+          )
+        }
+
+        const headers: Record<string, string> = {}
+        if (
+          row.authType !== "none" &&
+          row.authCredentialsCiphertext &&
+          row.authCredentialsIv &&
+          row.authCredentialsTag
+        ) {
+          const credentialsJson = yield* decryptCredentials(
+            {
+              authCredentialsCiphertext: row.authCredentialsCiphertext,
+              authCredentialsIv: row.authCredentialsIv,
+              authCredentialsTag: row.authCredentialsTag,
+            },
+            encryptionKey,
+          )
+          const creds = JSON.parse(credentialsJson) as Record<string, string>
+          if (row.authType === "bearer") {
+            headers["Authorization"] = `Bearer ${creds.token}`
+          } else if (row.authType === "basic") {
+            const encoded = Buffer.from(`${creds.username}:${creds.password}`).toString("base64")
+            headers["Authorization"] = `Basic ${encoded}`
+          }
+        }
+
+        const now = Date.now()
+        const result = yield* Effect.tryPromise({
+          try: async () => {
+            const controller = new AbortController()
+            const timeout = setTimeout(() => controller.abort(), 10_000)
+            try {
+              const response = await fetch(row.url, {
+                method: "GET",
+                headers,
+                signal: controller.signal,
+                redirect: "follow",
+              })
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status} ${response.statusText}`)
+              }
+              return { success: true as const, error: null }
+            } finally {
+              clearTimeout(timeout)
+            }
+          },
+          catch: (error) =>
+            error instanceof Error ? error.message : "Connection failed",
+        }).pipe(
+          Effect.catchAll((errorMessage) =>
+            Effect.succeed({ success: false as const, error: errorMessage }),
+          ),
+        )
+
+        if (result.success) {
+          yield* db
+            .update(scrapeTargets)
+            .set({ lastScrapeAt: now, lastScrapeError: null, updatedAt: now })
+            .where(eq(scrapeTargets.id, targetId))
+            .pipe(Effect.mapError(toPersistenceError))
+        } else {
+          yield* db
+            .update(scrapeTargets)
+            .set({ lastScrapeError: result.error, updatedAt: now })
+            .where(eq(scrapeTargets.id, targetId))
+            .pipe(Effect.mapError(toPersistenceError))
+        }
+
+        const updated = yield* db
+          .select()
+          .from(scrapeTargets)
+          .where(eq(scrapeTargets.id, targetId))
+          .limit(1)
+          .pipe(Effect.mapError(toPersistenceError))
+
+        return {
+          success: result.success,
+          lastScrapeAt: updated[0]?.lastScrapeAt
+            ? new Date(updated[0].lastScrapeAt).toISOString()
+            : null,
+          lastScrapeError: updated[0]?.lastScrapeError ?? null,
+        }
+      })
+
       return {
         list,
         create,
         update,
         delete: remove,
         listAllEnabled,
+        probe,
       }
     }),
   },

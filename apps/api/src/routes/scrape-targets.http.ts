@@ -40,5 +40,11 @@ export const HttpScrapeTargetsLive = HttpApiBuilder.group(
             return yield* service.delete(tenant.orgId, path.targetId)
           }),
         )
+        .handle("probe", ({ path }) =>
+          Effect.gen(function* () {
+            const tenant = yield* CurrentTenant.Context
+            return yield* service.probe(tenant.orgId, path.targetId)
+          }),
+        )
     }),
 )

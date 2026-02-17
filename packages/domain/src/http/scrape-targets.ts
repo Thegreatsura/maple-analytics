@@ -60,6 +60,14 @@ export class ScrapeTargetDeleteResponse extends Schema.Class<ScrapeTargetDeleteR
   id: Schema.String,
 }) {}
 
+export class ScrapeTargetProbeResponse extends Schema.Class<ScrapeTargetProbeResponse>(
+  "ScrapeTargetProbeResponse",
+)({
+  success: Schema.Boolean,
+  lastScrapeAt: Schema.NullOr(Schema.String),
+  lastScrapeError: Schema.NullOr(Schema.String),
+}) {}
+
 export class ScrapeTargetPersistenceError extends Schema.TaggedError<ScrapeTargetPersistenceError>()(
   "ScrapeTargetPersistenceError",
   {
@@ -123,6 +131,14 @@ export class ScrapeTargetsApiGroup extends HttpApiGroup.make("scrapeTargets")
       .addSuccess(ScrapeTargetDeleteResponse)
       .addError(ScrapeTargetNotFoundError)
       .addError(ScrapeTargetPersistenceError),
+  )
+  .add(
+    HttpApiEndpoint.post("probe", "/:targetId/probe")
+      .setPath(ScrapeTargetPath)
+      .addSuccess(ScrapeTargetProbeResponse)
+      .addError(ScrapeTargetNotFoundError)
+      .addError(ScrapeTargetPersistenceError)
+      .addError(ScrapeTargetEncryptionError),
   )
   .prefix("/api/scrape-targets")
   .middleware(Authorization) {}

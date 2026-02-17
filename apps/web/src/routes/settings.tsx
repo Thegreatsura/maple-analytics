@@ -1,6 +1,7 @@
-import { createMapleApiClient } from "@maple/api-client"
+import { useAtomSet } from "@effect-atom/atom-react"
 import { useEffect, useMemo, useState } from "react"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import { Exit } from "effect"
 import { toast } from "sonner"
 import { z } from "zod"
 
@@ -39,13 +40,12 @@ import {
   EyeIcon,
   ShieldIcon,
 } from "@/components/icons"
-import { apiBaseUrl } from "@/lib/services/common/api-base-url"
-import { getMapleAuthHeaders } from "@/lib/services/common/auth-headers"
 import { ingestUrl } from "@/lib/services/common/ingest-url"
 import { isClerkAuthEnabled } from "@/lib/services/common/auth-mode"
 import { ApiKeysSection } from "@/components/settings/api-keys-section"
 import { BillingSection } from "@/components/settings/billing-section"
 import { ScrapeTargetsSection } from "@/components/settings/scrape-targets-section"
+import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 
 const settingsSearchSchema = z.object({
   tab: z.enum(["general", "api-keys", "connectors", "billing"]).optional().default("general"),
@@ -56,36 +56,11 @@ export const Route = createFileRoute("/settings")({
   validateSearch: (search) => settingsSearchSchema.parse(search),
 })
 
-const mapleApiClient = createMapleApiClient({
-  baseUrl: apiBaseUrl,
-  fetch: async (input, init) => {
-    const headers = new Headers(init?.headers)
-    const authHeaders = await getMapleAuthHeaders()
-
-    for (const [name, value] of Object.entries(authHeaders)) {
-      headers.set(name, value)
-    }
-
-    return globalThis.fetch(input, {
-      ...init,
-      headers,
-    })
-  },
-})
-
 function maskKey(key: string): string {
   if (key.length <= 18) return key
   const prefix = key.slice(0, 14)
   const suffix = key.slice(-4)
   return `${prefix}${"•".repeat(key.length - 18)}${suffix}`
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message
-  }
-
-  return "Unable to complete request"
 }
 
 interface SettingsKeys {
@@ -320,27 +295,30 @@ function SettingsPage() {
   >(null)
   const [endpointCopied, setEndpointCopied] = useState(false)
 
+  const getKeysMutation = useAtomSet(MapleApiAtomClient.mutation("ingestKeys", "get"), { mode: "promiseExit" })
+  const rerollPublicMutation = useAtomSet(MapleApiAtomClient.mutation("ingestKeys", "rerollPublic"), { mode: "promiseExit" })
+  const rerollPrivateMutation = useAtomSet(MapleApiAtomClient.mutation("ingestKeys", "rerollPrivate"), { mode: "promiseExit" })
+
   useEffect(() => {
     let cancelled = false
 
     const loadIngestKeys = async () => {
       setIsLoading(true)
 
-      try {
-        const response = await mapleApiClient.getIngestKeys()
-        if (cancelled) return
+      const result = await getKeysMutation({})
+      if (cancelled) return
 
+      if (Exit.isSuccess(result)) {
         setKeys({
-          publicKey: response.publicKey,
-          privateKey: response.privateKey,
+          publicKey: result.value.publicKey,
+          privateKey: result.value.privateKey,
         })
-      } catch (error) {
-        if (cancelled) return
-        toast.error(getErrorMessage(error))
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false)
-        }
+      } else {
+        toast.error("Unable to complete request")
+      }
+
+      if (!cancelled) {
+        setIsLoading(false)
       }
     }
 
@@ -349,7 +327,7 @@ function SettingsPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [getKeysMutation])
 
   const isBusy = useMemo(
     () => isLoading || submittingKeyType !== null || keys === null,
@@ -394,28 +372,28 @@ function SettingsPage() {
 
     setSubmittingKeyType(regenerateKeyType)
 
-    try {
-      const response =
-        regenerateKeyType === "public"
-          ? await mapleApiClient.rerollPublicIngestKey()
-          : await mapleApiClient.rerollPrivateIngestKey()
+    const result =
+      regenerateKeyType === "public"
+        ? await rerollPublicMutation({})
+        : await rerollPrivateMutation({})
 
+    if (Exit.isSuccess(result)) {
       setKeys({
-        publicKey: response.publicKey,
-        privateKey: response.privateKey,
+        publicKey: result.value.publicKey,
+        privateKey: result.value.privateKey,
       })
       setCopiedKey(null)
 
       toast.success(
         `${regenerateKeyType === "public" ? "Public" : "Private"} key regenerated. Previous key was revoked immediately.`,
       )
-    } catch (error) {
-      toast.error(getErrorMessage(error))
-    } finally {
-      setSubmittingKeyType(null)
-      setRegenerateDialogOpen(false)
-      setRegenerateKeyType(null)
+    } else {
+      toast.error("Unable to complete request")
     }
+
+    setSubmittingKeyType(null)
+    setRegenerateDialogOpen(false)
+    setRegenerateKeyType(null)
   }
 
   const publicKey = keys?.publicKey ?? "Loading..."
