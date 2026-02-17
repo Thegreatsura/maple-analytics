@@ -1,4 +1,4 @@
-import { PlusIcon, PencilIcon, CheckIcon } from "@/components/icons"
+import { PlusIcon, PencilIcon, CheckIcon, GridIcon } from "@/components/icons"
 
 import { Button } from "@/components/ui/button"
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker"
@@ -11,6 +11,7 @@ interface DashboardToolbarProps {
   readOnly?: boolean
   onToggleEdit: () => void
   onAddWidget: () => void
+  onAutoLayout: () => void
 }
 
 function resolveForPicker(timeRange: TimeRange): {
@@ -31,6 +32,7 @@ export function DashboardToolbar({
   readOnly = false,
   onToggleEdit,
   onAddWidget,
+  onAutoLayout,
 }: DashboardToolbarProps) {
   const {
     state: { timeRange },
@@ -62,10 +64,16 @@ export function DashboardToolbar({
         }}
       />
       {mode === "edit" && (
-        <Button variant="outline" size="sm" onClick={onAddWidget} disabled={readOnly}>
-          <PlusIcon size={14} data-icon="inline-start" />
-          Add Widget
-        </Button>
+        <>
+          <Button variant="outline" size="sm" onClick={onAddWidget} disabled={readOnly}>
+            <PlusIcon size={14} data-icon="inline-start" />
+            Add Widget
+          </Button>
+          <Button variant="outline" size="sm" onClick={onAutoLayout} disabled={readOnly}>
+            <GridIcon size={14} data-icon="inline-start" />
+            Auto Layout
+          </Button>
+        </>
       )}
       <Button
         variant={mode === "edit" ? "default" : "outline"}

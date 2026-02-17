@@ -10,7 +10,7 @@ export interface BaseChartProps {
   tooltip?: ChartTooltipMode
 }
 
-export type ChartCategory = "bar" | "area" | "line" | "pie" | "radar"
+export type ChartCategory = "bar" | "area" | "line" | "radar"
 
 export interface ChartRegistryEntry {
   id: string

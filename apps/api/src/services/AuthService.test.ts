@@ -1,11 +1,12 @@
 import { describe, expect, it } from "bun:test"
 import { Cause, Effect, Exit, Option } from "effect"
-import { makeLoginSelfHosted, makeResolveTenant } from "./AuthService"
+import { makeLoginSelfHosted, makeResolveMcpTenant, makeResolveTenant } from "./AuthService"
 
 const baseEnv = {
   MAPLE_AUTH_MODE: "self_hosted",
   MAPLE_ROOT_PASSWORD: "root-password",
   MAPLE_DEFAULT_ORG_ID: "default",
+  MAPLE_ORG_ID_OVERRIDE: "",
   CLERK_SECRET_KEY: "",
   CLERK_PUBLISHABLE_KEY: "",
   CLERK_JWT_KEY: "",
@@ -175,6 +176,130 @@ describe("makeResolveTenant", () => {
 
     const tenant = await Effect.runPromise(
       resolveTenant({
+        authorization: `Bearer ${login.token}`,
+      }),
+    )
+
+    expect(tenant).toEqual({
+      orgId: "default",
+      userId: "root",
+      roles: ["root"],
+      authMode: "self_hosted",
+    })
+  })
+})
+
+describe("makeResolveMcpTenant", () => {
+  it("resolves tenant from an org API key", async () => {
+    const resolveMcpTenant = makeResolveMcpTenant(
+      {
+        ...baseEnv,
+        MAPLE_AUTH_MODE: "clerk",
+        CLERK_SECRET_KEY: "sk_test_123",
+      },
+      async () => ({
+        isAuthenticated: true,
+        message: null,
+        toAuth: () => ({
+          isAuthenticated: true,
+          tokenType: "api_key",
+          userId: "user_abc",
+          orgId: "org_abc",
+          orgRole: "org:member",
+        }),
+      }),
+    )
+
+    const tenant = await Effect.runPromise(
+      resolveMcpTenant({
+        authorization: "Bearer maple_key_xxx",
+      }),
+    )
+
+    expect(tenant).toEqual({
+      orgId: "org_abc",
+      userId: "user_abc",
+      roles: ["org:member"],
+      authMode: "clerk",
+    })
+  })
+
+  it("resolves tenant from a user API key with MAPLE_ORG_ID_OVERRIDE", async () => {
+    const resolveMcpTenant = makeResolveMcpTenant(
+      {
+        ...baseEnv,
+        MAPLE_AUTH_MODE: "clerk",
+        CLERK_SECRET_KEY: "sk_test_123",
+        MAPLE_ORG_ID_OVERRIDE: "org_override",
+      },
+      async () => ({
+        isAuthenticated: true,
+        message: null,
+        toAuth: () => ({
+          isAuthenticated: true,
+          tokenType: "api_key",
+          userId: "user_abc",
+          orgId: null,
+          orgRole: null,
+        }),
+      }),
+    )
+
+    const tenant = await Effect.runPromise(
+      resolveMcpTenant({
+        authorization: "Bearer maple_key_xxx",
+      }),
+    )
+
+    expect(tenant).toEqual({
+      orgId: "org_override",
+      userId: "user_abc",
+      roles: [],
+      authMode: "clerk",
+    })
+  })
+
+  it("rejects a user API key without org context", async () => {
+    const resolveMcpTenant = makeResolveMcpTenant(
+      {
+        ...baseEnv,
+        MAPLE_AUTH_MODE: "clerk",
+        CLERK_SECRET_KEY: "sk_test_123",
+      },
+      async () => ({
+        isAuthenticated: true,
+        message: null,
+        toAuth: () => ({
+          isAuthenticated: true,
+          tokenType: "api_key",
+          userId: "user_abc",
+          orgId: null,
+          orgRole: null,
+        }),
+      }),
+    )
+
+    const exit = await Effect.runPromiseExit(
+      resolveMcpTenant({
+        authorization: "Bearer maple_key_xxx",
+      }),
+    )
+    const failure = getFailure(exit)
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect(failure).toMatchObject({
+      _tag: "UnauthorizedError",
+      message: "Active organization is required",
+    })
+  })
+
+  it("falls through to self-hosted mode when MAPLE_AUTH_MODE is self_hosted", async () => {
+    const loginSelfHosted = makeLoginSelfHosted(baseEnv)
+    const resolveMcpTenant = makeResolveMcpTenant(baseEnv)
+    const login = await Effect.runPromise(loginSelfHosted("root-password"))
+
+    const tenant = await Effect.runPromise(
+      resolveMcpTenant({
         authorization: `Bearer ${login.token}`,
       }),
     )

@@ -10,7 +10,7 @@ export const Route = createRootRouteWithContext<{ auth: RouterAuthContext }>()({
   beforeLoad: ({ context, location }) => {
     if (PUBLIC_PATHS.has(location.pathname)) return
 
-    if (!context.auth.isAuthenticated) {
+    if (!context.auth?.isAuthenticated) {
       throw redirect({ to: "/sign-in" })
     }
 

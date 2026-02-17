@@ -10,12 +10,14 @@ export { DuotoneBarChart } from "./bar/duotone-bar-chart"
 export { GradientBarChart } from "./bar/gradient-bar-chart"
 export { GlowingBarChart } from "./bar/glowing-bar-chart"
 export { DefaultMultipleBarChart } from "./bar/default-multiple-bar-chart"
+export { QueryBuilderBarChart } from "./bar/query-builder-bar-chart"
 
 // Area Charts
 export { GradientAreaChart } from "./area/gradient-area-chart"
 export { GradientRoundedAreaChart } from "./area/gradient-rounded-area-chart"
 export { DottedPatternAreaChart } from "./area/dotted-pattern-area-chart"
 export { BarPatternAreaChart } from "./area/bar-pattern-area-chart"
+export { QueryBuilderAreaChart } from "./area/query-builder-area-chart"
 
 // Line Charts
 export { DottedLineChart } from "./line/dotted-line-chart"
@@ -25,12 +27,6 @@ export { PingingDotChart } from "./line/pinging-dot-chart"
 export { NumberDotLineChart } from "./line/number-dot-line-chart"
 export { PartialLineChart } from "./line/partial-line-chart"
 export { RainbowGlowGradientLineChart } from "./line/rainbow-glow-gradient-line-chart"
-
-// Pie Charts
-export { RoundedPieChart } from "./pie/rounded-pie-chart"
-export { IncreaseSizePieChart } from "./pie/increase-size-pie-chart"
-export { DefaultRadialChart } from "./pie/default-radial-chart"
-export { GlowingRadialChart } from "./pie/glowing-radial-chart"
 
 // Radar Charts
 export { StrokeRadarChart } from "./radar/stroke-radar-chart"

@@ -1,6 +1,8 @@
+import { createCipheriv, randomBytes } from "node:crypto"
 import { randomUUID } from "node:crypto"
 import { SqliteDrizzle } from "@effect/sql-drizzle/Sqlite"
 import {
+  ScrapeTargetEncryptionError,
   ScrapeTargetNotFoundError,
   ScrapeTargetPersistenceError,
   ScrapeTargetResponse,
@@ -12,6 +14,7 @@ import { scrapeTargets } from "@maple/db"
 import { and, eq } from "drizzle-orm"
 import { Effect, Layer } from "effect"
 import { DatabaseLive } from "./DatabaseLive"
+import { Env } from "./Env"
 
 const toPersistenceError = (error: unknown) =>
   new ScrapeTargetPersistenceError({
@@ -19,14 +22,128 @@ const toPersistenceError = (error: unknown) =>
       error instanceof Error ? error.message : "Scrape target persistence failed",
   })
 
+const toEncryptionError = (message: string) =>
+  new ScrapeTargetEncryptionError({ message })
+
+const parseEncryptionKey = (
+  raw: string,
+): Effect.Effect<Buffer, ScrapeTargetEncryptionError> =>
+  Effect.try({
+    try: () => {
+      const trimmed = raw.trim()
+      if (trimmed.length === 0) {
+        throw new Error("MAPLE_INGEST_KEY_ENCRYPTION_KEY is required")
+      }
+      const decoded = Buffer.from(trimmed, "base64")
+      if (decoded.length !== 32) {
+        throw new Error(
+          "MAPLE_INGEST_KEY_ENCRYPTION_KEY must be base64 for exactly 32 bytes",
+        )
+      }
+      return decoded
+    },
+    catch: (error) =>
+      toEncryptionError(
+        error instanceof Error ? error.message : "Invalid encryption key",
+      ),
+  })
+
+const encryptCredentials = (
+  plaintext: string,
+  encryptionKey: Buffer,
+): Effect.Effect<
+  { ciphertext: string; iv: string; tag: string },
+  ScrapeTargetEncryptionError
+> =>
+  Effect.try({
+    try: () => {
+      const iv = randomBytes(12)
+      const cipher = createCipheriv("aes-256-gcm", encryptionKey, iv)
+      const ciphertext = Buffer.concat([
+        cipher.update(plaintext, "utf8"),
+        cipher.final(),
+      ])
+      return {
+        ciphertext: ciphertext.toString("base64"),
+        iv: iv.toString("base64"),
+        tag: cipher.getAuthTag().toString("base64"),
+      }
+    },
+    catch: (error) =>
+      toEncryptionError(
+        error instanceof Error ? error.message : "Failed to encrypt credentials",
+      ),
+  })
+
+const VALID_AUTH_TYPES = ["none", "bearer", "basic"] as const
+
+const validateAuthType = (authType: string | undefined) => {
+  if (authType === undefined) return Effect.succeed(undefined)
+  if (!(VALID_AUTH_TYPES as readonly string[]).includes(authType)) {
+    return Effect.fail(
+      new ScrapeTargetValidationError({
+        message: `Invalid auth type: "${authType}". Must be one of: ${VALID_AUTH_TYPES.join(", ")}`,
+      }),
+    )
+  }
+  return Effect.succeed(authType as (typeof VALID_AUTH_TYPES)[number])
+}
+
+const validateAuthCredentials = (
+  authType: string,
+  authCredentials: string | null | undefined,
+) => {
+  if (authType === "none") return Effect.succeed(undefined)
+
+  if (!authCredentials) {
+    return Effect.fail(
+      new ScrapeTargetValidationError({
+        message: `Credentials are required for auth type "${authType}"`,
+      }),
+    )
+  }
+
+  try {
+    const parsed = JSON.parse(authCredentials)
+    if (authType === "bearer") {
+      if (!parsed.token || typeof parsed.token !== "string") {
+        return Effect.fail(
+          new ScrapeTargetValidationError({
+            message: 'Bearer auth credentials must include a "token" string field',
+          }),
+        )
+      }
+    } else if (authType === "basic") {
+      if (!parsed.username || typeof parsed.username !== "string" ||
+          !parsed.password || typeof parsed.password !== "string") {
+        return Effect.fail(
+          new ScrapeTargetValidationError({
+            message: 'Basic auth credentials must include "username" and "password" string fields',
+          }),
+        )
+      }
+    }
+  } catch {
+    return Effect.fail(
+      new ScrapeTargetValidationError({
+        message: "Auth credentials must be valid JSON",
+      }),
+    )
+  }
+
+  return Effect.succeed(authCredentials)
+}
+
 const rowToResponse = (row: typeof scrapeTargets.$inferSelect) =>
   new ScrapeTargetResponse({
     id: row.id,
     name: row.name,
+    serviceName: row.serviceName ?? null,
     url: row.url,
     scrapeIntervalSeconds: row.scrapeIntervalSeconds,
     labelsJson: row.labelsJson,
     authType: row.authType,
+    hasCredentials: row.authCredentialsCiphertext !== null,
     enabled: row.enabled === 1,
     lastScrapeAt: row.lastScrapeAt ? new Date(row.lastScrapeAt).toISOString() : null,
     lastScrapeError: row.lastScrapeError,
@@ -92,8 +209,13 @@ export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()
   "ScrapeTargetsService",
   {
     accessors: true,
+    dependencies: [Env.Default],
     effect: Effect.gen(function* () {
       const db = yield* SqliteDrizzle
+      const env = yield* Env
+      const encryptionKey = yield* parseEncryptionKey(
+        env.MAPLE_INGEST_KEY_ENCRYPTION_KEY,
+      )
 
       const list = Effect.fn("ScrapeTargetsService.list")(function* (
         orgId: string,
@@ -115,6 +237,28 @@ export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()
         yield* validateInterval(request.scrapeIntervalSeconds)
         yield* validateLabelsJson(request.labelsJson)
 
+        const authType = (yield* validateAuthType(request.authType)) ?? "none"
+
+        let credentialFields: {
+          authCredentialsCiphertext: string | null
+          authCredentialsIv: string | null
+          authCredentialsTag: string | null
+        } = {
+          authCredentialsCiphertext: null,
+          authCredentialsIv: null,
+          authCredentialsTag: null,
+        }
+
+        if (authType !== "none") {
+          yield* validateAuthCredentials(authType, request.authCredentials)
+          const encrypted = yield* encryptCredentials(request.authCredentials!, encryptionKey)
+          credentialFields = {
+            authCredentialsCiphertext: encrypted.ciphertext,
+            authCredentialsIv: encrypted.iv,
+            authCredentialsTag: encrypted.tag,
+          }
+        }
+
         const now = Date.now()
         const id = randomUUID()
 
@@ -124,10 +268,12 @@ export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()
             id,
             orgId,
             name: request.name.trim(),
+            serviceName: request.serviceName ?? null,
             url,
             scrapeIntervalSeconds: request.scrapeIntervalSeconds ?? 15,
             labelsJson: request.labelsJson ?? null,
-            authType: request.authType ?? "none",
+            authType,
+            ...credentialFields,
             enabled: request.enabled === false ? 0 : 1,
             createdAt: now,
             updatedAt: now,
@@ -192,8 +338,39 @@ export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()
         if (request.scrapeIntervalSeconds !== undefined)
           updates.scrapeIntervalSeconds = request.scrapeIntervalSeconds
         if (request.labelsJson !== undefined) updates.labelsJson = request.labelsJson
-        if (request.authType !== undefined) updates.authType = request.authType
         if (request.enabled !== undefined) updates.enabled = request.enabled ? 1 : 0
+        if (request.serviceName !== undefined) updates.serviceName = request.serviceName
+
+        // Handle auth type changes
+        if (request.authType !== undefined) {
+          const newAuthType = yield* validateAuthType(request.authType)
+          updates.authType = newAuthType
+
+          if (newAuthType === "none") {
+            // Clearing auth — remove credentials
+            updates.authCredentialsCiphertext = null
+            updates.authCredentialsIv = null
+            updates.authCredentialsTag = null
+          } else if (newAuthType !== existing[0].authType || request.authCredentials) {
+            // Auth type changed or new credentials provided — require and encrypt
+            yield* validateAuthCredentials(newAuthType!, request.authCredentials)
+            const encrypted = yield* encryptCredentials(request.authCredentials!, encryptionKey)
+            updates.authCredentialsCiphertext = encrypted.ciphertext
+            updates.authCredentialsIv = encrypted.iv
+            updates.authCredentialsTag = encrypted.tag
+          }
+          // Same auth type, no new credentials — keep existing
+        } else if (request.authCredentials) {
+          // No auth type change but new credentials provided — re-encrypt for current type
+          const currentAuthType = existing[0].authType
+          if (currentAuthType !== "none") {
+            yield* validateAuthCredentials(currentAuthType, request.authCredentials)
+            const encrypted = yield* encryptCredentials(request.authCredentials!, encryptionKey)
+            updates.authCredentialsCiphertext = encrypted.ciphertext
+            updates.authCredentialsIv = encrypted.iv
+            updates.authCredentialsTag = encrypted.tag
+          }
+        }
 
         yield* db
           .update(scrapeTargets)

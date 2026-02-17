@@ -33,6 +33,13 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   CircleCheckIcon,
   CircleXmarkIcon,
   FireIcon,
@@ -59,10 +66,12 @@ const mapleApiClient = createMapleApiClient({
 interface ScrapeTarget {
   id: string
   name: string
+  serviceName: string | null
   url: string
   scrapeIntervalSeconds: number
   labelsJson: string | null
   authType: string
+  hasCredentials: boolean
   enabled: boolean
   lastScrapeAt: string | null
   lastScrapeError: string | null
@@ -83,6 +92,12 @@ function formatRelativeTime(iso: string): string {
   return `${days}d ago`
 }
 
+const AUTH_TYPE_LABELS: Record<string, string> = {
+  none: "None",
+  bearer: "Bearer Token",
+  basic: "Basic Auth",
+}
+
 export function ScrapeTargetsSection() {
   const [targets, setTargets] = useState<ScrapeTarget[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -95,13 +110,18 @@ export function ScrapeTargetsSection() {
   // Form state — used for both create and edit
   const [editingTarget, setEditingTarget] = useState<ScrapeTarget | null>(null)
   const [formName, setFormName] = useState("")
+  const [formServiceName, setFormServiceName] = useState("")
   const [formUrl, setFormUrl] = useState("")
   const [formInterval, setFormInterval] = useState("15")
+  const [formAuthType, setFormAuthType] = useState("none")
+  const [formAuthToken, setFormAuthToken] = useState("")
+  const [formAuthUsername, setFormAuthUsername] = useState("")
+  const [formAuthPassword, setFormAuthPassword] = useState("")
 
   const loadTargets = useCallback(async () => {
     try {
       const response = await mapleApiClient.listScrapeTargets()
-      setTargets(response.targets as ScrapeTarget[])
+      setTargets([...response.targets] as ScrapeTarget[])
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to load scrape targets",
@@ -118,17 +138,52 @@ export function ScrapeTargetsSection() {
   function openAddDialog() {
     setEditingTarget(null)
     setFormName("")
+    setFormServiceName("")
     setFormUrl("")
     setFormInterval("15")
+    setFormAuthType("none")
+    setFormAuthToken("")
+    setFormAuthUsername("")
+    setFormAuthPassword("")
     setDialogOpen(true)
   }
 
   function openEditDialog(target: ScrapeTarget) {
     setEditingTarget(target)
     setFormName(target.name)
+    setFormServiceName(target.serviceName ?? "")
     setFormUrl(target.url)
     setFormInterval(String(target.scrapeIntervalSeconds))
+    setFormAuthType(target.authType)
+    setFormAuthToken("")
+    setFormAuthUsername("")
+    setFormAuthPassword("")
     setDialogOpen(true)
+  }
+
+  function buildAuthCredentials(): string | null {
+    if (formAuthType === "bearer") {
+      if (!formAuthToken.trim()) {
+        if (editingTarget?.hasCredentials && editingTarget.authType === "bearer") {
+          return null // keep existing
+        }
+        return null
+      }
+      return JSON.stringify({ token: formAuthToken.trim() })
+    }
+    if (formAuthType === "basic") {
+      if (!formAuthUsername.trim() && !formAuthPassword.trim()) {
+        if (editingTarget?.hasCredentials && editingTarget.authType === "basic") {
+          return null // keep existing
+        }
+        return null
+      }
+      return JSON.stringify({
+        username: formAuthUsername.trim(),
+        password: formAuthPassword.trim(),
+      })
+    }
+    return null
   }
 
   async function handleSave() {
@@ -139,12 +194,17 @@ export function ScrapeTargetsSection() {
 
     setIsSaving(true)
     try {
+      const authCredentials = buildAuthCredentials()
+
       if (editingTarget) {
         await mapleApiClient.updateScrapeTarget({
           targetId: editingTarget.id,
           name: formName.trim(),
           url: formUrl.trim(),
           scrapeIntervalSeconds: Number.parseInt(formInterval, 10) || 15,
+          serviceName: formServiceName.trim() || null,
+          authType: formAuthType,
+          ...(authCredentials !== null ? { authCredentials } : {}),
         })
         toast.success("Scrape target updated")
       } else {
@@ -152,6 +212,9 @@ export function ScrapeTargetsSection() {
           name: formName.trim(),
           url: formUrl.trim(),
           scrapeIntervalSeconds: Number.parseInt(formInterval, 10) || 15,
+          serviceName: formServiceName.trim() || null,
+          authType: formAuthType,
+          ...(authCredentials !== null ? { authCredentials } : {}),
         })
         toast.success("Scrape target created")
       }
@@ -252,6 +315,16 @@ export function ScrapeTargetsSection() {
                     <span className="text-sm font-medium truncate">
                       {target.name}
                     </span>
+                    {target.serviceName && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                        {target.serviceName}
+                      </Badge>
+                    )}
+                    {target.authType !== "none" && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                        {AUTH_TYPE_LABELS[target.authType] ?? target.authType}
+                      </Badge>
+                    )}
                     {target.lastScrapeError ? (
                       <Badge variant="destructive" className="text-[10px] gap-1 px-1.5 py-0">
                         <CircleXmarkIcon size={10} />
@@ -332,6 +405,18 @@ export function ScrapeTargetsSection() {
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="scrape-service-name">Service Name</Label>
+              <Input
+                id="scrape-service-name"
+                placeholder="e.g. my-api-server"
+                value={formServiceName}
+                onChange={(e) => setFormServiceName(e.target.value)}
+              />
+              <p className="text-muted-foreground text-xs">
+                Metrics will appear under this service name. Defaults to the target name if empty.
+              </p>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="scrape-url">URL</Label>
               <Input
                 id="scrape-url"
@@ -351,6 +436,74 @@ export function ScrapeTargetsSection() {
                 onChange={(e) => setFormInterval(e.target.value)}
               />
             </div>
+            <div className="space-y-2">
+              <Label>Authentication</Label>
+              <Select
+                value={formAuthType}
+                onValueChange={(val: string | null) => {
+                  setFormAuthType(val ?? "none")
+                  setFormAuthToken("")
+                  setFormAuthUsername("")
+                  setFormAuthPassword("")
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select auth type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="bearer">Bearer Token</SelectItem>
+                  <SelectItem value="basic">Basic Auth</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {formAuthType === "bearer" && (
+              <div className="space-y-2">
+                <Label htmlFor="scrape-auth-token">Bearer Token</Label>
+                <Input
+                  id="scrape-auth-token"
+                  type="password"
+                  placeholder={
+                    editingTarget?.hasCredentials && editingTarget.authType === "bearer"
+                      ? "Leave blank to keep existing"
+                      : "Enter bearer token"
+                  }
+                  value={formAuthToken}
+                  onChange={(e) => setFormAuthToken(e.target.value)}
+                />
+              </div>
+            )}
+            {formAuthType === "basic" && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="scrape-auth-username">Username</Label>
+                  <Input
+                    id="scrape-auth-username"
+                    placeholder={
+                      editingTarget?.hasCredentials && editingTarget.authType === "basic"
+                        ? "Leave blank to keep existing"
+                        : "Enter username"
+                    }
+                    value={formAuthUsername}
+                    onChange={(e) => setFormAuthUsername(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="scrape-auth-password">Password</Label>
+                  <Input
+                    id="scrape-auth-password"
+                    type="password"
+                    placeholder={
+                      editingTarget?.hasCredentials && editingTarget.authType === "basic"
+                        ? "Leave blank to keep existing"
+                        : "Enter password"
+                    }
+                    value={formAuthPassword}
+                    onChange={(e) => setFormAuthPassword(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
           </div>
           <DialogFooter>
             <Button

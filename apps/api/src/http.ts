@@ -1,6 +1,7 @@
 import { HttpLayerRouter } from "@effect/platform"
 import { MapleApi } from "@maple/domain/http"
 import { Layer } from "effect"
+import { HttpApiKeysLive } from "./routes/api-keys.http"
 import { HttpAuthLive, HttpAuthPublicLive } from "./routes/auth.http"
 import { HttpDashboardsLive } from "./routes/dashboards.http"
 import { HttpIngestKeysLive } from "./routes/ingest-keys.http"
@@ -12,6 +13,7 @@ import { HttpTinybirdLive } from "./routes/tinybird.http"
 export const HttpApiRoutes = HttpLayerRouter.addHttpApi(MapleApi).pipe(
   Layer.provideMerge(HttpAuthPublicLive),
   Layer.provideMerge(HttpAuthLive),
+  Layer.provideMerge(HttpApiKeysLive),
   Layer.provideMerge(HttpDashboardsLive),
   Layer.provideMerge(HttpIngestKeysLive),
   Layer.provideMerge(HttpScrapeTargetsLive),

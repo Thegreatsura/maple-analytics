@@ -1,22 +1,19 @@
 "use client"
 
+import { useMemo } from "react"
 import { RadialBar, RadialBarChart } from "recharts"
-import { type ChartConfig, ChartContainer } from "@/components/ui/chart"
+import { ChartContainer } from "@/components/ui/chart"
 import type { BaseChartProps } from "@/components/charts/_shared/chart-types"
+import { buildChartConfig } from "@/components/charts/_shared/build-chart-config"
 import { radialData } from "@/components/charts/_shared/sample-data"
 
-const chartConfig = {
-  chrome: { label: "Chrome", color: "hsl(var(--chart-1))" },
-  safari: { label: "Safari", color: "hsl(var(--chart-2))" },
-  firefox: { label: "Firefox", color: "hsl(var(--chart-3))" },
-  edge: { label: "Edge", color: "hsl(var(--chart-4))" },
-} satisfies ChartConfig
-
 export function DefaultRadialChart({ data = radialData, className }: BaseChartProps) {
+  const { config, data: coloredData } = useMemo(() => buildChartConfig(data), [data])
+
   return (
-    <ChartContainer config={chartConfig} className={className}>
+    <ChartContainer config={config} className={className}>
       <RadialBarChart
-        data={data}
+        data={coloredData}
         innerRadius={30}
         outerRadius={110}
       >

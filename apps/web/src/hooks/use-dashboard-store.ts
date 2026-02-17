@@ -29,8 +29,34 @@ const mapleApiClient = createMapleApiClient({
   },
 })
 
+const GRID_COLS = 12
+
 function generateId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+function findNextPosition(
+  widgets: DashboardWidget[],
+  newWidth: number,
+): { x: number; y: number } {
+  if (widgets.length === 0) {
+    return { x: 0, y: 0 }
+  }
+
+  const maxY = Math.max(...widgets.map((w) => w.layout.y))
+  const bottomRowWidgets = widgets.filter((w) => w.layout.y === maxY)
+  const rightEdge = Math.max(
+    ...bottomRowWidgets.map((w) => w.layout.x + w.layout.w),
+  )
+
+  if (rightEdge + newWidth <= GRID_COLS) {
+    return { x: rightEdge, y: maxY }
+  }
+
+  const maxBottom = Math.max(
+    ...widgets.map((w) => w.layout.y + w.layout.h),
+  )
+  return { x: 0, y: maxBottom }
 }
 
 function getErrorMessage(error: unknown): string {
@@ -247,26 +273,35 @@ export function useDashboardStore() {
 
       const layoutDefaults =
         visualization === "stat"
-          ? { w: 2, h: 2, minW: 2, minH: 2 }
+          ? { w: 3, h: 4, minW: 2, minH: 2 }
           : visualization === "table"
             ? { w: 6, h: 4, minW: 3, minH: 3 }
             : { w: 4, h: 4, minW: 2, minH: 2 }
 
-      const widget: DashboardWidget = {
-        id: generateId(),
-        visualization,
-        dataSource,
-        display,
-        layout: { x: 0, y: Infinity, ...layoutDefaults },
-      }
+      const widgetId = generateId()
+      let widgetRef: DashboardWidget | null = null
 
-      mutateDashboard(dashboardId, (dashboard) => ({
-        ...dashboard,
-        widgets: [...dashboard.widgets, widget],
-        updatedAt: new Date().toISOString(),
-      }))
+      mutateDashboard(dashboardId, (dashboard) => {
+        const position = findNextPosition(dashboard.widgets, layoutDefaults.w)
 
-      return widget
+        const widget: DashboardWidget = {
+          id: widgetId,
+          visualization,
+          dataSource,
+          display,
+          layout: { ...position, ...layoutDefaults },
+        }
+
+        widgetRef = widget
+
+        return {
+          ...dashboard,
+          widgets: [...dashboard.widgets, widget],
+          updatedAt: new Date().toISOString(),
+        }
+      })
+
+      return widgetRef!
     },
     [mutateDashboard, readOnly],
   )
@@ -364,6 +399,47 @@ export function useDashboardStore() {
     [mutateDashboard],
   )
 
+  const autoLayoutWidgets = useCallback(
+    (dashboardId: string) => {
+      mutateDashboard(dashboardId, (dashboard) => {
+        if (dashboard.widgets.length === 0) return dashboard
+
+        const sorted = [...dashboard.widgets].sort((a, b) => {
+          if (a.layout.y !== b.layout.y) return a.layout.y - b.layout.y
+          return a.layout.x - b.layout.x
+        })
+
+        let currentX = 0
+        let currentY = 0
+        let rowHeight = 0
+
+        const relaid = sorted.map((widget) => {
+          const w = widget.layout.w
+          const h = widget.layout.h
+
+          if (currentX + w > GRID_COLS) {
+            currentX = 0
+            currentY += rowHeight
+            rowHeight = 0
+          }
+
+          const newLayout = { ...widget.layout, x: currentX, y: currentY }
+          currentX += w
+          rowHeight = Math.max(rowHeight, h)
+
+          return { ...widget, layout: newLayout }
+        })
+
+        return {
+          ...dashboard,
+          widgets: relaid,
+          updatedAt: new Date().toISOString(),
+        }
+      })
+    },
+    [mutateDashboard],
+  )
+
   return {
     dashboards,
     isLoading,
@@ -380,5 +456,6 @@ export function useDashboardStore() {
     updateWidgetDisplay,
     updateWidgetLayouts,
     updateWidget,
+    autoLayoutWidgets,
   }
 }

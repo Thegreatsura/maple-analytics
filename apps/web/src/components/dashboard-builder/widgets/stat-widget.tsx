@@ -16,7 +16,7 @@ interface StatWidgetProps {
   editPanel?: React.ReactNode
 }
 
-function formatValue(value: unknown, unit?: string, prefix?: string, suffix?: string): string {
+export function formatValue(value: unknown, unit?: string, prefix?: string, suffix?: string): string {
   const num = typeof value === "number" ? value : Number(value)
   if (Number.isNaN(num)) return String(value ?? "-")
 

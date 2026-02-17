@@ -1,35 +1,30 @@
 "use client"
 
-import { useId, useState } from "react"
+import { useId, useMemo, useState } from "react"
 import { RadialBar, RadialBarChart } from "recharts"
-import { type ChartConfig, ChartContainer } from "@/components/ui/chart"
+import { ChartContainer } from "@/components/ui/chart"
 import type { BaseChartProps } from "@/components/charts/_shared/chart-types"
+import { buildChartConfig } from "@/components/charts/_shared/build-chart-config"
 import { radialData } from "@/components/charts/_shared/sample-data"
 import { GlowFilter } from "@/components/charts/_shared/svg-filters"
-
-const chartConfig = {
-  chrome: { label: "Chrome", color: "hsl(var(--chart-1))" },
-  safari: { label: "Safari", color: "hsl(var(--chart-2))" },
-  firefox: { label: "Firefox", color: "hsl(var(--chart-3))" },
-  edge: { label: "Edge", color: "hsl(var(--chart-4))" },
-} satisfies ChartConfig
 
 export function GlowingRadialChart({ data = radialData, className }: BaseChartProps) {
   const id = useId()
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+  const { config, data: coloredData } = useMemo(() => buildChartConfig(data), [data])
 
-  const glowFilterIds = data.map((_, i) => `radial-glow-${i}-${id}`)
+  const glowFilterIds = coloredData.map((_: unknown, i: number) => `radial-glow-${i}-${id}`)
 
   return (
-    <ChartContainer config={chartConfig} className={className}>
+    <ChartContainer config={config} className={className}>
       <RadialBarChart
-        data={data}
+        data={coloredData}
         innerRadius={30}
         outerRadius={110}
         onMouseLeave={() => setHoveredIndex(null)}
       >
         <defs>
-          {glowFilterIds.map((filterId) => (
+          {glowFilterIds.map((filterId: string) => (
             <GlowFilter key={filterId} id={filterId} stdDeviation={4} />
           ))}
         </defs>

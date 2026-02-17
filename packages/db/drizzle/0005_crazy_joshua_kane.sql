@@ -1,0 +1,1 @@
+ALTER TABLE `scrape_targets` ADD `service_name` text;

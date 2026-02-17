@@ -48,6 +48,7 @@ function DashboardsPage() {
     updateWidgetDisplay,
     updateWidgetLayouts,
     updateWidget,
+    autoLayoutWidgets,
   } = useDashboardStore()
 
   const [mode, setMode] = useState<WidgetMode>("view")
@@ -109,6 +110,12 @@ function DashboardsPage() {
     if (readOnly) return
     setConfigureWidgetId(widgetId)
     setConfigureOpen(true)
+  }
+
+  const handleAutoLayout = () => {
+    if (readOnly) return
+    if (!activeDashboardId) return
+    autoLayoutWidgets(activeDashboardId)
   }
 
   const handleApplyWidgetConfig = (
@@ -201,6 +208,7 @@ function DashboardsPage() {
                   setMode((current) => (current === "edit" ? "view" : "edit"))
                 }
                 onAddWidget={() => setChartPickerOpen(true)}
+                onAutoLayout={handleAutoLayout}
               />
             }
           >

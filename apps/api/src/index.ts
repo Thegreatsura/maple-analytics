@@ -7,6 +7,7 @@ import { runWithTenantContext } from "@/lib/tenant-context"
 import { mcpWebHandler } from "./mcp/app"
 import { resolveMcpTenantContext } from "./mcp/lib/resolve-tenant"
 import { AutumnRouter } from "./routes/autumn.http"
+import { ApiKeysService } from "./services/ApiKeysService"
 import { AuthorizationLive } from "./services/AuthorizationLive"
 import { DashboardPersistenceService } from "./services/DashboardPersistenceService"
 import { Env } from "./services/Env"
@@ -41,6 +42,7 @@ const MainLive = Layer.mergeAll(
   TinybirdService.Default,
   QueryEngineService.Default,
   AuthService.Default,
+  ApiKeysService.Live,
   DashboardPersistenceService.Live,
   OrgIngestKeysService.Live,
   ScrapeTargetsService.Live,

@@ -1,20 +1,16 @@
 "use client"
 
+import { useMemo } from "react"
 import { Cell, Pie, PieChart } from "recharts"
-import { type ChartConfig, ChartContainer } from "@/components/ui/chart"
+import { ChartContainer } from "@/components/ui/chart"
 import type { BaseChartProps } from "@/components/charts/_shared/chart-types"
+import { buildChartConfig } from "@/components/charts/_shared/build-chart-config"
 import { pieData } from "@/components/charts/_shared/sample-data"
 
-const chartConfig = {
-  chrome: { label: "Chrome", color: "hsl(var(--chart-1))" },
-  safari: { label: "Safari", color: "hsl(var(--chart-2))" },
-  firefox: { label: "Firefox", color: "hsl(var(--chart-3))" },
-  edge: { label: "Edge", color: "hsl(var(--chart-4))" },
-  other: { label: "Other", color: "hsl(var(--chart-5))" },
-} satisfies ChartConfig
-
 export function IncreaseSizePieChart({ data = pieData, className }: BaseChartProps) {
-  const sorted = [...data].sort(
+  const { config, data: coloredData } = useMemo(() => buildChartConfig(data), [data])
+
+  const sorted = [...coloredData].sort(
     (a, b) => (b as { value: number }).value - (a as { value: number }).value
   )
 
@@ -22,7 +18,7 @@ export function IncreaseSizePieChart({ data = pieData, className }: BaseChartPro
   const radiusStep = 15
 
   return (
-    <ChartContainer config={chartConfig} className={className}>
+    <ChartContainer config={config} className={className}>
       <PieChart>
         {sorted.map((entry, index) => (
           <Pie

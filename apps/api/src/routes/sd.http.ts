@@ -58,6 +58,7 @@ export const HttpServiceDiscoveryLive = HttpApiBuilder.group(
               __scheme__: url.protocol.replace(":", ""),
               __metrics_path__: url.pathname,
               __scrape_interval__: `${row.scrapeIntervalSeconds}s`,
+              job: row.serviceName ?? row.name,
               maple_org_id: row.orgId,
               maple_scrape_target_id: row.id,
               maple_scrape_target_name: row.name,

@@ -4,6 +4,9 @@ import type {
   TinybirdPipe,
 } from "@maple/domain"
 import type {
+  ApiKeyCreatedResponse,
+  ApiKeyResponse,
+  ApiKeysListResponse,
   CurrentTenant,
   DashboardDeleteResponse,
   DashboardDocument,
@@ -59,6 +62,8 @@ export interface CreateScrapeTargetInput {
   readonly scrapeIntervalSeconds?: number
   readonly labelsJson?: string | null
   readonly authType?: string
+  readonly serviceName?: string | null
+  readonly authCredentials?: string | null
   readonly enabled?: boolean
 }
 
@@ -69,11 +74,23 @@ export interface UpdateScrapeTargetInput {
   readonly scrapeIntervalSeconds?: number
   readonly labelsJson?: string | null
   readonly authType?: string
+  readonly serviceName?: string | null
+  readonly authCredentials?: string | null
   readonly enabled?: boolean
 }
 
 export interface DeleteScrapeTargetInput {
   readonly targetId: string
+}
+
+export interface CreateApiKeyInput {
+  readonly name: string
+  readonly description?: string
+  readonly expiresInSeconds?: number
+}
+
+export interface RevokeApiKeyInput {
+  readonly keyId: string
 }
 
 const runAtomMutation = <Arg, A, E>(
@@ -216,6 +233,18 @@ export function createMapleApiClient(config: MapleApiClientConfig) {
     return requestJson<ScrapeTargetDeleteResponse>("DELETE", `/api/scrape-targets/${encodeURIComponent(targetId)}`)
   }
 
+  const listApiKeys = (): Promise<ApiKeysListResponse> => {
+    return requestJson<ApiKeysListResponse>("GET", "/api/api-keys")
+  }
+
+  const createApiKey = (input: CreateApiKeyInput): Promise<ApiKeyCreatedResponse> => {
+    return requestJson<ApiKeyCreatedResponse>("POST", "/api/api-keys", input)
+  }
+
+  const revokeApiKey = ({ keyId }: RevokeApiKeyInput): Promise<ApiKeyResponse> => {
+    return requestJson<ApiKeyResponse>("DELETE", `/api/api-keys/${encodeURIComponent(keyId)}/revoke`)
+  }
+
   return {
     queryTinybird,
     executeQueryEngine,
@@ -231,5 +260,8 @@ export function createMapleApiClient(config: MapleApiClientConfig) {
     createScrapeTarget,
     updateScrapeTarget,
     deleteScrapeTarget,
+    listApiKeys,
+    createApiKey,
+    revokeApiKey,
   }
 }

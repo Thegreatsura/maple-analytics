@@ -24,7 +24,7 @@ interface TableWidgetProps {
   editPanel?: React.ReactNode
 }
 
-function formatCellValue(value: unknown, unit?: string): string {
+export function formatCellValue(value: unknown, unit?: string): string {
   if (value == null) return "-"
   const num = Number(value)
   if (Number.isNaN(num)) return String(value)

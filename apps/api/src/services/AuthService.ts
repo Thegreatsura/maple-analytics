@@ -185,7 +185,7 @@ type ClerkRequestState = {
 type ClerkAuthenticateRequest = (
   request: Request,
   options: {
-    readonly acceptsToken: "session_token"
+    readonly acceptsToken: string | string[]
     readonly jwtKey?: string
   },
 ) => Promise<ClerkRequestState>
@@ -193,6 +193,7 @@ type ClerkAuthenticateRequest = (
 interface AuthEnv {
   readonly MAPLE_AUTH_MODE: string
   readonly MAPLE_DEFAULT_ORG_ID: string
+  readonly MAPLE_ORG_ID_OVERRIDE: string
   readonly MAPLE_ROOT_PASSWORD: string
   readonly CLERK_SECRET_KEY: string
   readonly CLERK_PUBLISHABLE_KEY: string
@@ -212,7 +213,8 @@ const makeClerkAuthenticateRequest = (
     jwtKey: env.CLERK_JWT_KEY.length > 0 ? env.CLERK_JWT_KEY : undefined,
   })
 
-  return (request, options) => clerkClient.authenticateRequest(request, options)
+  return (request, options) =>
+    clerkClient.authenticateRequest(request, options as any) as Promise<ClerkRequestState>
 }
 
 export const makeLoginSelfHosted = (
@@ -263,6 +265,7 @@ export const makeLoginSelfHosted = (
 export const makeResolveTenant = (
   env: AuthEnv,
   authenticateClerkRequest = makeClerkAuthenticateRequest(env),
+  acceptsToken: string | string[] = "session_token",
 ) =>
   Effect.fn("AuthService.resolveTenant")(function* (
     headers: HeaderRecord,
@@ -277,7 +280,7 @@ export const makeResolveTenant = (
       const requestState = yield* Effect.tryPromise({
         try: () =>
           authenticateClerkRequest(toRequest(headers), {
-            acceptsToken: "session_token",
+            acceptsToken,
             jwtKey: env.CLERK_JWT_KEY.length > 0 ? env.CLERK_JWT_KEY : undefined,
           }),
         catch: (error) =>
@@ -295,24 +298,26 @@ export const makeResolveTenant = (
         return yield* unauthorized("Invalid Clerk session token")
       }
 
-      if (!auth.isAuthenticated || auth.tokenType !== "session_token") {
-        return yield* unauthorized("Invalid Clerk session token")
+      if (!auth.isAuthenticated) {
+        return yield* unauthorized("Invalid Clerk token")
       }
 
       if (!auth.userId) {
         return yield* unauthorized("Missing user in Clerk session token")
       }
 
-      if (!auth.orgId) {
+      if (!auth.orgId && env.MAPLE_ORG_ID_OVERRIDE.length === 0) {
         return yield* unauthorized("Active organization is required")
       }
 
-      return {
-        orgId: auth.orgId,
+      const clerkTenant: TenantContext = {
+        orgId: env.MAPLE_ORG_ID_OVERRIDE.length > 0 ? env.MAPLE_ORG_ID_OVERRIDE : auth.orgId!,
         userId: auth.userId,
         roles: typeof auth.orgRole === "string" ? [auth.orgRole] : [],
         authMode: "clerk" as const,
       }
+
+      return clerkTenant
     }
 
     const token = getBearerToken(headers)
@@ -332,13 +337,24 @@ export const makeResolveTenant = (
 
     const roles = parseRoles(payload.roles)
 
-    return {
+    const tenant: TenantContext = {
       orgId: payload.org_id,
       userId: payload.sub,
       roles: roles.length > 0 ? roles : ["root"],
       authMode: "self_hosted" as const,
     }
+
+    if (env.MAPLE_ORG_ID_OVERRIDE.length > 0) {
+      return { ...tenant, orgId: env.MAPLE_ORG_ID_OVERRIDE }
+    }
+
+    return tenant
   })
+
+export const makeResolveMcpTenant = (
+  env: AuthEnv,
+  authenticateClerkRequest = makeClerkAuthenticateRequest(env),
+) => makeResolveTenant(env, authenticateClerkRequest, "api_key")
 
 export class AuthService extends Effect.Service<AuthService>()("AuthService", {
   accessors: true,
@@ -346,10 +362,12 @@ export class AuthService extends Effect.Service<AuthService>()("AuthService", {
   effect: Effect.gen(function* () {
     const env = yield* Env
     const resolveTenant = makeResolveTenant(env)
+    const resolveMcpTenant = makeResolveMcpTenant(env)
     const loginSelfHosted = makeLoginSelfHosted(env)
 
     return {
       resolveTenant,
+      resolveMcpTenant,
       loginSelfHosted,
     }
   }),

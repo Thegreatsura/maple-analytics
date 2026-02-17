@@ -6,6 +6,7 @@ export const scrapeTargets = sqliteTable(
     id: text("id").notNull().primaryKey(),
     orgId: text("org_id").notNull(),
     name: text("name").notNull(),
+    serviceName: text("service_name"),
     url: text("url").notNull(),
     scrapeIntervalSeconds: integer("scrape_interval_seconds", { mode: "number" })
       .notNull()

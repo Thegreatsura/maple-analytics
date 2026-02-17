@@ -7,9 +7,7 @@ import {
   lineTimeSeriesData,
   multiLineData,
   partialLineData,
-  pieData,
-  radialData,
-  radarData,
+radarData,
   latencyTimeSeriesData,
   throughputTimeSeriesData,
   apdexTimeSeriesData,
@@ -98,6 +96,21 @@ export const chartRegistry: ChartRegistryEntry[] = [
     tags: ["bar", "multiple", "grouped"],
   },
 
+  // Query Builder Bar
+  {
+    id: "query-builder-bar",
+    name: "Query Builder Bar",
+    description: "Dynamic multi-query bar chart for query builder widgets",
+    category: "bar",
+    component: lazy(() =>
+      import("./bar/query-builder-bar-chart").then((m) => ({
+        default: m.QueryBuilderBarChart,
+      }))
+    ),
+    sampleData: latencyTimeSeriesData,
+    tags: ["bar", "query-builder", "dynamic", "multi-query"],
+  },
+
   // Area Charts
   {
     id: "gradient-area",
@@ -148,6 +161,21 @@ export const chartRegistry: ChartRegistryEntry[] = [
     ),
     sampleData: areaTimeSeriesData,
     tags: ["area", "hatched", "bar", "pattern"],
+  },
+
+  // Query Builder Area
+  {
+    id: "query-builder-area",
+    name: "Query Builder Area",
+    description: "Dynamic multi-query area chart for query builder widgets",
+    category: "area",
+    component: lazy(() =>
+      import("./area/query-builder-area-chart").then((m) => ({
+        default: m.QueryBuilderAreaChart,
+      }))
+    ),
+    sampleData: latencyTimeSeriesData,
+    tags: ["area", "query-builder", "dynamic", "multi-query"],
   },
 
   // Line Charts
@@ -246,54 +274,6 @@ export const chartRegistry: ChartRegistryEntry[] = [
     ),
     sampleData: lineTimeSeriesData,
     tags: ["line", "rainbow", "glow", "gradient"],
-  },
-
-  // Pie Charts
-  {
-    id: "rounded-pie",
-    name: "Rounded Pie",
-    description: "Donut chart with rounded corners",
-    category: "pie",
-    component: lazy(() =>
-      import("./pie/rounded-pie-chart").then((m) => ({ default: m.RoundedPieChart }))
-    ),
-    sampleData: pieData,
-    tags: ["pie", "donut", "rounded"],
-  },
-  {
-    id: "increase-size-pie",
-    name: "Increasing Size Pie",
-    description: "Pie chart with varying segment sizes",
-    category: "pie",
-    component: lazy(() =>
-      import("./pie/increase-size-pie-chart").then((m) => ({
-        default: m.IncreaseSizePieChart,
-      }))
-    ),
-    sampleData: pieData,
-    tags: ["pie", "increasing", "size"],
-  },
-  {
-    id: "default-radial",
-    name: "Default Radial",
-    description: "Radial bar chart with corner radius",
-    category: "pie",
-    component: lazy(() =>
-      import("./pie/default-radial-chart").then((m) => ({ default: m.DefaultRadialChart }))
-    ),
-    sampleData: radialData,
-    tags: ["pie", "radial", "bar"],
-  },
-  {
-    id: "glowing-radial",
-    name: "Glowing Radial",
-    description: "Radial bar chart with glow on hover",
-    category: "pie",
-    component: lazy(() =>
-      import("./pie/glowing-radial-chart").then((m) => ({ default: m.GlowingRadialChart }))
-    ),
-    sampleData: radialData,
-    tags: ["pie", "radial", "glow", "hover"],
   },
 
   // Service Charts

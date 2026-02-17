@@ -43,11 +43,12 @@ import { apiBaseUrl } from "@/lib/services/common/api-base-url"
 import { getMapleAuthHeaders } from "@/lib/services/common/auth-headers"
 import { ingestUrl } from "@/lib/services/common/ingest-url"
 import { isClerkAuthEnabled } from "@/lib/services/common/auth-mode"
+import { ApiKeysSection } from "@/components/settings/api-keys-section"
 import { BillingSection } from "@/components/settings/billing-section"
 import { ScrapeTargetsSection } from "@/components/settings/scrape-targets-section"
 
 const settingsSearchSchema = z.object({
-  tab: z.enum(["general", "connectors", "billing"]).optional().default("general"),
+  tab: z.enum(["general", "api-keys", "connectors", "billing"]).optional().default("general"),
 })
 
 export const Route = createFileRoute("/settings")({
@@ -445,16 +446,20 @@ function SettingsPage() {
         <Tabs
           value={search.tab}
           onValueChange={(tab) =>
-            navigate({ search: { tab: tab as "general" | "connectors" | "billing" } })
+            navigate({ search: { tab: tab as "general" | "api-keys" | "connectors" | "billing" } })
           }
         >
           <TabsList variant="line">
             <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="api-keys">API Keys</TabsTrigger>
             <TabsTrigger value="connectors">Connectors</TabsTrigger>
             <TabsTrigger value="billing">Usage & Billing</TabsTrigger>
           </TabsList>
           <TabsContent value="general" className="pt-4">
             <GeneralSettings {...generalSettingsProps} />
+          </TabsContent>
+          <TabsContent value="api-keys" className="pt-4">
+            <ApiKeysSection />
           </TabsContent>
           <TabsContent value="connectors" className="pt-4">
             <div className="max-w-2xl space-y-6">
@@ -473,15 +478,19 @@ function SettingsPage() {
         <Tabs
           value={search.tab}
           onValueChange={(tab) =>
-            navigate({ search: { tab: tab as "general" | "connectors" } })
+            navigate({ search: { tab: tab as "general" | "api-keys" | "connectors" } })
           }
         >
           <TabsList variant="line">
             <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="api-keys">API Keys</TabsTrigger>
             <TabsTrigger value="connectors">Connectors</TabsTrigger>
           </TabsList>
           <TabsContent value="general" className="pt-4">
             <GeneralSettings {...generalSettingsProps} />
+          </TabsContent>
+          <TabsContent value="api-keys" className="pt-4">
+            <ApiKeysSection />
           </TabsContent>
           <TabsContent value="connectors" className="pt-4">
             <div className="max-w-2xl space-y-6">

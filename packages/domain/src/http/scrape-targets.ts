@@ -9,10 +9,12 @@ const ScrapeTargetPath = Schema.Struct({
 export class ScrapeTargetResponse extends Schema.Class<ScrapeTargetResponse>("ScrapeTargetResponse")({
   id: Schema.String,
   name: Schema.String,
+  serviceName: Schema.NullOr(Schema.String),
   url: Schema.String,
   scrapeIntervalSeconds: Schema.Number,
   labelsJson: Schema.NullOr(Schema.String),
   authType: Schema.String,
+  hasCredentials: Schema.Boolean,
   enabled: Schema.Boolean,
   lastScrapeAt: Schema.NullOr(Schema.String),
   lastScrapeError: Schema.NullOr(Schema.String),
@@ -34,6 +36,8 @@ export class CreateScrapeTargetRequest extends Schema.Class<CreateScrapeTargetRe
   scrapeIntervalSeconds: Schema.optional(Schema.Number),
   labelsJson: Schema.optional(Schema.NullOr(Schema.String)),
   authType: Schema.optional(Schema.String),
+  serviceName: Schema.optional(Schema.NullOr(Schema.String)),
+  authCredentials: Schema.optional(Schema.NullOr(Schema.String)),
   enabled: Schema.optional(Schema.Boolean),
 }) {}
 
@@ -45,6 +49,8 @@ export class UpdateScrapeTargetRequest extends Schema.Class<UpdateScrapeTargetRe
   scrapeIntervalSeconds: Schema.optional(Schema.Number),
   labelsJson: Schema.optional(Schema.NullOr(Schema.String)),
   authType: Schema.optional(Schema.String),
+  serviceName: Schema.optional(Schema.NullOr(Schema.String)),
+  authCredentials: Schema.optional(Schema.NullOr(Schema.String)),
   enabled: Schema.optional(Schema.Boolean),
 }) {}
 
@@ -79,6 +85,14 @@ export class ScrapeTargetValidationError extends Schema.TaggedError<ScrapeTarget
   HttpApiSchema.annotations({ status: 400 }),
 ) {}
 
+export class ScrapeTargetEncryptionError extends Schema.TaggedError<ScrapeTargetEncryptionError>()(
+  "ScrapeTargetEncryptionError",
+  {
+    message: Schema.String,
+  },
+  HttpApiSchema.annotations({ status: 500 }),
+) {}
+
 export class ScrapeTargetsApiGroup extends HttpApiGroup.make("scrapeTargets")
   .add(
     HttpApiEndpoint.get("list", "/")
@@ -90,7 +104,8 @@ export class ScrapeTargetsApiGroup extends HttpApiGroup.make("scrapeTargets")
       .setPayload(CreateScrapeTargetRequest)
       .addSuccess(ScrapeTargetResponse)
       .addError(ScrapeTargetValidationError)
-      .addError(ScrapeTargetPersistenceError),
+      .addError(ScrapeTargetPersistenceError)
+      .addError(ScrapeTargetEncryptionError),
   )
   .add(
     HttpApiEndpoint.patch("update", "/:targetId")
@@ -99,7 +114,8 @@ export class ScrapeTargetsApiGroup extends HttpApiGroup.make("scrapeTargets")
       .addSuccess(ScrapeTargetResponse)
       .addError(ScrapeTargetNotFoundError)
       .addError(ScrapeTargetValidationError)
-      .addError(ScrapeTargetPersistenceError),
+      .addError(ScrapeTargetPersistenceError)
+      .addError(ScrapeTargetEncryptionError),
   )
   .add(
     HttpApiEndpoint.del("delete", "/:targetId")
