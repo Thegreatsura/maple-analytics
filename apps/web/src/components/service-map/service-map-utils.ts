@@ -15,6 +15,9 @@ import type { ServiceOverview } from "@/api/tinybird/services"
 export interface ServiceNodeData {
   label: string
   throughput: number
+  tracedThroughput: number
+  hasSampling: boolean
+  samplingWeight: number
   errorRate: number
   avgLatencyMs: number
   services: string[]
@@ -24,10 +27,12 @@ export interface ServiceNodeData {
 export interface ServiceEdgeData {
   callCount: number
   callsPerSecond: number
+  estimatedCallsPerSecond: number
   errorCount: number
   errorRate: number
   avgDurationMs: number
   p95DurationMs: number
+  hasSampling: boolean
   services: string[]
   [key: string]: unknown
 }
@@ -83,6 +88,9 @@ export function buildFlowElements(
       data: {
         label: service,
         throughput: overview?.throughput ?? 0,
+        tracedThroughput: overview?.tracedThroughput ?? 0,
+        hasSampling: overview?.hasSampling ?? false,
+        samplingWeight: overview?.samplingWeight ?? 1,
         errorRate: overview?.errorRate ?? 0,
         avgLatencyMs: overview?.p50LatencyMs ?? 0,
         services,
@@ -100,10 +108,12 @@ export function buildFlowElements(
     data: {
       callCount: edge.callCount,
       callsPerSecond: edge.callCount / safeDuration,
+      estimatedCallsPerSecond: edge.estimatedCallCount / safeDuration,
       errorCount: edge.errorCount,
       errorRate: edge.errorRate,
       avgDurationMs: edge.avgDurationMs,
       p95DurationMs: edge.p95DurationMs,
+      hasSampling: edge.hasSampling,
       services,
     },
   }))

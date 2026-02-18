@@ -304,18 +304,30 @@ export function ServicesTable({ filters }: ServicesTableProps) {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="relative w-[120px] h-8">
-                            <Sparkline
-                              data={throughputData}
-                              color="var(--color-primary, #3b82f6)"
-                              className="absolute inset-0 h-full w-full"
-                            />
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <span className="font-mono text-xs font-semibold [text-shadow:0_0_6px_var(--background),0_0_12px_var(--background),0_0_18px_var(--background)]">
-                                {formatThroughput(service.throughput)}
-                              </span>
-                            </div>
-                          </div>
+                          <Tooltip>
+                            <TooltipTrigger className="relative w-[120px] h-8 block">
+                              <Sparkline
+                                data={throughputData}
+                                color="var(--color-primary, #3b82f6)"
+                                className="absolute inset-0 h-full w-full"
+                              />
+                              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                <span className="font-mono text-xs font-semibold [text-shadow:0_0_6px_var(--background),0_0_12px_var(--background),0_0_18px_var(--background)]">
+                                  {service.hasSampling ? "~" : ""}{formatThroughput(service.throughput)}
+                                </span>
+                                {service.hasSampling && (
+                                  <span className="font-mono text-[9px] text-muted-foreground [text-shadow:0_0_6px_var(--background),0_0_12px_var(--background),0_0_18px_var(--background)]">
+                                    ~{formatThroughput(service.tracedThroughput)} traced
+                                  </span>
+                                )}
+                              </div>
+                            </TooltipTrigger>
+                            {service.hasSampling && (
+                              <TooltipContent side="bottom">
+                                <p>Estimated from {((1 / service.samplingWeight) * 100).toFixed(0)}% sampled traces (x{service.samplingWeight.toFixed(0)} extrapolation)</p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
                         </TableCell>
                         <TableCell className="font-mono text-xs text-muted-foreground">
                           <CommitsList commits={service.commits} />

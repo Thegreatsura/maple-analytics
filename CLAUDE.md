@@ -128,6 +128,13 @@ Use `/Users/maki/Documents/superwall/app` as the reference implementation for Ef
 
 - **Span Status Codes:** Use title case (`"Ok"`, `"Error"`, `"Unset"`), not uppercase
 
+## Documentation
+
+End-user and platform documentation lives in `docs/`:
+- `docs/sampling-throughput.md` — How Maple handles sampling-aware throughput metrics
+- `docs/persistence.md` — Database persistence and migration operations
+- `docs/railway-deploy.md` — Railway deployment with Alchemy
+
 ## Self-Observability (Trace Loop Prevention)
 
 The Maple API traces itself via `@effect/opentelemetry` → ingest gateway → collector → Tinybird. This creates a feedback loop: viewing traces in the dashboard generates API calls, which create more traces.

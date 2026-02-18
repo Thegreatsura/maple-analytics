@@ -2,6 +2,11 @@ import { memo } from "react"
 import { Handle, Position } from "@xyflow/react"
 import { cn } from "@/lib/utils"
 import { getServiceLegendColor } from "@/lib/colors"
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip"
 import type { ServiceNodeData } from "./service-map-utils"
 
 function formatRate(value: number): string {
@@ -34,7 +39,7 @@ interface ServiceMapNodeProps {
 export const ServiceMapNode = memo(function ServiceMapNode({
   data,
 }: ServiceMapNodeProps) {
-  const { label, throughput, errorRate, avgLatencyMs, services } = data
+  const { label, throughput, tracedThroughput, hasSampling, samplingWeight, errorRate, avgLatencyMs, services } = data
   const color = getServiceLegendColor(label, services)
 
   return (
@@ -65,12 +70,19 @@ export const ServiceMapNode = memo(function ServiceMapNode({
 
         {/* Metrics */}
         <div className="grid grid-cols-3 divide-x divide-border px-1 py-2 text-center text-[10px]">
-          <div>
-            <div className="font-medium text-muted-foreground">req/s</div>
-            <div className="font-mono font-semibold text-foreground tabular-nums">
-              {formatRate(throughput)}
-            </div>
-          </div>
+          <Tooltip>
+            <TooltipTrigger>
+              <div className="font-medium text-muted-foreground">req/s</div>
+              <div className="font-mono font-semibold text-foreground tabular-nums">
+                {hasSampling ? "~" : ""}{formatRate(throughput)}
+              </div>
+            </TooltipTrigger>
+            {hasSampling && (
+              <TooltipContent side="bottom">
+                <p>Estimated x{samplingWeight.toFixed(0)} from {formatRate(tracedThroughput)} traced req/s</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
           <div>
             <div className="font-medium text-muted-foreground">err%</div>
             <div

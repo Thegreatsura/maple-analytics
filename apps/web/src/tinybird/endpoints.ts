@@ -1455,7 +1455,10 @@ export const serviceOverview = defineEndpoint("service_overview", {
           count() AS spanCount,
           quantile(0.50)(Duration / 1000000) AS p50LatencyMs,
           quantile(0.95)(Duration / 1000000) AS p95LatencyMs,
-          quantile(0.99)(Duration / 1000000) AS p99LatencyMs
+          quantile(0.99)(Duration / 1000000) AS p99LatencyMs,
+          countIf(TraceState LIKE '%th:%') AS sampledSpanCount,
+          countIf(TraceState = '' OR TraceState NOT LIKE '%th:%') AS unsampledSpanCount,
+          anyIf(extract(TraceState, 'th:([0-9a-f]+)'), TraceState LIKE '%th:%') AS dominantThreshold
         FROM traces
         WHERE ParentSpanId = ''
           AND OrgId = {{String(org_id, "")}}
@@ -1487,6 +1490,9 @@ export const serviceOverview = defineEndpoint("service_overview", {
     p50LatencyMs: t.float64(),
     p95LatencyMs: t.float64(),
     p99LatencyMs: t.float64(),
+    sampledSpanCount: t.uint64(),
+    unsampledSpanCount: t.uint64(),
+    dominantThreshold: t.string(),
   },
 });
 
@@ -2376,7 +2382,10 @@ export const serviceDependencies = defineEndpoint("service_dependencies", {
           count() AS callCount,
           countIf(StatusCode = 'Error') AS errorCount,
           avg(Duration / 1000000) AS avgDurationMs,
-          quantile(0.95)(Duration / 1000000) AS p95DurationMs
+          quantile(0.95)(Duration / 1000000) AS p95DurationMs,
+          countIf(TraceState LIKE '%th:%') AS sampledSpanCount,
+          countIf(TraceState = '' OR TraceState NOT LIKE '%th:%') AS unsampledSpanCount,
+          anyIf(extract(TraceState, 'th:([0-9a-f]+)'), TraceState LIKE '%th:%') AS dominantThreshold
         FROM traces
         WHERE OrgId = {{String(org_id, "")}}
           AND SpanKind = 'SPAN_KIND_CLIENT'
@@ -2402,7 +2411,10 @@ export const serviceDependencies = defineEndpoint("service_dependencies", {
           count() AS callCount,
           countIf(c.StatusCode = 'Error') AS errorCount,
           avg(c.Duration / 1000000) AS avgDurationMs,
-          quantile(0.95)(c.Duration / 1000000) AS p95DurationMs
+          quantile(0.95)(c.Duration / 1000000) AS p95DurationMs,
+          countIf(c.TraceState LIKE '%th:%') AS sampledSpanCount,
+          countIf(c.TraceState = '' OR c.TraceState NOT LIKE '%th:%') AS unsampledSpanCount,
+          anyIf(extract(c.TraceState, 'th:([0-9a-f]+)'), c.TraceState LIKE '%th:%') AS dominantThreshold
         FROM (
           SELECT TraceId, SpanId, ServiceName
           FROM traces
@@ -2420,7 +2432,7 @@ export const serviceDependencies = defineEndpoint("service_dependencies", {
           {% end %}
         ) AS p
         INNER JOIN (
-          SELECT TraceId, ParentSpanId, ServiceName, Duration, StatusCode
+          SELECT TraceId, ParentSpanId, ServiceName, Duration, StatusCode, TraceState
           FROM traces
           WHERE OrgId = {{String(org_id, "")}}
             AND ParentSpanId != ''
@@ -2448,7 +2460,10 @@ export const serviceDependencies = defineEndpoint("service_dependencies", {
           sum(callCount) AS callCount,
           sum(errorCount) AS errorCount,
           avg(avgDurationMs) AS avgDurationMs,
-          max(p95DurationMs) AS p95DurationMs
+          max(p95DurationMs) AS p95DurationMs,
+          sum(sampledSpanCount) AS sampledSpanCount,
+          sum(unsampledSpanCount) AS unsampledSpanCount,
+          any(dominantThreshold) AS dominantThreshold
         FROM (
           SELECT * FROM peer_service_edges
           UNION ALL
@@ -2467,6 +2482,9 @@ export const serviceDependencies = defineEndpoint("service_dependencies", {
     errorCount: t.uint64(),
     avgDurationMs: t.float64(),
     p95DurationMs: t.float64(),
+    sampledSpanCount: t.uint64(),
+    unsampledSpanCount: t.uint64(),
+    dominantThreshold: t.string(),
   },
 });
 

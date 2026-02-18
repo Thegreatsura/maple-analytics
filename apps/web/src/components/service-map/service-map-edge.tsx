@@ -49,8 +49,12 @@ export const ServiceMapEdge = memo(function ServiceMapEdge({
   const edgeData = data as ServiceEdgeData | undefined
 
   const callCount = edgeData?.callCount ?? 0
+  const estimatedCallCount = edgeData?.hasSampling
+    ? Math.round((edgeData?.estimatedCallsPerSecond ?? 0) * (callCount / Math.max(edgeData?.callsPerSecond ?? 1, 0.001)))
+    : callCount
   const callsPerSecond = edgeData?.callsPerSecond ?? 0
   const errorRate = edgeData?.errorRate ?? 0
+  const hasSampling = edgeData?.hasSampling ?? false
   const services = edgeData?.services ?? []
 
   const [edgePath, labelX, labelY] = getSmoothStepPath({
@@ -249,9 +253,9 @@ export const ServiceMapEdge = memo(function ServiceMapEdge({
         height={24}
         className="overflow-visible pointer-events-none"
       >
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-center" title={hasSampling ? "Based on traced requests — actual rate may be higher with sampling enabled" : undefined}>
           <span className="rounded bg-card/90 backdrop-blur-sm px-1.5 py-0.5 text-[10px] font-mono font-medium text-muted-foreground border border-border/50 whitespace-nowrap tabular-nums">
-            {formatCallCount(callCount)}
+            {hasSampling ? "~" : ""}{formatCallCount(hasSampling ? estimatedCallCount : callCount)}
             {errorRate > 0 && (
               <span
                 className={

@@ -5,6 +5,7 @@ import {
   computeBucketSeconds,
   toIsoBucket,
 } from "@/api/tinybird/timeseries-utils";
+import { estimateThroughput } from "@/lib/sampling";
 
 // Date format: "YYYY-MM-DD HH:mm:ss" (Tinybird/ClickHouse compatible)
 const dateTimeString = z
@@ -27,6 +28,9 @@ export interface ServiceOverview {
   p99LatencyMs: number;
   errorRate: number;
   throughput: number;
+  tracedThroughput: number;
+  hasSampling: boolean;
+  samplingWeight: number;
 }
 
 export interface ServiceOverviewResponse {
@@ -53,6 +57,9 @@ interface CoercedRow {
   p50LatencyMs: number;
   p95LatencyMs: number;
   p99LatencyMs: number;
+  sampledSpanCount: number;
+  unsampledSpanCount: number;
+  dominantThreshold: string;
 }
 
 function coerceRow(raw: ServiceOverviewOutput): CoercedRow {
@@ -66,6 +73,9 @@ function coerceRow(raw: ServiceOverviewOutput): CoercedRow {
     p50LatencyMs: Number(raw.p50LatencyMs),
     p95LatencyMs: Number(raw.p95LatencyMs),
     p99LatencyMs: Number(raw.p99LatencyMs),
+    sampledSpanCount: Number(raw.sampledSpanCount),
+    unsampledSpanCount: Number(raw.unsampledSpanCount),
+    dominantThreshold: raw.dominantThreshold || "",
   };
 }
 
@@ -90,7 +100,19 @@ function aggregateByServiceEnvironment(
   for (const group of groups.values()) {
     const totalSpans = group.reduce((sum, r) => sum + r.spanCount, 0);
     const totalErrors = group.reduce((sum, r) => sum + r.errorCount, 0);
-    const totalCount = group.reduce((sum, r) => sum + r.totalCount, 0);
+    const totalSampled = group.reduce((sum, r) => sum + r.sampledSpanCount, 0);
+    const totalUnsampled = group.reduce((sum, r) => sum + r.unsampledSpanCount, 0);
+
+    // Use the first non-empty threshold found across commit groups
+    let threshold = "";
+    for (const r of group) {
+      if (r.dominantThreshold) {
+        threshold = r.dominantThreshold;
+        break;
+      }
+    }
+
+    const sampling = estimateThroughput(totalSampled, totalUnsampled, threshold, durationSeconds);
 
     // Weighted average of latencies by span count
     let p50 = 0;
@@ -124,7 +146,10 @@ function aggregateByServiceEnvironment(
       p95LatencyMs: p95,
       p99LatencyMs: p99,
       errorRate: totalSpans > 0 ? (totalErrors / totalSpans) * 100 : 0,
-      throughput: durationSeconds > 0 ? totalCount / durationSeconds : 0,
+      throughput: sampling.hasSampling ? sampling.estimated : sampling.traced,
+      tracedThroughput: sampling.traced,
+      hasSampling: sampling.hasSampling,
+      samplingWeight: sampling.weight,
     });
   }
 
