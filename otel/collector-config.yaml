@@ -66,8 +66,16 @@ exporters:
       enabled: true
       num_consumers: 8
       queue_size: 10000
+      storage: file_storage/queue
 
 extensions:
+  file_storage/queue:
+    directory: /var/lib/otelcol/file_storage
+    timeout: 10s
+    compaction:
+      on_start: true
+      on_rebound: true
+
   health_check:
     endpoint: 0.0.0.0:13133
 
@@ -75,7 +83,7 @@ extensions:
     endpoint: 0.0.0.0:55679
 
 service:
-  extensions: [health_check, zpages]
+  extensions: [health_check, zpages, file_storage/queue]
 
   pipelines:
     logs:

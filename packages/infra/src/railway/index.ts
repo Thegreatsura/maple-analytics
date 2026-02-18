@@ -5,6 +5,7 @@ import {
   RailwayApi,
   Service,
   Variable,
+  Volume,
   type Environment as RailwayEnvironment,
   type Service as RailwayService,
 } from "alchemy/railway"
@@ -134,6 +135,14 @@ export async function provisionRailwayStack(
       SD_API_PORT: "3472",
       SD_INTERNAL_TOKEN: env.SD_INTERNAL_TOKEN?.trim() || "",
     },
+  })
+
+  await Volume("otel-queue-storage", {
+    project,
+    service: otelService,
+    environment,
+    mountPath: "/var/lib/otelcol/file_storage",
+    delete: false,
   })
 
   const otelPrivateEndpoint = toOtelPrivateEndpoint(otelService.name)
