@@ -6,13 +6,15 @@
     ".": "./src/index.ts",
     "./http": "./src/http/index.ts",
     "./query-engine": "./src/query-engine.ts",
-    "./tinybird-pipes": "./src/tinybird-pipes.ts"
+    "./tinybird-pipes": "./src/tinybird-pipes.ts",
+    "./tinybird": "./src/tinybird/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@effect/platform": "^0.94.4",
+    "@tinybirdco/sdk": "0.0.44",
     "effect": "^3.19.16"
   },
   "devDependencies": {

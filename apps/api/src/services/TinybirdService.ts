@@ -52,7 +52,7 @@ import {
   spanHierarchy,
   tracesDurationStats,
   tracesFacets,
-} from "../tinybird/endpoints"
+} from "@maple/domain/tinybird"
 
 export class TinybirdService extends Effect.Service<TinybirdService>()("TinybirdService", {
   accessors: true,

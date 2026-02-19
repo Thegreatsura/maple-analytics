@@ -34,7 +34,7 @@ import type {
   SpanHierarchyOutput,
   TracesDurationStatsOutput,
   TracesFacetsOutput,
-} from "@/tinybird/endpoints"
+} from "@maple/domain/tinybird"
 
 export type {
   CustomLogsBreakdownParams,
@@ -97,7 +97,7 @@ export type {
   TracesDurationStatsOutput,
   TracesFacetsParams,
   TracesFacetsOutput,
-} from "@/tinybird/endpoints"
+} from "@maple/domain/tinybird"
 
 type QueryResponse<T> = {
   data: T[]
