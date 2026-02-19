@@ -17,8 +17,8 @@
     --secondary-foreground: oklch(0.21 0.006 285.885);
     --muted: oklch(0.967 0.001 286.375);
     --muted-foreground: oklch(0.552 0.016 285.938);
-    --accent: oklch(0.59 0.14 242);
-    --accent-foreground: oklch(0.98 0.01 237);
+    --accent: oklch(0.96 0.02 242);
+    --accent-foreground: oklch(0.21 0.006 285.885);
     --destructive: oklch(0.577 0.245 27.325);
     --border: oklch(0.92 0.004 286.32);
     --input: oklch(0.92 0.004 286.32);
@@ -33,10 +33,17 @@
     --sidebar-foreground: oklch(0.141 0.005 285.823);
     --sidebar-primary: oklch(0.59 0.14 242);
     --sidebar-primary-foreground: oklch(0.98 0.01 237);
-    --sidebar-accent: oklch(0.59 0.14 242);
-    --sidebar-accent-foreground: oklch(0.98 0.01 237);
+    --sidebar-accent: oklch(0.96 0.02 242);
+    --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
     --sidebar-border: oklch(0.92 0.004 286.32);
     --sidebar-ring: oklch(0.705 0.015 286.067);
+    --border-hairline: 1px;
+}
+
+@media only screen and (min-device-pixel-ratio: 2), only screen and (min-resolution: 192dpi) {
+  :root {
+    --border-hairline: 0.5px;
+  }
 }
 
 .dark {
@@ -52,8 +59,8 @@
     --secondary-foreground: oklch(0.985 0 0);
     --muted: oklch(0.274 0.006 286.033);
     --muted-foreground: oklch(0.705 0.015 286.067);
-    --accent: oklch(0.68 0.15 237);
-    --accent-foreground: oklch(0.29 0.06 243);
+    --accent: oklch(0.274 0.006 286.033);
+    --accent-foreground: oklch(0.985 0 0);
     --destructive: oklch(0.704 0.191 22.216);
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
@@ -67,8 +74,8 @@
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-primary: oklch(0.75 0.14 233);
     --sidebar-primary-foreground: oklch(0.29 0.06 243);
-    --sidebar-accent: oklch(0.68 0.15 237);
-    --sidebar-accent-foreground: oklch(0.29 0.06 243);
+    --sidebar-accent: oklch(0.274 0.006 286.033);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.552 0.016 285.938);
 }

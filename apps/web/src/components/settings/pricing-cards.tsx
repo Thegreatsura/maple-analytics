@@ -307,75 +307,82 @@ export function PricingCards() {
             <Card
               key={product.id}
               className={cn(
-                "flex flex-col",
-                isActive && "ring-primary/40",
-                isUpgrade && "ring-primary/30 ring-2",
+                "flex flex-col relative transition-all duration-300 ease-out",
+                isActive && "ring-primary/20 bg-muted/30",
+                isUpgrade && "ring-primary/40 ring-2 shadow-[0_0_40px_-15px_rgba(var(--primary),0.3)] scale-[1.02] z-10",
+                !isUpgrade && "hover:ring-primary/20",
               )}
             >
-              <CardHeader>
+              {isUpgrade && (
+                <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
+              )}
+              <CardHeader className="pt-6">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-xs font-medium uppercase tracking-widest">
+                  <CardTitle className={cn(
+                    "text-[11px] font-semibold uppercase tracking-widest",
+                    isUpgrade ? "text-primary" : "text-muted-foreground"
+                  )}>
                     {product.display?.name ?? product.name}
                   </CardTitle>
                   <div className="flex gap-2">
                     {isActive && (
-                      <Badge variant="secondary" className="text-[10px]">
+                      <Badge variant="secondary" className="text-[10px] font-medium bg-secondary/50">
                         Current
                       </Badge>
                     )}
                     {product.display?.recommend_text && !isActive && (
-                      <Badge variant="default" className="text-[10px]">
+                      <Badge variant="default" className="text-[10px] font-medium shadow-sm">
                         {product.display.recommend_text}
                       </Badge>
                     )}
                   </div>
                 </div>
-                <div className="mt-2 flex items-baseline gap-1">
-                  <span className="text-3xl font-bold tracking-tight">
+                <div className="mt-4 flex items-baseline gap-1">
+                  <span className="text-4xl font-semibold tracking-tight tabular-nums">
                     {price}
                   </span>
                   {interval && (
-                    <span className="text-muted-foreground text-sm font-normal">
+                    <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider ml-1">
                       {interval}
                     </span>
                   )}
                 </div>
                 {product.display?.description && (
-                  <CardDescription className="mt-2 text-sm leading-relaxed">
+                  <CardDescription className="mt-3 text-sm leading-relaxed text-muted-foreground">
                     {product.display.description}
                   </CardDescription>
                 )}
                 {product.display?.everything_from && (
-                  <p className="text-muted-foreground mt-2 text-xs">
-                    Everything in {product.display.everything_from}, plus:
+                  <p className="text-muted-foreground mt-3 text-xs font-medium">
+                    Everything in <span className="text-foreground">{product.display.everything_from}</span>, plus:
                   </p>
                 )}
               </CardHeader>
 
-              <CardContent className="flex flex-col gap-5 flex-1">
+              <CardContent className="flex flex-col gap-6 flex-1 pt-2 pb-6">
                 {features.length > 0 && (
                   <div>
-                    <div className="text-muted-foreground mb-3 text-[11px] font-medium uppercase tracking-wider">
+                    <div className="text-muted-foreground/70 mb-4 text-[10px] font-semibold uppercase tracking-widest">
                       Data included
                     </div>
-                    <div className="space-y-2.5">
+                    <div className="space-y-3">
                       {features.map((feature) => {
                         const Icon = FEATURE_ICONS[feature.featureId]
                         return (
                           <div
                             key={feature.featureId}
-                            className="flex items-center justify-between text-sm"
+                            className="flex items-center justify-between text-sm group/feature"
                           >
-                            <div className="text-muted-foreground flex items-center gap-2.5">
-                              {Icon && <Icon className="size-4" />}
-                              <span>{feature.label}</span>
+                            <div className="text-muted-foreground flex items-center gap-3 transition-colors group-hover/feature:text-foreground">
+                              {Icon && <Icon className="size-4 opacity-70" />}
+                              <span className="font-medium">{feature.label}</span>
                             </div>
                             <div className="text-right">
-                              <span className="font-medium tabular-nums">
+                              <span className="font-semibold tabular-nums text-foreground">
                                 {feature.value}
                               </span>
                               {feature.detail && (
-                                <p className="text-muted-foreground text-[10px] mt-0.5">
+                                <p className="text-muted-foreground/70 text-[10px] mt-0.5 font-medium">
                                   {feature.detail}
                                 </p>
                               )}
@@ -387,42 +394,48 @@ export function PricingCards() {
                   </div>
                 )}
 
-                <Separator />
+                <Separator className="bg-border/60" />
 
                 <div>
-                  <div className="text-muted-foreground mb-3 text-[11px] font-medium uppercase tracking-wider">
+                  <div className="text-muted-foreground/70 mb-4 text-[10px] font-semibold uppercase tracking-widest">
                     Platform features
                   </div>
-                  <div className="space-y-2.5">
+                  <div className="space-y-3">
                     {planFeatures.map((feature) => (
                       <div
                         key={feature.label}
-                        className="flex items-center gap-2.5 text-sm"
+                        className="flex items-start gap-3 text-sm"
                       >
-                        <CircleCheckIcon className="text-primary size-4 shrink-0" />
-                        <span className="text-muted-foreground flex-1">
+                        <CircleCheckIcon className="text-primary size-4 shrink-0 mt-0.5" />
+                        <span className="text-muted-foreground leading-snug">
                           {feature.label}
                         </span>
-                        <span className="font-medium tabular-nums text-xs">
-                          {feature.value}
-                        </span>
+                        {feature.value && (
+                          <span className="font-semibold tabular-nums text-xs ml-auto shrink-0">
+                            {feature.value}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
                 </div>
               </CardContent>
 
-              <CardFooter className="mt-auto pt-6">
+              <CardFooter className="mt-auto pt-4 pb-6 px-6">
                 <Button
                   variant={btn.variant}
                   disabled={btn.disabled || loadingProductId === product.id}
-                  className={cn("w-full", isUpgrade && "font-bold")}
+                  className={cn(
+                    "w-full h-10 transition-all",
+                    isUpgrade && "shadow-md hover:shadow-lg font-medium",
+                    !isUpgrade && "font-medium"
+                  )}
                   onClick={() =>
                     handleCheckout(product.id, product.display?.button_url)
                   }
                 >
                   {loadingProductId === product.id ? (
-                    <Spinner className="size-3.5" />
+                    <Spinner className="size-4" />
                   ) : (
                     <>
                       {btn.label}
@@ -437,40 +450,44 @@ export function PricingCards() {
       </div>
 
       {/* Enterprise Full Width Plan */}
-      <Card className="flex flex-col lg:flex-row overflow-hidden border-border bg-card/50">
-        <div className="lg:w-1/3 p-6 sm:p-8 flex flex-col justify-center lg:border-r border-border bg-card">
-          <CardTitle className="text-xs font-medium uppercase tracking-widest text-primary mb-2">
-            Enterprise
-          </CardTitle>
-          <div className="flex items-baseline gap-1 mb-2">
-            <span className="text-3xl font-bold tracking-tight">Custom</span>
+      <Card className="flex flex-col overflow-hidden border-border/50 bg-primary/[0.02] shadow-sm mt-8 transition-colors hover:border-border">
+        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between p-8 pb-6">
+          <div className="max-w-xl">
+            <CardTitle className="text-[11px] font-semibold uppercase tracking-widest text-primary mb-3">
+              Enterprise
+            </CardTitle>
+            <div className="flex items-baseline gap-1 mb-2">
+              <span className="text-4xl font-semibold tracking-tight">Custom</span>
+            </div>
+            <CardDescription className="text-[13px] leading-relaxed text-muted-foreground/90">
+              Built for high-volume teams with custom compliance, data retention, and dedicated support requirements.
+            </CardDescription>
           </div>
-          <CardDescription className="text-sm leading-relaxed mb-6">
-            Built for high-volume teams with custom compliance, data retention, and support requirements.
-          </CardDescription>
-          <Button variant="outline" className="w-full sm:w-auto mt-auto" onClick={handleEnterpriseContact}>
+          <Button variant="default" className="w-full sm:w-auto shrink-0 h-10 shadow-sm" onClick={handleEnterpriseContact}>
             Contact Sales
           </Button>
-        </div>
+        </CardHeader>
 
-        <div className="lg:w-2/3 p-6 sm:p-8 flex flex-col sm:flex-row gap-8 sm:gap-12">
+        <Separator className="bg-border/40" />
+
+        <div className="p-8 pt-6 flex flex-col sm:flex-row gap-12">
           <div className="flex-1">
-            <div className="text-muted-foreground mb-4 text-[11px] font-medium uppercase tracking-wider">
+            <div className="text-muted-foreground/70 mb-5 text-[10px] font-semibold uppercase tracking-widest">
               Data included
             </div>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {ENTERPRISE_DATA_FEATURES.map((feature) => {
                 const Icon = FEATURE_ICONS[feature.featureId]
                 return (
                   <div
                     key={feature.featureId}
-                    className="flex items-center justify-between text-sm border-b border-border/50 pb-2 last:border-0 last:pb-0"
+                    className="flex items-center justify-between gap-4 text-[13px] border-b border-border/30 pb-3 last:border-0 last:pb-0 group/feature"
                   >
-                    <div className="text-muted-foreground flex items-center gap-2.5">
-                      {Icon && <Icon className="size-4" />}
-                      <span>{feature.label}</span>
+                    <div className="text-muted-foreground flex items-center gap-3 transition-colors group-hover/feature:text-foreground">
+                      {Icon && <Icon className="size-4 opacity-70" />}
+                      <span className="font-medium">{feature.label}</span>
                     </div>
-                    <span className="font-medium tabular-nums">
+                    <span className="font-semibold tabular-nums text-foreground">
                       {feature.value}
                     </span>
                   </div>
@@ -479,25 +496,28 @@ export function PricingCards() {
             </div>
           </div>
 
-          <div className="hidden sm:block w-px bg-border/50" />
+          {/* Hairline border for high-DPI displays via CSS var */}
+          <div className="hidden sm:block w-[var(--border-hairline,1px)] bg-border/40" />
 
           <div className="flex-1">
-            <div className="text-muted-foreground mb-4 text-[11px] font-medium uppercase tracking-wider">
+            <div className="text-muted-foreground/70 mb-5 text-[10px] font-semibold uppercase tracking-widest">
               Platform features
             </div>
-            <div className="space-y-3">
+            <div className="space-y-4">
               {enterprisePlanFeatures.map((feature) => (
                 <div
                   key={feature.label}
-                  className="flex items-center gap-2.5 text-sm"
+                  className="flex items-start gap-3 text-[13px]"
                 >
-                  <CircleCheckIcon className="text-primary size-4 shrink-0" />
-                  <span className="text-muted-foreground flex-1">
+                  <CircleCheckIcon className="text-primary size-[18px] shrink-0 mt-[2px]" />
+                  <span className="text-muted-foreground leading-snug">
                     {feature.label}
                   </span>
-                  <span className="font-medium tabular-nums text-xs">
-                    {feature.value}
-                  </span>
+                  {feature.value && (
+                    <span className="font-semibold tabular-nums ml-auto shrink-0">
+                      {feature.value}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
