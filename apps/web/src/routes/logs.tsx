@@ -3,6 +3,7 @@ import { Schema } from "effect"
 
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { LogsTable } from "@/components/logs/logs-table"
+import { LogsVolumeChart } from "@/components/logs/logs-volume-chart"
 import { LogsFilterSidebar } from "@/components/logs/logs-filter-sidebar"
 import { TimeRangePicker } from "@/components/time-range-picker"
 
@@ -44,7 +45,7 @@ function LogsPage() {
     <DashboardLayout
       breadcrumbs={[{ label: "Logs" }]}
       title="Logs"
-      description="View and search application logs."
+      filterSidebar={<LogsFilterSidebar />}
       headerActions={
         <TimeRangePicker
           startTime={search.startTime}
@@ -53,13 +54,9 @@ function LogsPage() {
           onChange={handleTimeChange}
         />
       }
+      stickyContent={<LogsVolumeChart filters={search} />}
     >
-      <div className="flex gap-4">
-        <LogsFilterSidebar />
-        <div className="flex-1 min-w-0">
-          <LogsTable filters={search} />
-        </div>
-      </div>
+      <LogsTable filters={search} />
     </DashboardLayout>
   )
 }

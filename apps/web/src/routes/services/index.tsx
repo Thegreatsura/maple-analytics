@@ -41,6 +41,7 @@ function ServicesPage() {
       breadcrumbs={[{ label: "Services" }]}
       title="Services"
       description="Overview of all services with key metrics."
+      filterSidebar={<ServicesFilterSidebar />}
       headerActions={
         <TimeRangePicker
           startTime={search.startTime}
@@ -49,12 +50,7 @@ function ServicesPage() {
         />
       }
     >
-      <div className="flex gap-4">
-        <div className="flex-1 min-w-0">
-          <ServicesTable filters={search} />
-        </div>
-        <ServicesFilterSidebar />
-      </div>
+      <ServicesTable filters={search} />
     </DashboardLayout>
   )
 }

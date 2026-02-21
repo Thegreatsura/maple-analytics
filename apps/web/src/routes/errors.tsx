@@ -59,6 +59,7 @@ function ErrorsPage() {
       breadcrumbs={[{ label: "Errors" }]}
       title="Errors"
       description="Monitor and analyze errors across your services."
+      filterSidebar={<ErrorsFilterSidebar />}
       headerActions={
         <TimeRangePicker
           startTime={search.startTime}
@@ -70,13 +71,9 @@ function ErrorsPage() {
     >
       <div className="space-y-6">
         <ErrorsSummaryCards filters={apiFilters} />
-
-        <div className="flex gap-4">
-          <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-semibold mb-4">Errors by Type</h2>
-            <ErrorsByTypeTable filters={apiFilters} />
-          </div>
-          <ErrorsFilterSidebar />
+        <div>
+          <h2 className="text-lg font-semibold mb-4">Errors by Type</h2>
+          <ErrorsByTypeTable filters={apiFilters} />
         </div>
       </div>
     </DashboardLayout>

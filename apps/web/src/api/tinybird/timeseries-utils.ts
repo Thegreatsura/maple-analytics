@@ -29,7 +29,7 @@ export function toIsoBucket(value: string | Date): string {
   return new Date(parsed).toISOString();
 }
 
-export function computeBucketSeconds(startTime?: string, endTime?: string): number {
+export function computeBucketSeconds(startTime?: string, endTime?: string, targetPoints = TARGET_POINTS): number {
   if (!startTime || !endTime) return 60;
 
   const startMs = toEpochMs(startTime);
@@ -39,7 +39,7 @@ export function computeBucketSeconds(startTime?: string, endTime?: string): numb
   }
 
   const rangeSeconds = Math.max((endMs - startMs) / 1000, 1);
-  const raw = Math.ceil(rangeSeconds / TARGET_POINTS);
+  const raw = Math.ceil(rangeSeconds / targetPoints);
 
   if (raw <= 60) return 60;
   if (raw <= 300) return 300;

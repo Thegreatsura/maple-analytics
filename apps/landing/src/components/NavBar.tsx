@@ -22,6 +22,18 @@ const useCaseLinks = [
   { href: "/use-cases/api-performance", label: "API Performance" },
 ]
 
+const compareLinks = [
+  { href: "/compare/datadog", label: "Maple vs Datadog" },
+  { href: "/compare/grafana", label: "Maple vs Grafana" },
+  { href: "/compare/new-relic", label: "Maple vs New Relic" },
+]
+
+const integrationLinks = [
+  { href: "/integrations/nextjs", label: "Next.js" },
+  { href: "/integrations/python", label: "Python" },
+  { href: "/integrations/nodejs", label: "Node.js" },
+]
+
 export function NavBar() {
   return (
     <div className="flex items-center justify-between h-full">
@@ -71,6 +83,48 @@ export function NavBar() {
                   ))}
                 </div>
               </NavigationMenuContent>
+            </NavigationMenuItem>
+
+            <NavigationMenuItem>
+              <NavigationMenuTrigger className="bg-transparent hover:bg-muted/20 text-fg-muted hover:text-fg">
+                Compare
+              </NavigationMenuTrigger>
+              <NavigationMenuContent>
+                <div className="p-2 min-w-[220px]">
+                  {compareLinks.map((link) => (
+                    <NavigationMenuLink
+                      key={link.href}
+                      href={link.href}
+                    >
+                      {link.label}
+                    </NavigationMenuLink>
+                  ))}
+                </div>
+              </NavigationMenuContent>
+            </NavigationMenuItem>
+
+            <NavigationMenuItem>
+              <NavigationMenuTrigger className="bg-transparent hover:bg-muted/20 text-fg-muted hover:text-fg">
+                Integrations
+              </NavigationMenuTrigger>
+              <NavigationMenuContent>
+                <div className="p-2 min-w-[220px]">
+                  {integrationLinks.map((link) => (
+                    <NavigationMenuLink
+                      key={link.href}
+                      href={link.href}
+                    >
+                      {link.label}
+                    </NavigationMenuLink>
+                  ))}
+                </div>
+              </NavigationMenuContent>
+            </NavigationMenuItem>
+
+            <NavigationMenuItem>
+              <a href="/pricing" className="inline-flex h-9 w-max items-center justify-center bg-transparent px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:bg-muted/20 hover:text-fg transition-all">
+                Pricing
+              </a>
             </NavigationMenuItem>
           </NavigationMenuList>
         </NavigationMenu>

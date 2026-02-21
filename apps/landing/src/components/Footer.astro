@@ -4,16 +4,16 @@
 
 <footer class="border-t border-border">
     <div class="mx-auto max-w-6xl px-6 py-12">
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-8">
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-8">
             <!-- Col 1: Logo + tagline -->
-            <div class="col-span-2 md:col-span-1">
+            <div class="col-span-2 md:col-span-3 lg:col-span-2">
                 <div class="flex items-center gap-3 mb-3">
                     <div class="w-6 h-6 bg-accent flex items-center justify-center">
                         <span class="text-accent-foreground text-[10px] font-bold">M</span>
                     </div>
                     <span class="text-fg text-xs font-medium">Maple</span>
                 </div>
-                <p class="text-fg-muted text-[10px] leading-relaxed">
+                <p class="text-fg-muted text-[10px] leading-relaxed max-w-xs">
                     Open-source observability platform built on OpenTelemetry.
                 </p>
             </div>
@@ -24,6 +24,7 @@
                 <ul class="space-y-2">
                     <li><a href="#features" class="text-fg-muted text-xs hover:text-fg transition-colors">Features</a></li>
                     <li><a href="#how-it-works" class="text-fg-muted text-xs hover:text-fg transition-colors">How it works</a></li>
+                    <li><a href="/pricing" class="text-fg-muted text-xs hover:text-fg transition-colors">Pricing</a></li>
                     <li><a href="/waitlist" class="text-fg-muted text-xs hover:text-fg transition-colors">Waitlist</a></li>
                 </ul>
             </div>
@@ -41,13 +42,20 @@
                 </ul>
             </div>
 
-            <!-- Col 4: Use Cases -->
+            <!-- Col 4: Compare -->
             <div>
-                <h4 class="text-[11px] text-fg font-medium uppercase tracking-wider mb-4">Use Cases</h4>
+                <h4 class="text-[11px] text-fg font-medium uppercase tracking-wider mb-4">Compare</h4>
                 <ul class="space-y-2">
-                    <li><a href="/use-cases/ecommerce-observability" class="text-fg-muted text-xs hover:text-fg transition-colors">E-Commerce</a></li>
-                    <li><a href="/use-cases/microservices-debugging" class="text-fg-muted text-xs hover:text-fg transition-colors">Microservices</a></li>
-                    <li><a href="/use-cases/api-performance" class="text-fg-muted text-xs hover:text-fg transition-colors">API Performance</a></li>
+                    <li><a href="/compare/datadog" class="text-fg-muted text-xs hover:text-fg transition-colors">vs Datadog</a></li>
+                    <li><a href="/compare/grafana" class="text-fg-muted text-xs hover:text-fg transition-colors">vs Grafana</a></li>
+                    <li><a href="/compare/new-relic" class="text-fg-muted text-xs hover:text-fg transition-colors">vs New Relic</a></li>
+                </ul>
+
+                <h4 class="text-[11px] text-fg font-medium uppercase tracking-wider mb-4 mt-6">Integrations</h4>
+                <ul class="space-y-2">
+                    <li><a href="/integrations/nextjs" class="text-fg-muted text-xs hover:text-fg transition-colors">Next.js</a></li>
+                    <li><a href="/integrations/python" class="text-fg-muted text-xs hover:text-fg transition-colors">Python</a></li>
+                    <li><a href="/integrations/nodejs" class="text-fg-muted text-xs hover:text-fg transition-colors">Node.js</a></li>
                 </ul>
             </div>
 

@@ -22,11 +22,12 @@ interface FilterSectionBaseProps {
   onChange: (selected: string[]) => void
   defaultOpen?: boolean
   maxVisible?: number
+  colorMap?: Record<string, string>
 }
 
 interface FilterSectionProps extends FilterSectionBaseProps {}
 
-interface SearchableFilterSectionProps extends FilterSectionBaseProps {}
+interface SearchableFilterSectionProps extends Omit<FilterSectionBaseProps, "colorMap"> {}
 
 function FilterSectionBase({
   title,
@@ -36,6 +37,7 @@ function FilterSectionBase({
   defaultOpen = true,
   maxVisible = 5,
   searchable,
+  colorMap,
 }: FilterSectionBaseProps & { searchable: boolean }) {
   const [isOpen, setIsOpen] = React.useState(defaultOpen)
   const [showAll, setShowAll] = React.useState(false)
@@ -122,10 +124,16 @@ function FilterSectionBase({
                 />
                 <Label
                   htmlFor={`${title}-${option.name}`}
-                  className="flex-1 min-w-0 truncate cursor-pointer text-xs text-foreground font-normal"
+                  className="flex-1 min-w-0 flex items-center gap-1.5 cursor-pointer text-xs text-foreground font-normal"
                   title={option.name}
                 >
-                  {option.name}
+                  {colorMap?.[option.name] && (
+                    <span
+                      className="size-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: colorMap[option.name] }}
+                    />
+                  )}
+                  <span className="truncate">{option.name}</span>
                 </Label>
                 <span className="text-xs text-muted-foreground tabular-nums">
                   {option.count.toLocaleString()}

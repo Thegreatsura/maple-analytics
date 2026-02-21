@@ -152,8 +152,7 @@ function TracesPage() {
   return (
     <DashboardLayout
       breadcrumbs={[{ label: "Traces" }]}
-      title="Traces"
-      description="View distributed traces across your services."
+      filterSidebar={<TracesFilterSidebar facetsResult={facetsResult} />}
       headerActions={
         <div className="flex items-center gap-2">
           <AdvancedFilterDialog
@@ -190,12 +189,7 @@ function TracesPage() {
           </Button>
         </div>
       )}
-      <div className="flex gap-4">
-        <TracesFilterSidebar facetsResult={facetsResult} />
-        <div className="flex-1 min-w-0">
-          <TracesTable filters={search} />
-        </div>
-      </div>
+      <TracesTable filters={search} />
     </DashboardLayout>
   )
 }

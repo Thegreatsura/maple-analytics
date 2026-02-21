@@ -21,7 +21,7 @@ export function FilterSidebarFrame({
   return (
     <div
       className={cn(
-        "w-64 shrink-0 overflow-hidden border-r pr-4",
+        "w-56 shrink-0 overflow-hidden",
         sticky && "sticky top-0 self-start",
         waiting && "opacity-60",
         className

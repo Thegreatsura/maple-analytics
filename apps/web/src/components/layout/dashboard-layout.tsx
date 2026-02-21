@@ -25,6 +25,10 @@ interface DashboardLayoutProps {
   titleContent?: React.ReactNode
   description?: string
   headerActions?: React.ReactNode
+  /** Render a filter sidebar flush to the left of the content area, spanning full height. */
+  filterSidebar?: React.ReactNode
+  /** Content pinned above the scrollable children (e.g. volume charts). */
+  stickyContent?: React.ReactNode
 }
 
 export function DashboardLayout({
@@ -34,7 +38,12 @@ export function DashboardLayout({
   titleContent,
   description,
   headerActions,
+  filterSidebar,
+  stickyContent,
 }: DashboardLayoutProps) {
+  const [isScrolled, setIsScrolled] = React.useState(false)
+  const hasHeader = title || titleContent || description || headerActions
+
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -61,22 +70,39 @@ export function DashboardLayout({
             </BreadcrumbList>
           </Breadcrumb>
         </header>
-        <main className="flex min-h-0 flex-1 flex-col overflow-auto p-4">
-          <div className="flex min-h-0 flex-1 flex-col space-y-4">
-            <div className="shrink-0 flex items-start justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                {titleContent ?? (
-                  title && <h1 className="text-2xl font-bold tracking-tight truncate" title={title}>{title}</h1>
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          {filterSidebar && (
+            <aside className="sticky top-0 h-[calc(100vh-4rem)] shrink-0 overflow-y-auto border-r p-4">
+              {filterSidebar}
+            </aside>
+          )}
+          <main className="flex min-h-0 flex-1 flex-col">
+            {(hasHeader || stickyContent) && (
+              <div className={`shrink-0 space-y-4 p-4 transition-shadow ${isScrolled ? "shadow-[0_2px_8px_rgba(0,0,0,0.08)]" : ""}`}>
+                {hasHeader && (
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      {titleContent ?? (
+                        title && <h1 className="text-2xl font-bold tracking-tight truncate" title={title}>{title}</h1>
+                      )}
+                      {description && (
+                        <p className="text-muted-foreground">{description}</p>
+                      )}
+                    </div>
+                    {headerActions && <div className="shrink-0">{headerActions}</div>}
+                  </div>
                 )}
-                {description && (
-                  <p className="text-muted-foreground">{description}</p>
-                )}
+                {stickyContent}
               </div>
-              {headerActions && <div className="shrink-0">{headerActions}</div>}
+            )}
+            <div
+              className="flex min-h-0 flex-1 flex-col overflow-auto p-4"
+              onScroll={(e) => setIsScrolled(e.currentTarget.scrollTop > 0)}
+            >
+              {children}
             </div>
-            {children}
-          </div>
-        </main>
+          </main>
+        </div>
       </SidebarInset>
     </SidebarProvider>
   )

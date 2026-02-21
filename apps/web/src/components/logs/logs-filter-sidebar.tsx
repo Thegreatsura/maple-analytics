@@ -18,6 +18,7 @@ import {
   FilterSidebarHeader,
   FilterSidebarLoading,
 } from "@/components/filters/filter-sidebar"
+import { SEVERITY_COLORS } from "@/lib/severity"
 
 function LoadingState() {
   return <FilterSidebarLoading sectionCount={3} sticky />
@@ -134,6 +135,7 @@ export function LogsFilterSidebar() {
                   options={facets.severities}
                   selected={search.severities ?? []}
                   onChange={(val) => updateFilter("severities", val)}
+                  colorMap={SEVERITY_COLORS}
                 />
                 <Separator className="my-2" />
               </>
