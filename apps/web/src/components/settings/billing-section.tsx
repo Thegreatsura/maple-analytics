@@ -26,7 +26,7 @@ export function BillingSection() {
   const { customer, isLoading: isCustomerLoading } = useCustomer()
   const { total, isLoading: isUsageLoading } = useAggregateEvents({
     featureId: ["logs", "traces", "metrics"],
-    range: "bc",
+    range: "1bc",
   })
 
   const isLoading = isCustomerLoading || isUsageLoading
