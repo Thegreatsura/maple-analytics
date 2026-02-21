@@ -42,7 +42,7 @@ describe("makeQueryEngineExecute", () => {
         customTracesTimeseriesQuery: () =>
           Effect.succeed([
             {
-              bucket: new Date("2026-01-01T00:00:00.000Z"),
+              bucket: "2026-01-01 00:00:00",
               groupName: "checkout",
               count: 2,
               avgDuration: 0,
@@ -52,7 +52,7 @@ describe("makeQueryEngineExecute", () => {
               errorRate: 0,
             },
             {
-              bucket: new Date("2026-01-01T00:10:00.000Z"),
+              bucket: "2026-01-01 00:10:00",
               groupName: "checkout",
               count: 5,
               avgDuration: 0,
@@ -106,7 +106,7 @@ describe("makeQueryEngineExecute", () => {
         customTracesTimeseriesQuery: () =>
           Effect.succeed([
             {
-              bucket: "2026-01-01 00:00:00" as unknown as Date,
+              bucket: "2026-01-01 00:00:00",
               groupName: "checkout",
               count: 2,
               avgDuration: 0,
@@ -116,7 +116,7 @@ describe("makeQueryEngineExecute", () => {
               errorRate: 0,
             },
             {
-              bucket: "2026-01-01 00:10:00" as unknown as Date,
+              bucket: "2026-01-01 00:10:00",
               groupName: "checkout",
               count: 5,
               avgDuration: 0,
