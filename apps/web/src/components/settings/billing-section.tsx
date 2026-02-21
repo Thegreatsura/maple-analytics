@@ -1,5 +1,5 @@
 import { useMemo } from "react"
-import { useCustomer } from "autumn-js/react"
+import { useCustomer, useAggregateEvents } from "autumn-js/react"
 import { PricingCards } from "./pricing-cards"
 import { format } from "date-fns"
 
@@ -22,17 +22,14 @@ function limitsFromCustomer(features: CustomerFeatures): PlanLimits | null {
   }
 }
 
-function usageFromCustomer(features: CustomerFeatures): AggregatedUsage {
-  if (!features) return { logsGB: 0, tracesGB: 0, metricsGB: 0 }
-  return {
-    logsGB: features.logs?.usage ?? 0,
-    tracesGB: features.traces?.usage ?? 0,
-    metricsGB: features.metrics?.usage ?? 0,
-  }
-}
-
 export function BillingSection() {
   const { customer, isLoading: isCustomerLoading } = useCustomer()
+  const { total, isLoading: isUsageLoading } = useAggregateEvents({
+    featureId: ["logs", "traces", "metrics"],
+    range: "last_cycle",
+  })
+
+  const isLoading = isCustomerLoading || isUsageLoading
 
   const now = useMemo(() => new Date(), [])
   const startOfMonth = useMemo(
@@ -42,11 +39,15 @@ export function BillingSection() {
   const billingPeriodLabel = `${format(startOfMonth, "MMM d")} – ${format(now, "MMM d, yyyy")}`
 
   const limits = limitsFromCustomer(customer?.features) ?? getPlanLimits("starter")
-  const usage = usageFromCustomer(customer?.features)
+  const usage: AggregatedUsage = {
+    logsGB: total?.logs?.sum ?? 0,
+    tracesGB: total?.traces?.sum ?? 0,
+    metricsGB: total?.metrics?.sum ?? 0,
+  }
 
   return (
     <div className="space-y-6">
-      {isCustomerLoading ? (
+      {isLoading ? (
         <Card>
           <CardHeader>
             <Skeleton className="h-5 w-32" />
@@ -68,7 +69,7 @@ export function BillingSection() {
 
       <div className="space-y-3">
         <h3 className="text-sm font-medium">Plans</h3>
-        {isCustomerLoading ? (
+        {isLoading ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Skeleton className="h-48 w-full rounded-lg" />
             <Skeleton className="h-48 w-full rounded-lg" />

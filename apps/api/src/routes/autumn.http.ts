@@ -47,6 +47,7 @@ export const AutumnRouter = HttpLayerRouter.use((router) =>
       ["POST", "/api/autumn/billing_portal"],
       ["POST", "/api/autumn/setup_payment"],
       ["POST", "/api/autumn/query"],
+      ["POST", "/api/autumn/events/aggregate"],
       ["GET", "/api/autumn/products"],
     ] as const
 
