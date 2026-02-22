@@ -81,12 +81,20 @@ export function BillingSection() {
 
   const isLoading = isCustomerLoading || isUsageLoading
 
-  const now = useMemo(() => new Date(), [])
-  const startOfMonth = useMemo(
-    () => new Date(now.getFullYear(), now.getMonth(), 1),
-    [now],
-  )
-  const billingPeriodLabel = `${format(startOfMonth, "MMM d")} – ${format(now, "MMM d, yyyy")}`
+  const billingPeriodLabel = useMemo(() => {
+    const activeProduct = customer?.products?.find(
+      (p) => p.status === "active" || p.status === "trialing",
+    )
+    if (activeProduct?.current_period_start && activeProduct?.current_period_end) {
+      const start = new Date(activeProduct.current_period_start)
+      const end = new Date(activeProduct.current_period_end)
+      return `${format(start, "MMM d")} – ${format(end, "MMM d, yyyy")}`
+    }
+    // Fallback: calendar month → today
+    const now = new Date()
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    return `${format(startOfMonth, "MMM d")} – ${format(now, "MMM d, yyyy")}`
+  }, [customer])
 
   const limits = limitsFromCustomer(customer?.features) ?? getPlanLimits("starter")
   const usage: AggregatedUsage = {

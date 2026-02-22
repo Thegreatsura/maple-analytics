@@ -13,16 +13,10 @@ import {
   GearIcon,
   LogoutIcon,
   ChevronUpIcon,
-  ChevronRightIcon,
   RocketIcon,
   CheckIcon,
   NetworkNodesIcon,
 } from "@/components/icons"
-import {
-  Collapsible,
-  CollapsibleTrigger,
-  CollapsibleContent,
-} from "@maple/ui/components/ui/collapsible"
 import { OrgSwitcher } from "@/components/dashboard/org-switcher"
 import {
   DropdownMenu,
@@ -61,7 +55,7 @@ const mainNavItems = [
   },
 ]
 
-const observabilityNavItems = [
+const servicesNavItems = [
   {
     title: "Services",
     href: "/services",
@@ -72,20 +66,23 @@ const observabilityNavItems = [
     href: "/service-map",
     icon: NetworkNodesIcon,
   },
+]
+
+const telemetryNavItems = [
   {
     title: "Errors",
     href: "/errors",
     icon: CircleWarningIcon,
   },
   {
-    title: "Logs",
-    href: "/logs",
-    icon: FileIcon,
-  },
-  {
     title: "Traces",
     href: "/traces",
     icon: PulseIcon,
+  },
+  {
+    title: "Logs",
+    href: "/logs",
+    icon: FileIcon,
   },
   {
     title: "Metrics",
@@ -94,7 +91,7 @@ const observabilityNavItems = [
   },
 ]
 
-const toolsNavItems = [
+const configureNavItems = [
   {
     title: "MCP",
     href: "/mcp",
@@ -301,11 +298,10 @@ export function AppSidebar() {
         <OrgSwitcher />
       </SidebarHeader>
       <SidebarContent>
-        {!isDismissed && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Get Started</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {!isDismissed && (
                 <SidebarMenuItem>
                   <SidebarMenuButton
                     render={<Link to="/quick-start" />}
@@ -323,13 +319,7 @@ export function AppSidebar() {
                     )}
                   </SidebarMenuBadge>
                 </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
+              )}
               {mainNavItems.map((item) => {
                 const isActive = currentPath === item.href
                 return (
@@ -349,46 +339,59 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <Collapsible defaultOpen={true} className="group/collapsible">
-          <SidebarGroup>
-            <SidebarGroupLabel render={<CollapsibleTrigger />}>
-              Observability
-              <ChevronRightIcon
-                size={16}
-                className="ml-auto transition-transform group-data-[open]/collapsible:rotate-90"
-              />
-            </SidebarGroupLabel>
-            <CollapsibleContent>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {observabilityNavItems.map((item) => {
-                    const isActive = currentPath.startsWith(item.href)
-                    return (
-                      <SidebarMenuItem key={item.title}>
-                        <SidebarMenuButton
-                          render={<Link to={item.href} />}
-                          tooltip={item.title}
-                          isActive={isActive}
-                        >
-                          <item.icon size={16} />
-                          <span>{item.title}</span>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    )
-                  })}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </CollapsibleContent>
-          </SidebarGroup>
-        </Collapsible>
+        <SidebarGroup>
+          <SidebarGroupLabel>Services</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {servicesNavItems.map((item) => {
+                const isActive = currentPath.startsWith(item.href)
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      render={<Link to={item.href} />}
+                      tooltip={item.title}
+                      isActive={isActive}
+                    >
+                      <item.icon size={16} />
+                      <span>{item.title}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Telemetry</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {telemetryNavItems.map((item) => {
+                const isActive = currentPath.startsWith(item.href)
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      render={<Link to={item.href} />}
+                      tooltip={item.title}
+                      isActive={isActive}
+                    >
+                      <item.icon size={16} />
+                      <span>{item.title}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
         <div className="flex-1" />
 
         <SidebarGroup>
-          <SidebarGroupLabel>Tools</SidebarGroupLabel>
+          <SidebarGroupLabel>Configure</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {toolsNavItems.map((item) => {
+              {configureNavItems.map((item) => {
                 const isActive = currentPath.startsWith(item.href)
                 return (
                   <SidebarMenuItem key={item.title}>
