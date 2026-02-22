@@ -363,6 +363,11 @@ export function PricingCards() {
                 <CardDescription className="mt-3 text-sm leading-relaxed text-muted-foreground">
                   {product.display?.description ?? getPlanDescription(getProductSlug(product))}
                 </CardDescription>
+                {getProductSlug(product) === "starter" && (
+                  <div className="mt-3 rounded-md bg-primary/10 px-3 py-1.5 text-center text-xs font-medium text-primary">
+                    Predictable pricing — no usage-based charges
+                  </div>
+                )}
                 {product.display?.everything_from && (
                   <p className="text-muted-foreground mt-3 text-xs font-medium">
                     Everything in <span className="text-foreground">{product.display.everything_from}</span>, plus:

@@ -149,6 +149,11 @@ if (plans.length === 0) {
                             {plan.interval && <span class="text-base font-normal text-fg-muted">{plan.interval}</span>}
                         </div>
                         <p class="mt-1 text-sm text-fg-muted">{plan.subtitle}</p>
+                        {plan.slug === "starter" && (
+                            <div class="mt-3 rounded-md bg-accent/10 px-3 py-1.5 text-center text-xs font-medium text-accent">
+                                Predictable pricing — no usage-based charges
+                            </div>
+                        )}
 
                         <div class="mt-6">
                             <span class="text-[10px] uppercase tracking-widest text-fg-muted/70">Data included</span>
