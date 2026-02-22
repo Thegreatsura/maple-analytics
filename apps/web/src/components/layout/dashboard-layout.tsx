@@ -72,7 +72,7 @@ export function DashboardLayout({
         </header>
         <div className="flex min-h-0 flex-1 overflow-hidden">
           {filterSidebar && (
-            <aside className="sticky top-0 h-[calc(100vh-4rem)] shrink-0 overflow-y-auto border-r p-4">
+            <aside className="sticky top-0 h-full shrink-0 overflow-y-auto border-r p-4">
               {filterSidebar}
             </aside>
           )}
