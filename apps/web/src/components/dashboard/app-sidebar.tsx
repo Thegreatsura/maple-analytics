@@ -7,7 +7,6 @@ import {
   ChartLineIcon,
   ServerIcon,
   CircleWarningIcon,
-  MagnifierIcon,
   CodeIcon,
   KeyIcon,
   DatabaseIcon,
@@ -93,11 +92,6 @@ const observabilityNavItems = [
 ]
 
 const toolsNavItems = [
-  {
-    title: "Query Lab",
-    href: "/query-builder-lab",
-    icon: MagnifierIcon,
-  },
   {
     title: "MCP",
     href: "/mcp",
