@@ -1,3 +1,4 @@
+import { useMemo } from "react"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { Result, useAtomValue } from "@effect-atom/atom-react"
 import { Schema } from "effect"
@@ -23,6 +24,9 @@ import {
   getOverviewTimeSeriesResultAtom,
   getServicesFacetsResultAtom,
 } from "@/lib/services/atoms/tinybird-query-atoms"
+import type { CustomChartTimeSeriesResponse } from "@/api/tinybird/custom-charts"
+import type { ServiceDetailTimeSeriesPoint } from "@/api/tinybird/services"
+import { disabledResultAtom } from "@/lib/services/atoms/disabled-result-atom"
 
 const dashboardSearchSchema = Schema.Struct({
   startTime: Schema.optional(Schema.String),
@@ -44,6 +48,8 @@ interface OverviewChartConfig {
   legend?: ChartLegendMode
   tooltip?: ChartTooltipMode
 }
+
+const EMPTY_ARRAY: Record<string, unknown>[] = []
 
 const OVERVIEW_CHARTS: OverviewChartConfig[] = [
   { id: "throughput", chartId: "throughput-area", title: "Request Volume", layout: { x: 0, y: 0, w: 6, h: 4 }, tooltip: "visible" },
@@ -111,35 +117,45 @@ function DashboardPage() {
   const selectedEnvironment = search.environment
     ?? (environments.some((e) => e.name === "production") ? "production" : "__all__")
 
+  // Wait for facets before fetching data to avoid a cascading double-fetch
+  // when environmentFilter changes from undefined → ["production"]
+  const facetsReady = !Result.isInitial(facetsResult)
+
   const overviewResult = useAtomValue(
-    getOverviewTimeSeriesResultAtom({
-      data: {
-        startTime: effectiveStartTime,
-        endTime: effectiveEndTime,
-        environments: environmentFilter,
-      },
-    }),
+    facetsReady
+      ? getOverviewTimeSeriesResultAtom({
+          data: {
+            startTime: effectiveStartTime,
+            endTime: effectiveEndTime,
+            environments: environmentFilter,
+          },
+        })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      : disabledResultAtom<{ data: ServiceDetailTimeSeriesPoint[] }, any>(),
   )
 
   const logVolumeResult = useAtomValue(
-    getCustomChartTimeSeriesResultAtom({
-      data: {
-        source: "logs",
-        metric: "count",
-        groupBy: "severity",
-        startTime: effectiveStartTime,
-        endTime: effectiveEndTime,
-        filters: {
-          serviceName: undefined,
-          environments: environmentFilter,
-        },
-      },
-    }),
+    facetsReady
+      ? getCustomChartTimeSeriesResultAtom({
+          data: {
+            source: "logs",
+            metric: "count",
+            groupBy: "severity",
+            startTime: effectiveStartTime,
+            endTime: effectiveEndTime,
+            filters: {
+              serviceName: undefined,
+              environments: environmentFilter,
+            },
+          },
+        })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      : disabledResultAtom<CustomChartTimeSeriesResponse, any>(),
   )
 
   const overviewPoints = Result.builder(overviewResult)
     .onSuccess((response) => response.data as unknown as Record<string, unknown>[])
-    .orElse(() => [])
+    .orElse(() => EMPTY_ARRAY)
 
   const logPoints = Result.builder(logVolumeResult)
     .onSuccess((response) =>
@@ -151,29 +167,42 @@ function DashboardPage() {
         return { bucket: point.bucket, throughput: total }
       }) as unknown as Record<string, unknown>[],
     )
-    .orElse(() => [])
+    .orElse(() => EMPTY_ARRAY)
 
-  const widgetData: Record<string, Record<string, unknown>[]> = {
-    throughput: overviewPoints,
-    "error-rate": overviewPoints,
-    latency: overviewPoints,
-    "log-volume": logPoints,
-  }
+  const isOverviewLoading = Result.isInitial(overviewResult)
+  const isLogVolumeLoading = Result.isInitial(logVolumeResult)
 
-  const metrics = OVERVIEW_CHARTS.map((chart) => ({
-    id: chart.id,
-    chartId: chart.chartId,
-    title: chart.title,
-    layout: chart.layout,
-    data: widgetData[chart.id] ?? [],
-    legend: chart.legend,
-    tooltip: chart.tooltip,
-  }))
+  const metrics = useMemo(() => {
+    const loadingMap: Record<string, boolean> = {
+      throughput: isOverviewLoading,
+      "error-rate": isOverviewLoading,
+      latency: isOverviewLoading,
+      "log-volume": isLogVolumeLoading,
+    }
 
-  const environmentItems = [
+    const dataMap: Record<string, Record<string, unknown>[]> = {
+      throughput: overviewPoints,
+      "error-rate": overviewPoints,
+      latency: overviewPoints,
+      "log-volume": logPoints,
+    }
+
+    return OVERVIEW_CHARTS.map((chart) => ({
+      id: chart.id,
+      chartId: chart.chartId,
+      title: chart.title,
+      layout: chart.layout,
+      data: dataMap[chart.id] ?? EMPTY_ARRAY,
+      legend: chart.legend,
+      tooltip: chart.tooltip,
+      isLoading: loadingMap[chart.id] ?? false,
+    }))
+  }, [overviewPoints, logPoints, isOverviewLoading, isLogVolumeLoading])
+
+  const environmentItems = useMemo(() => [
     { value: "__all__", label: "All Environments" },
     ...environments.map((e) => ({ value: e.name, label: e.name })),
-  ]
+  ], [environments])
 
   return (
     <DashboardLayout
