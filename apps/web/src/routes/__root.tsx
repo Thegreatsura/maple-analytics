@@ -2,6 +2,7 @@ import { useAuth } from "@clerk/clerk-react"
 import { useCustomer } from "autumn-js/react"
 import { Navigate, Outlet, createRootRouteWithContext, redirect, useRouterState } from "@tanstack/react-router"
 import { hasSelectedPlan } from "@/lib/billing/plan-gating"
+import { useQuickStart } from "@/hooks/use-quick-start"
 import { parseRedirectUrl } from "@/lib/redirect-utils"
 import { Toaster } from "@maple/ui/components/ui/sonner"
 import { isClerkAuthEnabled } from "@/lib/services/common/auth-mode"
@@ -84,13 +85,16 @@ function ClerkReverseRedirects() {
     return <Navigate to={target.pathname} search={target.search} replace />
   }
 
+  const { isStepComplete } = useQuickStart(orgId)
+
   if (isSignedIn && orgId) {
     if (isCustomerLoading) {
       return null
     }
     const ALLOWED_WITHOUT_PLAN = ["/select-plan", "/quick-start"]
     if (!selectedPlan && !ALLOWED_WITHOUT_PLAN.includes(pathname)) {
-      return <Navigate to="/select-plan" search={{ redirect_url: redirectUrl }} replace />
+      const noPlanRedirect = isStepComplete("verify-data") ? "/select-plan" : "/quick-start"
+      return <Navigate to={noPlanRedirect} search={{ redirect_url: redirectUrl }} replace />
     }
     if (selectedPlan && pathname === "/select-plan") {
       const target = getRedirectTarget(searchStr)
