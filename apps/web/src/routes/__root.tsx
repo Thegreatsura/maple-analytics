@@ -47,6 +47,14 @@ function getRedirectTarget(searchStr: string, fallback = "/"): string {
   return target.startsWith("/") ? target : fallback
 }
 
+function getSignUpRedirectTarget(searchStr: string): string {
+  const target = new URLSearchParams(searchStr).get("redirect_url")
+  if (!target || target === "/" || !target.startsWith("/")) {
+    return "/quick-start"
+  }
+  return target
+}
+
 function ClerkReverseRedirects() {
   const { pathname, searchStr } = useRouterState({
     select: (state) => ({
@@ -65,7 +73,7 @@ function ClerkReverseRedirects() {
   }
 
   if (isSignedIn && pathname === "/sign-up") {
-    return <Navigate to={getRedirectTarget(searchStr, "/quick-start")} replace />
+    return <Navigate to={getSignUpRedirectTarget(searchStr)} replace />
   }
 
   if (isSignedIn && orgId && pathname === "/org-required") {
