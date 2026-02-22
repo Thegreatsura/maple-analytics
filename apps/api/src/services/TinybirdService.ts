@@ -47,6 +47,8 @@ import {
   serviceDependencies,
   serviceOverview,
   servicesFacets,
+  resourceAttributeKeys,
+  resourceAttributeValues,
   spanAttributeKeys,
   spanAttributeValues,
   spanHierarchy,
@@ -95,6 +97,8 @@ export class TinybirdService extends Effect.Service<TinybirdService>()("Tinybird
         service_dependencies: serviceDependencies,
         span_attribute_keys: spanAttributeKeys,
         span_attribute_values: spanAttributeValues,
+        resource_attribute_keys: resourceAttributeKeys,
+        resource_attribute_values: resourceAttributeValues,
       },
     })
 

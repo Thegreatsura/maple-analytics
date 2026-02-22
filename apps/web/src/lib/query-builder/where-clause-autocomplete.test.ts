@@ -141,6 +141,39 @@ describe("where clause autocomplete", () => {
     ).toBe(true)
   })
 
+  it("suggests resource attribute keys when typing resource. prefix", () => {
+    const result = getWhereClauseAutocomplete({
+      expression: "resource.",
+      cursor: "resource.".length,
+      dataSource: "traces",
+      scope: "trace_search",
+      values: {
+        resourceAttributeKeys: ["service.version", "telemetry.sdk.name"],
+      },
+    })
+
+    expect(result.context).toBe("key")
+    expect(result.suggestions.some((item) => item.insertText === "resource.service.version")).toBe(true)
+    expect(result.suggestions.some((item) => item.insertText === "resource.telemetry.sdk.name")).toBe(true)
+  })
+
+  it("suggests resource attribute values after resource.<key> =", () => {
+    const result = getWhereClauseAutocomplete({
+      expression: 'resource.service.version = "1.',
+      cursor: 'resource.service.version = "1.'.length,
+      dataSource: "traces",
+      scope: "trace_search",
+      values: {
+        resourceAttributeValues: ["1.0.0", "1.2.3", "2.0.0"],
+      },
+    })
+
+    expect(result.context).toBe("value")
+    expect(result.key).toBe("resource.service.version")
+    expect(result.suggestions[0]?.label).toBe("1.0.0")
+    expect(result.suggestions[1]?.label).toBe("1.2.3")
+  })
+
   it("suggests trace_search values for HTTP and booleans", () => {
     const method = getWhereClauseAutocomplete({
       expression: "http.method = ge",

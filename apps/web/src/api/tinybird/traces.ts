@@ -29,6 +29,8 @@ const ListTracesInputSchema = Schema.Struct({
   deploymentEnv: Schema.optional(Schema.String),
   attributeKey: Schema.optional(Schema.String),
   attributeValue: Schema.optional(Schema.String),
+  resourceAttributeKey: Schema.optional(Schema.String),
+  resourceAttributeValue: Schema.optional(Schema.String),
   rootOnly: Schema.optional(Schema.Boolean),
 })
 
@@ -103,6 +105,8 @@ const listTracesEffect = Effect.fn("Tinybird.listTraces")(function* ({
         deployment_env: input.deploymentEnv,
         attribute_filter_key: input.attributeKey,
         attribute_filter_value: input.attributeValue,
+        resource_filter_key: input.resourceAttributeKey,
+        resource_filter_value: input.resourceAttributeValue,
         root_only: input.rootOnly,
       }),
     )
@@ -329,6 +333,8 @@ const GetTracesFacetsInputSchema = Schema.Struct({
   deploymentEnv: Schema.optional(Schema.String),
   attributeKey: Schema.optional(Schema.String),
   attributeValue: Schema.optional(Schema.String),
+  resourceAttributeKey: Schema.optional(Schema.String),
+  resourceAttributeValue: Schema.optional(Schema.String),
 })
 
 export type GetTracesFacetsInput = Schema.Schema.Type<typeof GetTracesFacetsInputSchema>
@@ -419,6 +425,8 @@ const getTracesFacetsEffect = Effect.fn("Tinybird.getTracesFacets")(function* ({
           deployment_env: input.deploymentEnv,
           attribute_filter_key: input.attributeKey,
           attribute_filter_value: input.attributeValue,
+          resource_filter_key: input.resourceAttributeKey,
+          resource_filter_value: input.resourceAttributeValue,
         }),
       ),
       runTinybirdQuery("traces_duration_stats", () =>
@@ -433,6 +441,8 @@ const getTracesFacetsEffect = Effect.fn("Tinybird.getTracesFacets")(function* ({
           deployment_env: input.deploymentEnv,
           attribute_filter_key: input.attributeKey,
           attribute_filter_value: input.attributeValue,
+          resource_filter_key: input.resourceAttributeKey,
+          resource_filter_value: input.resourceAttributeValue,
         }),
       ),
     ])
@@ -473,6 +483,8 @@ const getTracesDurationStatsEffect = Effect.fn("Tinybird.getTracesDurationStats"
         deployment_env: input.deploymentEnv,
         attribute_filter_key: input.attributeKey,
         attribute_filter_value: input.attributeValue,
+        resource_filter_key: input.resourceAttributeKey,
+        resource_filter_value: input.resourceAttributeValue,
       }),
     )
 
@@ -570,6 +582,105 @@ const getSpanAttributeValuesEffect = Effect.fn("Tinybird.getSpanAttributeValues"
     const tinybird = getTinybird()
     const result = yield* runTinybirdQuery("span_attribute_values", () =>
       tinybird.query.span_attribute_values({
+        start_time: input.startTime,
+        end_time: input.endTime,
+        attribute_key: input.attributeKey,
+      }),
+    )
+
+    return {
+      data: result.data.map((row) => ({
+        attributeValue: row.attributeValue,
+        usageCount: Number(row.usageCount),
+      })),
+    }
+  },
+)
+
+const GetResourceAttributeKeysInputSchema = Schema.Struct({
+  startTime: Schema.optional(TinybirdDateTimeString),
+  endTime: Schema.optional(TinybirdDateTimeString),
+})
+
+export type GetResourceAttributeKeysInput = Schema.Schema.Type<typeof GetResourceAttributeKeysInputSchema>
+
+export interface ResourceAttributeKeysResponse {
+  data: Array<{ attributeKey: string; usageCount: number }>
+}
+
+export function getResourceAttributeKeys({
+  data,
+}: {
+  data: GetResourceAttributeKeysInput
+}) {
+  return getResourceAttributeKeysEffect({ data })
+}
+
+const getResourceAttributeKeysEffect = Effect.fn("Tinybird.getResourceAttributeKeys")(function* ({
+  data,
+}: {
+  data: GetResourceAttributeKeysInput
+}) {
+    const input = yield* decodeInput(
+      GetResourceAttributeKeysInputSchema,
+      data ?? {},
+      "getResourceAttributeKeys",
+    )
+    const tinybird = getTinybird()
+    const result = yield* runTinybirdQuery("resource_attribute_keys", () =>
+      tinybird.query.resource_attribute_keys({
+        start_time: input.startTime,
+        end_time: input.endTime,
+      }),
+    )
+
+    return {
+      data: result.data.map((row) => ({
+        attributeKey: row.attributeKey,
+        usageCount: Number(row.usageCount),
+      })),
+    }
+})
+
+const GetResourceAttributeValuesInputSchema = Schema.Struct({
+  startTime: Schema.optional(TinybirdDateTimeString),
+  endTime: Schema.optional(TinybirdDateTimeString),
+  attributeKey: Schema.String,
+})
+
+export type GetResourceAttributeValuesInput = Schema.Schema.Type<typeof GetResourceAttributeValuesInputSchema>
+
+export interface ResourceAttributeValuesResponse {
+  data: Array<{ attributeValue: string; usageCount: number }>
+}
+
+export function getResourceAttributeValues({
+  data,
+}: {
+  data: GetResourceAttributeValuesInput
+}) {
+  return getResourceAttributeValuesEffect({ data })
+}
+
+const getResourceAttributeValuesEffect = Effect.fn("Tinybird.getResourceAttributeValues")(
+  function* ({
+    data,
+  }: {
+    data: GetResourceAttributeValuesInput
+  }) {
+    const input = yield* decodeInput(
+      GetResourceAttributeValuesInputSchema,
+      data ?? {},
+      "getResourceAttributeValues",
+    )
+
+    if (!input.attributeKey) {
+      return { data: [] }
+    }
+
+    const tinybird = getTinybird()
+    const result = yield* runTinybirdQuery("resource_attribute_values", () =>
+      tinybird.query.resource_attribute_values({
         start_time: input.startTime,
         end_time: input.endTime,
         attribute_key: input.attributeKey,

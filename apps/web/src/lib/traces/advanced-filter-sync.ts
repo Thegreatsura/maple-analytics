@@ -13,6 +13,8 @@ export interface TracesSearchLike {
   whereClause?: string
   attributeKey?: string
   attributeValue?: string
+  resourceAttributeKey?: string
+  resourceAttributeValue?: string
 }
 
 export interface ParsedWhereClauseFilters {
@@ -27,6 +29,8 @@ export interface ParsedWhereClauseFilters {
   maxDurationMs?: number
   attributeKey?: string
   attributeValue?: string
+  resourceAttributeKey?: string
+  resourceAttributeValue?: string
 }
 
 const TRUE_VALUES = new Set(["1", "true", "yes", "y"])
@@ -183,6 +187,17 @@ export function parseWhereClause(whereClause: string | undefined): {
 
       parsed.attributeKey = attributeKey
       parsed.attributeValue = rawValue
+      continue
+    }
+
+    if (rawKey.startsWith("resource.")) {
+      const resourceKey = rawKey.slice(9).trim()
+      if (!resourceKey || parsed.resourceAttributeKey) {
+        continue
+      }
+
+      parsed.resourceAttributeKey = resourceKey
+      parsed.resourceAttributeValue = rawValue
     }
   }
 
@@ -237,6 +252,12 @@ export function toWhereClause(filters: ParsedWhereClauseFilters): string | undef
     )
   }
 
+  if (filters.resourceAttributeKey && filters.resourceAttributeValue) {
+    clauses.push(
+      `resource.${filters.resourceAttributeKey} = ${quoteValue(filters.resourceAttributeValue)}`,
+    )
+  }
+
   if (clauses.length === 0) {
     return undefined
   }
@@ -270,6 +291,8 @@ export function applyWhereClause(
       rootOnly: undefined,
       attributeKey: undefined,
       attributeValue: undefined,
+      resourceAttributeKey: undefined,
+      resourceAttributeValue: undefined,
     }
   }
 
@@ -289,5 +312,7 @@ export function applyWhereClause(
     rootOnly: filters.rootOnly ?? search.rootOnly,
     attributeKey: filters.attributeKey ?? search.attributeKey,
     attributeValue: filters.attributeValue ?? search.attributeValue,
+    resourceAttributeKey: filters.resourceAttributeKey ?? search.resourceAttributeKey,
+    resourceAttributeValue: filters.resourceAttributeValue ?? search.resourceAttributeValue,
   }
 }

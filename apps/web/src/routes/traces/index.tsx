@@ -16,6 +16,8 @@ import {
   getTracesFacetsResultAtom,
   getSpanAttributeKeysResultAtom,
   getSpanAttributeValuesResultAtom,
+  getResourceAttributeKeysResultAtom,
+  getResourceAttributeValuesResultAtom,
 } from "@/lib/services/atoms/tinybird-query-atoms"
 
 const tracesSearchSchema = Schema.Struct({
@@ -33,6 +35,8 @@ const tracesSearchSchema = Schema.Struct({
   whereClause: Schema.optional(Schema.String),
   attributeKey: Schema.optional(Schema.String),
   attributeValue: Schema.optional(Schema.String),
+  resourceAttributeKey: Schema.optional(Schema.String),
+  resourceAttributeValue: Schema.optional(Schema.String),
 })
 
 export type TracesSearchParams = Schema.Schema.Type<typeof tracesSearchSchema>
@@ -46,6 +50,7 @@ function TracesPage() {
   const search = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
   const [activeAttributeKey, setActiveAttributeKey] = React.useState<string | null>(null)
+  const [activeResourceAttributeKey, setActiveResourceAttributeKey] = React.useState<string | null>(null)
 
   const handleApplyWhereClause = React.useCallback(
     (newClause: string) => {
@@ -87,6 +92,25 @@ function TracesPage() {
     }),
   )
 
+  const resourceAttributeKeysResult = useAtomValue(
+    getResourceAttributeKeysResultAtom({
+      data: {
+        startTime: effectiveStartTime,
+        endTime: effectiveEndTime,
+      },
+    }),
+  )
+
+  const resourceAttributeValuesResult = useAtomValue(
+    getResourceAttributeValuesResultAtom({
+      data: {
+        startTime: effectiveStartTime,
+        endTime: effectiveEndTime,
+        attributeKey: activeResourceAttributeKey ?? "",
+      },
+    }),
+  )
+
   const attributeKeys = React.useMemo(
     () =>
       Result.builder(spanAttributeKeysResult)
@@ -103,6 +127,24 @@ function TracesPage() {
             .orElse(() => [])
         : [],
     [activeAttributeKey, spanAttributeValuesResult],
+  )
+
+  const resourceAttributeKeys = React.useMemo(
+    () =>
+      Result.builder(resourceAttributeKeysResult)
+        .onSuccess((response) => response.data.map((row) => row.attributeKey))
+        .orElse(() => []),
+    [resourceAttributeKeysResult],
+  )
+
+  const resourceAttributeValues = React.useMemo(
+    () =>
+      activeResourceAttributeKey
+        ? Result.builder(resourceAttributeValuesResult)
+            .onSuccess((response) => response.data.map((row) => row.attributeValue))
+            .orElse(() => [])
+        : [],
+    [activeResourceAttributeKey, resourceAttributeValuesResult],
   )
 
   const autocompleteValues = React.useMemo(() => {
@@ -127,6 +169,8 @@ function TracesPage() {
         httpStatusCodes: toNames(response.data.httpStatusCodes ?? []),
         attributeKeys,
         attributeValues,
+        resourceAttributeKeys,
+        resourceAttributeValues,
       }))
       .orElse(() => ({
         services: [] as string[],
@@ -136,8 +180,10 @@ function TracesPage() {
         httpStatusCodes: [] as string[],
         attributeKeys,
         attributeValues,
+        resourceAttributeKeys,
+        resourceAttributeValues,
       }))
-  }, [facetsResult, attributeKeys, attributeValues])
+  }, [facetsResult, attributeKeys, attributeValues, resourceAttributeKeys, resourceAttributeValues])
 
   const handleTimeChange = ({ startTime, endTime }: { startTime?: string; endTime?: string }) => {
     navigate({
@@ -160,6 +206,7 @@ function TracesPage() {
             onApply={handleApplyWhereClause}
             autocompleteValues={autocompleteValues}
             onActiveAttributeKey={setActiveAttributeKey}
+            onActiveResourceAttributeKey={setActiveResourceAttributeKey}
           />
           <TimeRangePicker
             startTime={search.startTime}

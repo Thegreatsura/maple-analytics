@@ -28,6 +28,8 @@ export const listTraces = defineEndpoint("list_traces", {
     deployment_env: p.string().optional().describe("Filter by deployment environment"),
     attribute_filter_key: p.string().optional().describe("Filter where SpanAttributes[key] = value"),
     attribute_filter_value: p.string().optional().describe("Value for attribute filter"),
+    resource_filter_key: p.string().optional().describe("Filter where ResourceAttributes[key] = value"),
+    resource_filter_value: p.string().optional().describe("Value for resource attribute filter"),
     root_only: p.boolean().optional().describe("Filter to root traces only (spans with no parent)"),
   },
   nodes: [
@@ -65,6 +67,15 @@ export const listTraces = defineEndpoint("list_traces", {
           )) AS matchesAttributeFilter,
           {% else %}
           1 AS matchesAttributeFilter,
+          {% end %}
+          {% if defined(resource_filter_key) %}
+          max(if(
+            ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, "")}},
+            1,
+            0
+          )) AS matchesResourceFilter,
+          {% else %}
+          1 AS matchesResourceFilter,
           {% end %}
           countIf(ParentSpanId = '') AS rootSpanCount
         FROM traces
@@ -122,6 +133,9 @@ export const listTraces = defineEndpoint("list_traces", {
         {% end %}
         {% if defined(attribute_filter_key) %}
           AND matchesAttributeFilter = 1
+        {% end %}
+        {% if defined(resource_filter_key) %}
+          AND matchesResourceFilter = 1
         {% end %}
         ORDER BY startTime DESC
         LIMIT {{Int32(limit, 100)}}
@@ -1085,6 +1099,8 @@ export const tracesFacets = defineEndpoint("traces_facets", {
     deployment_env: p.string().optional().describe("Filter by deployment environment"),
     attribute_filter_key: p.string().optional().describe("Filter where SpanAttributes[key] = value"),
     attribute_filter_value: p.string().optional().describe("Value for attribute filter"),
+    resource_filter_key: p.string().optional().describe("Filter where ResourceAttributes[key] = value"),
+    resource_filter_value: p.string().optional().describe("Value for resource attribute filter"),
   },
   nodes: [
     node({
@@ -1118,6 +1134,15 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           {% else %}
           1 AS matchesAttributeFilter,
           {% end %}
+          {% if defined(resource_filter_key) %}
+          max(if(
+            ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, "")}},
+            1,
+            0
+          )) AS matchesResourceFilter,
+          {% else %}
+          1 AS matchesResourceFilter,
+          {% end %}
           (max(toUnixTimestamp64Nano(Timestamp) + Duration) - min(toUnixTimestamp64Nano(Timestamp))) / 1000000.0 AS durationMs
         FROM traces
         WHERE TraceId != ''
@@ -1143,6 +1168,9 @@ export const tracesFacets = defineEndpoint("traces_facets", {
         WHERE 1=1
         {% if defined(attribute_filter_key) %}
           AND matchesAttributeFilter = 1
+        {% end %}
+        {% if defined(resource_filter_key) %}
+          AND matchesResourceFilter = 1
         {% end %}
         {% if defined(span_name) %}
           AND rootSpanName = {{String(span_name)}}
@@ -1181,6 +1209,9 @@ export const tracesFacets = defineEndpoint("traces_facets", {
         WHERE 1=1
         {% if defined(attribute_filter_key) %}
           AND matchesAttributeFilter = 1
+        {% end %}
+        {% if defined(resource_filter_key) %}
+          AND matchesResourceFilter = 1
         {% end %}
         {% if defined(service) %}
           AND has(services, {{String(service)}})
@@ -1221,6 +1252,9 @@ export const tracesFacets = defineEndpoint("traces_facets", {
         {% if defined(attribute_filter_key) %}
           AND matchesAttributeFilter = 1
         {% end %}
+        {% if defined(resource_filter_key) %}
+          AND matchesResourceFilter = 1
+        {% end %}
         {% if defined(service) %}
           AND has(services, {{String(service)}})
         {% end %}
@@ -1259,6 +1293,9 @@ export const tracesFacets = defineEndpoint("traces_facets", {
         WHERE 1=1
         {% if defined(attribute_filter_key) %}
           AND matchesAttributeFilter = 1
+        {% end %}
+        {% if defined(resource_filter_key) %}
+          AND matchesResourceFilter = 1
         {% end %}
         {% if defined(service) %}
           AND has(services, {{String(service)}})
@@ -1299,6 +1336,9 @@ export const tracesFacets = defineEndpoint("traces_facets", {
         {% if defined(attribute_filter_key) %}
           AND matchesAttributeFilter = 1
         {% end %}
+        {% if defined(resource_filter_key) %}
+          AND matchesResourceFilter = 1
+        {% end %}
         {% if defined(service) %}
           AND has(services, {{String(service)}})
         {% end %}
@@ -1336,6 +1376,9 @@ export const tracesFacets = defineEndpoint("traces_facets", {
         WHERE 1=1
         {% if defined(attribute_filter_key) %}
           AND matchesAttributeFilter = 1
+        {% end %}
+        {% if defined(resource_filter_key) %}
+          AND matchesResourceFilter = 1
         {% end %}
         {% if defined(service) %}
           AND has(services, {{String(service)}})
@@ -1404,6 +1447,8 @@ export const tracesDurationStats = defineEndpoint("traces_duration_stats", {
     deployment_env: p.string().optional().describe("Filter by deployment environment"),
     attribute_filter_key: p.string().optional().describe("Filter where SpanAttributes[key] = value"),
     attribute_filter_value: p.string().optional().describe("Value for attribute filter"),
+    resource_filter_key: p.string().optional().describe("Filter where ResourceAttributes[key] = value"),
+    resource_filter_value: p.string().optional().describe("Value for resource attribute filter"),
   },
   nodes: [
     node({
@@ -1462,6 +1507,20 @@ export const tracesDurationStats = defineEndpoint("traces_duration_stats", {
               SELECT TraceId FROM traces WHERE TraceId != ''
               AND OrgId = {{String(org_id, "")}}
               AND SpanAttributes[{{String(attribute_filter_key)}}] = {{String(attribute_filter_value, "")}}
+              {% if defined(start_time) %}
+                AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
+              {% end %}
+              {% if defined(end_time) %}
+                AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
+              {% end %}
+              GROUP BY TraceId
+            )
+          {% end %}
+          {% if defined(resource_filter_key) %}
+            AND TraceId IN (
+              SELECT TraceId FROM traces WHERE TraceId != ''
+              AND OrgId = {{String(org_id, "")}}
+              AND ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, "")}}
               {% if defined(start_time) %}
                 AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
               {% end %}
@@ -2053,6 +2112,8 @@ export const customTracesTimeseries = defineEndpoint("custom_traces_timeseries",
     group_by_attribute: p.string().optional().describe("Group by SpanAttributes[key]"),
     attribute_filter_key: p.string().optional().describe("Filter where SpanAttributes[key] = value"),
     attribute_filter_value: p.string().optional().describe("Value for attribute filter"),
+    resource_filter_key: p.string().optional().describe("Filter where ResourceAttributes[key] = value"),
+    resource_filter_value: p.string().optional().describe("Value for resource attribute filter"),
   },
   nodes: [
     node({
@@ -2092,6 +2153,9 @@ export const customTracesTimeseries = defineEndpoint("custom_traces_timeseries",
           {% end %}
           {% if defined(attribute_filter_key) %}
             AND SpanAttributes[{{String(attribute_filter_key)}}] = {{String(attribute_filter_value, '')}}
+          {% end %}
+          {% if defined(resource_filter_key) %}
+            AND ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, '')}}
           {% end %}
         GROUP BY bucket, groupName
         ORDER BY bucket ASC, groupName ASC
@@ -2135,6 +2199,8 @@ export const customTracesBreakdown = defineEndpoint("custom_traces_breakdown", {
     group_by_attribute: p.string().optional().describe("Group by SpanAttributes[key]"),
     attribute_filter_key: p.string().optional().describe("Filter where SpanAttributes[key] = value"),
     attribute_filter_value: p.string().optional().describe("Value for attribute filter"),
+    resource_filter_key: p.string().optional().describe("Filter where ResourceAttributes[key] = value"),
+    resource_filter_value: p.string().optional().describe("Value for resource attribute filter"),
   },
   nodes: [
     node({
@@ -2175,6 +2241,9 @@ export const customTracesBreakdown = defineEndpoint("custom_traces_breakdown", {
           {% end %}
           {% if defined(attribute_filter_key) %}
             AND SpanAttributes[{{String(attribute_filter_key)}}] = {{String(attribute_filter_value, '')}}
+          {% end %}
+          {% if defined(resource_filter_key) %}
+            AND ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, '')}}
           {% end %}
         GROUP BY name
         ORDER BY count DESC
@@ -2624,3 +2693,80 @@ export const spanAttributeValues = defineEndpoint("span_attribute_values", {
 
 export type SpanAttributeValuesParams = InferParams<typeof spanAttributeValues>;
 export type SpanAttributeValuesOutput = InferOutputRow<typeof spanAttributeValues>;
+
+/**
+ * Resource attribute keys endpoint - returns distinct resource attribute key names
+ */
+export const resourceAttributeKeys = defineEndpoint("resource_attribute_keys", {
+  description: "List distinct resource attribute keys with usage counts.",
+  params: {
+    org_id: p.string().optional().describe("Organization ID"),
+    start_time: p.dateTime().describe("Start of time range"),
+    end_time: p.dateTime().describe("End of time range"),
+    limit: p.int32().optional(200).describe("Maximum number of keys to return"),
+  },
+  nodes: [
+    node({
+      name: "resource_attribute_keys_node",
+      sql: `
+        SELECT
+          arrayJoin(mapKeys(ResourceAttributes)) AS attributeKey,
+          count() AS usageCount
+        FROM traces
+        WHERE OrgId = {{String(org_id, "")}}
+          AND Timestamp >= {{DateTime(start_time)}}
+          AND Timestamp <= {{DateTime(end_time)}}
+          AND ResourceAttributes != map()
+        GROUP BY attributeKey
+        ORDER BY usageCount DESC
+        LIMIT {{Int32(limit, 200)}}
+      `,
+    }),
+  ],
+  output: {
+    attributeKey: t.string(),
+    usageCount: t.uint64(),
+  },
+});
+
+export type ResourceAttributeKeysParams = InferParams<typeof resourceAttributeKeys>;
+export type ResourceAttributeKeysOutput = InferOutputRow<typeof resourceAttributeKeys>;
+
+/**
+ * Resource attribute values endpoint - returns distinct values for a specific resource attribute key
+ */
+export const resourceAttributeValues = defineEndpoint("resource_attribute_values", {
+  description: "List distinct values for a specific resource attribute key.",
+  params: {
+    org_id: p.string().optional().describe("Organization ID"),
+    start_time: p.dateTime().describe("Start of time range"),
+    end_time: p.dateTime().describe("End of time range"),
+    attribute_key: p.string().describe("The attribute key to get values for"),
+    limit: p.int32().optional(50).describe("Maximum number of values to return"),
+  },
+  nodes: [
+    node({
+      name: "resource_attribute_values_node",
+      sql: `
+        SELECT
+          ResourceAttributes[{{String(attribute_key)}}] AS attributeValue,
+          count() AS usageCount
+        FROM traces
+        WHERE OrgId = {{String(org_id, "")}}
+          AND Timestamp >= {{DateTime(start_time)}}
+          AND Timestamp <= {{DateTime(end_time)}}
+          AND ResourceAttributes[{{String(attribute_key)}}] != ''
+        GROUP BY attributeValue
+        ORDER BY usageCount DESC
+        LIMIT {{Int32(limit, 50)}}
+      `,
+    }),
+  ],
+  output: {
+    attributeValue: t.string(),
+    usageCount: t.uint64(),
+  },
+});
+
+export type ResourceAttributeValuesParams = InferParams<typeof resourceAttributeValues>;
+export type ResourceAttributeValuesOutput = InferOutputRow<typeof resourceAttributeValues>;

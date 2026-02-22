@@ -103,6 +103,8 @@ const SharedFiltersSchema = Schema.Struct({
   commitShas: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
   attributeKey: Schema.optional(Schema.String),
   attributeValue: Schema.optional(Schema.String),
+  resourceAttributeKey: Schema.optional(Schema.String),
+  resourceAttributeValue: Schema.optional(Schema.String),
 })
 
 const CustomChartTimeSeriesInputSchema = Schema.Struct({
@@ -197,6 +199,8 @@ function buildTimeseriesQuerySpec(data: CustomChartTimeSeriesInput): QuerySpec |
         commitShas: data.filters?.commitShas,
         attributeKey: data.filters?.attributeKey,
         attributeValue: data.filters?.attributeValue,
+        resourceAttributeKey: data.filters?.resourceAttributeKey,
+        resourceAttributeValue: data.filters?.resourceAttributeValue,
       },
       bucketSeconds: data.bucketSeconds,
     }
@@ -353,6 +357,8 @@ function buildBreakdownQuerySpec(data: CustomChartBreakdownInput): QuerySpec | s
         commitShas: data.filters?.commitShas,
         attributeKey: data.filters?.attributeKey,
         attributeValue: data.filters?.attributeValue,
+        resourceAttributeKey: data.filters?.resourceAttributeKey,
+        resourceAttributeValue: data.filters?.resourceAttributeValue,
       },
       limit: data.limit,
     }

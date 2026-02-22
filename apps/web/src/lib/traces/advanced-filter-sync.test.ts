@@ -66,6 +66,22 @@ describe("parseWhereClause", () => {
     expect(filters.attributeValue).toBe("/orders/:id")
   })
 
+  it("parses resource.* keys", () => {
+    const { filters } = parseWhereClause('resource.service.version = "1.2.3"')
+    expect(filters.resourceAttributeKey).toBe("service.version")
+    expect(filters.resourceAttributeValue).toBe("1.2.3")
+  })
+
+  it("parses combined attr.* and resource.* keys", () => {
+    const { filters } = parseWhereClause(
+      'attr.http.route = "/orders/:id" AND resource.telemetry.sdk.name = "opentelemetry"',
+    )
+    expect(filters.attributeKey).toBe("http.route")
+    expect(filters.attributeValue).toBe("/orders/:id")
+    expect(filters.resourceAttributeKey).toBe("telemetry.sdk.name")
+    expect(filters.resourceAttributeValue).toBe("opentelemetry")
+  })
+
   it("marks incomplete clauses for unclosed quotes", () => {
     const result = parseWhereClause('service.name = "check')
     expect(result.hasIncompleteClauses).toBe(true)
@@ -125,6 +141,24 @@ describe("toWhereClause", () => {
       attributeValue: "/orders/:id",
     })
     expect(clause).toBe('attr.http.route = "/orders/:id"')
+  })
+
+  it("includes resource.* clauses", () => {
+    const clause = toWhereClause({
+      resourceAttributeKey: "service.version",
+      resourceAttributeValue: "1.2.3",
+    })
+    expect(clause).toBe('resource.service.version = "1.2.3"')
+  })
+
+  it("includes both attr.* and resource.* clauses", () => {
+    const clause = toWhereClause({
+      attributeKey: "http.route",
+      attributeValue: "/orders/:id",
+      resourceAttributeKey: "service.version",
+      resourceAttributeValue: "1.2.3",
+    })
+    expect(clause).toBe('attr.http.route = "/orders/:id" AND resource.service.version = "1.2.3"')
   })
 })
 
@@ -202,5 +236,25 @@ describe("applyWhereClause", () => {
 
     expect(result.whereClause).toBeUndefined()
     expect(result.services).toBeUndefined()
+  })
+
+  it("merges resource attribute filters into search params", () => {
+    const result = applyWhereClause(
+      { startTime: "2026-02-01 00:00:00" },
+      'resource.service.version = "1.2.3"',
+    )
+
+    expect(result.resourceAttributeKey).toBe("service.version")
+    expect(result.resourceAttributeValue).toBe("1.2.3")
+  })
+
+  it("clears resource attribute filters when clause is empty", () => {
+    const result = applyWhereClause(
+      { resourceAttributeKey: "service.version", resourceAttributeValue: "1.2.3" },
+      "",
+    )
+
+    expect(result.resourceAttributeKey).toBeUndefined()
+    expect(result.resourceAttributeValue).toBeUndefined()
   })
 })

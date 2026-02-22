@@ -18,6 +18,7 @@ interface AdvancedFilterDialogProps {
   onApply: (value: string) => void
   autocompleteValues?: WhereClauseAutocompleteValues
   onActiveAttributeKey?: (key: string | null) => void
+  onActiveResourceAttributeKey?: (key: string | null) => void
 }
 
 export function AdvancedFilterDialog({
@@ -25,6 +26,7 @@ export function AdvancedFilterDialog({
   onApply,
   autocompleteValues,
   onActiveAttributeKey,
+  onActiveResourceAttributeKey,
 }: AdvancedFilterDialogProps) {
   const [open, setOpen] = React.useState(false)
   const [value, setValue] = React.useState(initialValue)
@@ -110,6 +112,7 @@ export function AdvancedFilterDialog({
             maxSuggestions={20}
             values={autocompleteValues}
             onActiveAttributeKey={onActiveAttributeKey}
+            onActiveResourceAttributeKey={onActiveResourceAttributeKey}
             onChange={setValue}
             placeholder='service.name = "checkout" AND attr.http.route = "/orders/:id"'
             textareaClassName="font-mono text-sm leading-relaxed resize-y min-h-[200px]"

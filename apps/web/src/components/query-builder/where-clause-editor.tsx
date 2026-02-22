@@ -17,6 +17,7 @@ interface WhereClauseEditorProps {
   values?: WhereClauseAutocompleteValues
   autocompleteScope?: WhereClauseAutocompleteScope
   onActiveAttributeKey?: (key: string | null) => void
+  onActiveResourceAttributeKey?: (key: string | null) => void
   placeholder?: string
   rows?: number
   maxSuggestions?: number
@@ -32,6 +33,7 @@ export function WhereClauseEditor({
   values,
   autocompleteScope,
   onActiveAttributeKey,
+  onActiveResourceAttributeKey,
   placeholder,
   rows = 2,
   maxSuggestions,
@@ -71,6 +73,16 @@ export function WhereClauseEditor({
       onActiveAttributeKey(null)
     }
   }, [autocomplete.context, autocomplete.key, onActiveAttributeKey])
+
+  // Notify parent when user is editing a value for a resource.* key
+  React.useEffect(() => {
+    if (!onActiveResourceAttributeKey) return
+    if (autocomplete.context === "value" && autocomplete.key?.startsWith("resource.")) {
+      onActiveResourceAttributeKey(autocomplete.key.slice(9))
+    } else {
+      onActiveResourceAttributeKey(null)
+    }
+  }, [autocomplete.context, autocomplete.key, onActiveResourceAttributeKey])
 
   const suggestions = autocomplete.suggestions
   const isOpen = isFocused && !isDismissed && suggestions.length > 0

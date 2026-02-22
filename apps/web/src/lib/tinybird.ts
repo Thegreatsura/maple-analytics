@@ -29,6 +29,8 @@ import type {
   ServiceDependenciesOutput,
   ServiceOverviewOutput,
   ServicesFacetsOutput,
+  ResourceAttributeKeysOutput,
+  ResourceAttributeValuesOutput,
   SpanAttributeKeysOutput,
   SpanAttributeValuesOutput,
   SpanHierarchyOutput,
@@ -87,6 +89,10 @@ export type {
   ServiceOverviewOutput,
   ServicesFacetsParams,
   ServicesFacetsOutput,
+  ResourceAttributeKeysParams,
+  ResourceAttributeKeysOutput,
+  ResourceAttributeValuesParams,
+  ResourceAttributeValuesOutput,
   SpanAttributeKeysParams,
   SpanAttributeKeysOutput,
   SpanAttributeValuesParams,
@@ -182,6 +188,10 @@ const query = {
     queryTinybird<SpanAttributeKeysOutput>("span_attribute_keys", params),
   span_attribute_values: (params?: Record<string, unknown>) =>
     queryTinybird<SpanAttributeValuesOutput>("span_attribute_values", params),
+  resource_attribute_keys: (params?: Record<string, unknown>) =>
+    queryTinybird<ResourceAttributeKeysOutput>("resource_attribute_keys", params),
+  resource_attribute_values: (params?: Record<string, unknown>) =>
+    queryTinybird<ResourceAttributeValuesOutput>("resource_attribute_values", params),
 }
 
 export function createTinybird() {

@@ -264,6 +264,8 @@ export function buildTimeseriesQuerySpec(
       commitShas?: string[]
       attributeKey?: string
       attributeValue?: string
+      resourceAttributeKey?: string
+      resourceAttributeValue?: string
     } = {}
 
     for (const clause of clauses) {
@@ -312,6 +314,19 @@ export function buildTimeseriesQuerySpec(
         } else {
           warnings.push(
             `Multiple attr.* filters found; only ${filters.attributeKey} is used`
+          )
+        }
+        continue
+      }
+
+      if (clause.key.startsWith("resource.")) {
+        const resourceKey = clause.key.slice(9)
+        if (!filters.resourceAttributeKey) {
+          filters.resourceAttributeKey = resourceKey
+          filters.resourceAttributeValue = clause.value
+        } else {
+          warnings.push(
+            `Multiple resource.* filters found; only ${filters.resourceAttributeKey} is used`
           )
         }
         continue
@@ -562,6 +577,16 @@ export function formatFiltersAsWhereClause(
   ) {
     clauses.push(
       `attr.${filters.attributeKey.trim()} = "${filters.attributeValue.trim()}"`
+    )
+  }
+
+  if (
+    typeof filters.resourceAttributeKey === "string" &&
+    filters.resourceAttributeKey.trim() &&
+    typeof filters.resourceAttributeValue === "string"
+  ) {
+    clauses.push(
+      `resource.${filters.resourceAttributeKey.trim()} = "${filters.resourceAttributeValue.trim()}"`
     )
   }
 

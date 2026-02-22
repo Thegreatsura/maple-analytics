@@ -21,7 +21,7 @@ import {
   getServiceOverview,
   getServicesFacets,
 } from "@/api/tinybird/services"
-import { getSpanAttributeKeys, getSpanAttributeValues, getSpanHierarchy, getTracesFacets, listTraces } from "@/api/tinybird/traces"
+import { getResourceAttributeKeys, getResourceAttributeValues, getSpanAttributeKeys, getSpanAttributeValues, getSpanHierarchy, getTracesFacets, listTraces } from "@/api/tinybird/traces"
 import { getQueryBuilderTimeseries } from "@/api/tinybird/query-builder-timeseries"
 
 type QueryEffect<Input, Output> = (input: Input) => Effect.Effect<Output, unknown>
@@ -207,5 +207,13 @@ export const getSpanAttributeKeysResultAtom = makeQueryAtomFamily(getSpanAttribu
 })
 
 export const getSpanAttributeValuesResultAtom = makeQueryAtomFamily(getSpanAttributeValues, {
+  staleTime: 30_000,
+})
+
+export const getResourceAttributeKeysResultAtom = makeQueryAtomFamily(getResourceAttributeKeys, {
+  staleTime: 60_000,
+})
+
+export const getResourceAttributeValuesResultAtom = makeQueryAtomFamily(getResourceAttributeValues, {
   staleTime: 30_000,
 })

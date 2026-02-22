@@ -279,6 +279,8 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
               : undefined,
           attribute_filter_key: request.query.filters?.attributeKey,
           attribute_filter_value: request.query.filters?.attributeValue,
+          resource_filter_key: request.query.filters?.resourceAttributeKey,
+          resource_filter_value: request.query.filters?.resourceAttributeValue,
         }),
         "Failed to execute traces timeseries query",
       )
@@ -392,6 +394,8 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
               : undefined,
           attribute_filter_key: request.query.filters?.attributeKey,
           attribute_filter_value: request.query.filters?.attributeValue,
+          resource_filter_key: request.query.filters?.resourceAttributeKey,
+          resource_filter_value: request.query.filters?.resourceAttributeValue,
         }),
         "Failed to execute traces breakdown query",
       )

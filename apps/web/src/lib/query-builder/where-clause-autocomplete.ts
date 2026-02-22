@@ -23,6 +23,8 @@ export interface WhereClauseAutocompleteValues {
   metricTypes?: QueryBuilderMetricType[]
   attributeKeys?: string[]
   attributeValues?: string[]
+  resourceAttributeKeys?: string[]
+  resourceAttributeValues?: string[]
 }
 
 export interface WhereClauseAutocompleteSuggestion {
@@ -105,6 +107,11 @@ const KEY_DEFINITIONS: Record<QueryBuilderDataSource, KeyDefinition[]> = {
       insertText: "attr.",
       description: "Filter by a single span attribute",
     },
+    {
+      label: "resource.<key>",
+      insertText: "resource.",
+      description: "Filter by a single resource attribute",
+    },
   ],
   logs: [
     {
@@ -182,6 +189,11 @@ const TRACE_SEARCH_KEY_DEFINITIONS: KeyDefinition[] = [
     label: "attr.<key>",
     insertText: "attr.",
     description: "Filter by a single span attribute",
+  },
+  {
+    label: "resource.<key>",
+    insertText: "resource.",
+    description: "Filter by a single resource attribute",
   },
 ]
 
@@ -506,6 +518,10 @@ function normalizeKey(input: string | null): string {
     return "attr.*"
   }
 
+  if (normalized.startsWith("resource.")) {
+    return "resource.*"
+  }
+
   return normalized
 }
 
@@ -680,6 +696,12 @@ function buildValueSuggestions(
     )
   }
 
+  if (normalizedKey === "resource.*" && values?.resourceAttributeValues) {
+    return uniqueValues(values.resourceAttributeValues).map((value) =>
+      toStringValueSuggestion(value, "resource"),
+    )
+  }
+
   return []
 }
 
@@ -717,6 +739,18 @@ function buildAttributeKeySuggestions(
   return [...clean, ...noisy]
 }
 
+function buildResourceAttributeKeySuggestions(
+  attributeKeys: string[],
+): WhereClauseAutocompleteSuggestion[] {
+  return attributeKeys.map((key) => ({
+    id: `key:resource.${key}`,
+    kind: "key" as const,
+    label: `resource.${key}`,
+    insertText: `resource.${key}`,
+    description: "Resource attribute",
+  }))
+}
+
 function buildSuggestions(
   parsed: ParsedWhereClauseContext,
   dataSource: QueryBuilderDataSource,
@@ -736,6 +770,17 @@ function buildSuggestions(
     ) {
       const attrSuggestions = buildAttributeKeySuggestions(values.attributeKeys)
       return filterAndRankSuggestions(attrSuggestions, query, maxSuggestions)
+    }
+
+    // When typing resource., show dynamic resource attribute keys
+    if (
+      dataSource === "traces" &&
+      query.startsWith("resource.") &&
+      values?.resourceAttributeKeys &&
+      values.resourceAttributeKeys.length > 0
+    ) {
+      const resourceSuggestions = buildResourceAttributeKeySuggestions(values.resourceAttributeKeys)
+      return filterAndRankSuggestions(resourceSuggestions, query, maxSuggestions)
     }
 
     const keyDefinitions =

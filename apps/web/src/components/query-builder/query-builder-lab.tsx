@@ -39,6 +39,8 @@ import {
   getQueryBuilderTimeseriesResultAtom,
   getSpanAttributeKeysResultAtom,
   getSpanAttributeValuesResultAtom,
+  getResourceAttributeKeysResultAtom,
+  getResourceAttributeValuesResultAtom,
   getTracesFacetsResultAtom,
   listMetricsResultAtom,
 } from "@/lib/services/atoms/tinybird-query-atoms"
@@ -471,6 +473,7 @@ export function QueryBuilderLab({
   )
 
   const [activeAttributeKey, setActiveAttributeKey] = React.useState<string | null>(null)
+  const [activeResourceAttributeKey, setActiveResourceAttributeKey] = React.useState<string | null>(null)
 
   const spanAttributeValuesResult = useAtomValue(
     getSpanAttributeValuesResultAtom({
@@ -478,6 +481,25 @@ export function QueryBuilderLab({
         startTime,
         endTime,
         attributeKey: activeAttributeKey ?? "",
+      },
+    }),
+  )
+
+  const resourceAttributeKeysResult = useAtomValue(
+    getResourceAttributeKeysResultAtom({
+      data: {
+        startTime,
+        endTime,
+      },
+    }),
+  )
+
+  const resourceAttributeValuesResult = useAtomValue(
+    getResourceAttributeValuesResultAtom({
+      data: {
+        startTime,
+        endTime,
+        attributeKey: activeResourceAttributeKey ?? "",
       },
     }),
   )
@@ -498,6 +520,24 @@ export function QueryBuilderLab({
             .orElse(() => [])
         : [],
     [activeAttributeKey, spanAttributeValuesResult],
+  )
+
+  const resourceAttributeKeys = React.useMemo(
+    () =>
+      Result.builder(resourceAttributeKeysResult)
+        .onSuccess((response) => response.data.map((row) => row.attributeKey))
+        .orElse(() => []),
+    [resourceAttributeKeysResult],
+  )
+
+  const resourceAttributeValues = React.useMemo(
+    () =>
+      activeResourceAttributeKey
+        ? Result.builder(resourceAttributeValuesResult)
+            .onSuccess((response) => response.data.map((row) => row.attributeValue))
+            .orElse(() => [])
+        : [],
+    [activeResourceAttributeKey, resourceAttributeValuesResult],
   )
 
   const metricRows = React.useMemo(
@@ -578,6 +618,8 @@ export function QueryBuilderLab({
         environments: toNames(tracesFacets.deploymentEnvs),
         attributeKeys,
         attributeValues,
+        resourceAttributeKeys,
+        resourceAttributeValues,
       },
       logs: {
         services: toNames(logsFacets.services),
@@ -588,7 +630,7 @@ export function QueryBuilderLab({
         metricTypes: [...QUERY_BUILDER_METRIC_TYPES],
       },
     }
-  }, [attributeKeys, attributeValues, logsFacetsResult, metricRows, tracesFacetsResult])
+  }, [attributeKeys, attributeValues, resourceAttributeKeys, resourceAttributeValues, logsFacetsResult, metricRows, tracesFacetsResult])
 
   React.useEffect(() => {
     const firstMetric = metricOptions[0]
@@ -947,6 +989,11 @@ export function QueryBuilderLab({
                               onActiveAttributeKey={
                                 query.dataSource === "traces"
                                   ? setActiveAttributeKey
+                                  : undefined
+                              }
+                              onActiveResourceAttributeKey={
+                                query.dataSource === "traces"
+                                  ? setActiveResourceAttributeKey
                                   : undefined
                               }
                               onChange={(nextWhereClause) =>
