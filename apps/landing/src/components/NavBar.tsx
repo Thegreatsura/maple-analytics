@@ -89,25 +89,7 @@ function NavBarInner() {
               </NavigationMenuContent>
             </NavigationMenuItem>
 
-            <NavigationMenuItem>
-              <NavigationMenuTrigger className="bg-transparent hover:bg-muted/20 text-fg-muted hover:text-fg">
-                Compare
-              </NavigationMenuTrigger>
-              <NavigationMenuContent>
-                <div className="p-2 min-w-[220px]">
-                  {compareLinks.map((link) => (
-                    <NavigationMenuLink
-                      key={link.href}
-                      href={link.href}
-                    >
-                      {link.label}
-                    </NavigationMenuLink>
-                  ))}
-                </div>
-              </NavigationMenuContent>
-            </NavigationMenuItem>
-
-            <NavigationMenuItem>
+<NavigationMenuItem>
               <NavigationMenuTrigger className="bg-transparent hover:bg-muted/20 text-fg-muted hover:text-fg">
                 Integrations
               </NavigationMenuTrigger>
@@ -128,6 +110,12 @@ function NavBarInner() {
             <NavigationMenuItem>
               <a href="/pricing" className="inline-flex h-9 w-max items-center justify-center bg-transparent px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:bg-muted/20 hover:text-fg transition-all">
                 Pricing
+              </a>
+            </NavigationMenuItem>
+
+            <NavigationMenuItem>
+              <a href="/roadmap" className="inline-flex h-9 w-max items-center justify-center bg-transparent px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:bg-muted/20 hover:text-fg transition-all">
+                Roadmap
               </a>
             </NavigationMenuItem>
           </NavigationMenuList>
