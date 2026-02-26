@@ -7,6 +7,7 @@ import { getSpamPatternsParam } from "@/lib/spam-patterns"
 import { defaultTimeRange } from "../lib/time"
 import { formatPercent, formatDurationFromMs, formatNumber } from "../lib/format"
 import { Effect } from "effect"
+import { createDualContent } from "../lib/structured-output"
 
 export function registerSystemHealthTool(server: McpToolRegistrar) {
   server.tool(
@@ -86,7 +87,26 @@ export function registerSystemHealthTool(server: McpToolRegistrar) {
           }
         }
 
-        return { content: [{ type: "text", text: lines.join("\n") }] }
+        return {
+          content: createDualContent(lines.join("\n"), {
+            tool: "system_health",
+            data: {
+              timeRange: { start: st, end: et },
+              serviceCount,
+              totalSpans: summary ? Number(summary.totalSpans) : 0,
+              totalErrors: summary ? Number(summary.totalErrors) : 0,
+              errorRate: summary ? summary.errorRate : 0,
+              affectedServicesCount: summary ? Number(summary.affectedServicesCount) : 0,
+              affectedTracesCount: summary ? Number(summary.affectedTracesCount) : 0,
+              latency: { p50Ms: avgP50, p95Ms: avgP95 },
+              topErrors: errors.map((e) => ({
+                errorType: e.errorType,
+                count: Number(e.count),
+                affectedServicesCount: Number(e.affectedServicesCount),
+              })),
+            },
+          }),
+        }
       }),
   )
 }

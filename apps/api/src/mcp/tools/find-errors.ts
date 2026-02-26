@@ -8,6 +8,7 @@ import { getSpamPatternsParam } from "@/lib/spam-patterns"
 import { defaultTimeRange } from "../lib/time"
 import { formatNumber, formatTable } from "../lib/format"
 import { Effect } from "effect"
+import { createDualContent } from "../lib/structured-output"
 
 export function registerFindErrorsTool(server: McpToolRegistrar) {
   server.tool(
@@ -53,7 +54,20 @@ export function registerFindErrorsTool(server: McpToolRegistrar) {
         lines.push(formatTable(headers, rows))
         lines.push(``, `Total: ${result.data.length} error types`)
 
-        return { content: [{ type: "text", text: lines.join("\n") }] }
+        return {
+          content: createDualContent(lines.join("\n"), {
+            tool: "find_errors",
+            data: {
+              timeRange: { start: st, end: et },
+              errors: result.data.map((e) => ({
+                errorType: e.errorType,
+                count: Number(e.count),
+                affectedServices: e.affectedServices,
+                lastSeen: String(e.lastSeen),
+              })),
+            },
+          }),
+        }
       }),
   )
 }

@@ -11,6 +11,7 @@ import { defaultTimeRange } from "../lib/time"
 import { formatDurationFromMs, formatNumber, formatPercent, formatTable } from "../lib/format"
 import { HttpServerRequest } from "@effect/platform"
 import { Cause, Effect, Exit, ManagedRuntime, Option } from "effect"
+import { createDualContent } from "../lib/structured-output"
 import { resolveMcpTenantContext } from "@/mcp/lib/resolve-tenant"
 import { QueryEngineService } from "@/services/QueryEngineService"
 import type {
@@ -185,6 +186,18 @@ function formatQueryResult(
   const result = response.result
   const metricLabel = metric ?? (source === "metrics" ? "avg" : "count")
 
+  const structuredData = {
+    tool: "query_data" as const,
+    data: {
+      timeRange: { start: startTime, end: endTime },
+      source,
+      kind,
+      metric: metricLabel,
+      groupBy,
+      result: result as any,
+    },
+  }
+
   const lines: string[] = [
     `=== ${capitalize(source)} ${capitalize(kind)}: ${metricLabel} ===`,
     `Time range: ${startTime} — ${endTime}`,
@@ -194,7 +207,7 @@ function formatQueryResult(
     const data = result.data as Array<{ bucket: string; series: Record<string, number> }>
     if (data.length === 0) {
       lines.push("", "No data points found.")
-      return { content: [{ type: "text", text: lines.join("\n") }] }
+      return { content: createDualContent(lines.join("\n"), structuredData) }
     }
 
     const seriesKeys = [...new Set(data.flatMap((d) => Object.keys(d.series)))]
@@ -211,14 +224,14 @@ function formatQueryResult(
     ])
 
     lines.push(formatTable(headers, rows))
-    return { content: [{ type: "text", text: lines.join("\n") }] }
+    return { content: createDualContent(lines.join("\n"), structuredData) }
   }
 
   if (result.kind === "breakdown") {
     const data = result.data as Array<{ name: string; value: number }>
     if (data.length === 0) {
       lines.push("", "No data found.")
-      return { content: [{ type: "text", text: lines.join("\n") }] }
+      return { content: createDualContent(lines.join("\n"), structuredData) }
     }
 
     if (groupBy) lines.push(`Grouped by: ${groupBy}`)
@@ -231,7 +244,7 @@ function formatQueryResult(
     ])
 
     lines.push(formatTable(headers, rows))
-    return { content: [{ type: "text", text: lines.join("\n") }] }
+    return { content: createDualContent(lines.join("\n"), structuredData) }
   }
 
   lines.push("", "Unexpected result format.")

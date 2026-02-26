@@ -6,6 +6,7 @@ import { queryTinybird } from "../lib/query-tinybird"
 import { defaultTimeRange } from "../lib/time"
 import { formatDurationFromMs, formatPercent, formatNumber, formatTable } from "../lib/format"
 import { Effect } from "effect"
+import { createDualContent } from "../lib/structured-output"
 
 export function registerServiceOverviewTool(server: McpToolRegistrar) {
   server.tool(
@@ -120,7 +121,33 @@ export function registerServiceOverviewTool(server: McpToolRegistrar) {
           }
         }
 
-        return { content: [{ type: "text", text: lines.join("\n") }] }
+        return {
+          content: createDualContent(lines.join("\n"), {
+            tool: "service_overview",
+            data: {
+              timeRange: { start: st, end: et },
+              services: Array.from(serviceMap.entries()).map(([name, svc]) => ({
+                name,
+                throughput: svc.throughput,
+                errorRate: svc.throughput > 0 ? (svc.errorCount / svc.throughput) * 100 : 0,
+                p50Ms: svc.totalWeight > 0 ? svc.p50 / svc.totalWeight : 0,
+                p95Ms: svc.totalWeight > 0 ? svc.p95 / svc.totalWeight : 0,
+                p99Ms: svc.totalWeight > 0 ? svc.p99 / svc.totalWeight : 0,
+              })),
+              dataVolume: usageResult.data.length > 0
+                ? Array.from(serviceMap.keys()).map((name) => {
+                    const usage = usageMap.get(name)
+                    return {
+                      name,
+                      traces: usage?.traces ?? 0,
+                      logs: usage?.logs ?? 0,
+                      metrics: usage?.metrics ?? 0,
+                    }
+                  })
+                : undefined,
+            },
+          }),
+        }
       }),
   )
 }

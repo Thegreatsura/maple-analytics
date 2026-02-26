@@ -7,6 +7,7 @@ import { queryTinybird } from "../lib/query-tinybird"
 import { defaultTimeRange } from "../lib/time"
 import { formatDurationMs, formatDurationFromMs, formatTable } from "../lib/format"
 import { Effect } from "effect"
+import { createDualContent } from "../lib/structured-output"
 
 const SYSTEM_SPAN_PATTERNS = ["ClusterCron"]
 
@@ -88,7 +89,30 @@ export function registerFindSlowTracesTool(server: McpToolRegistrar) {
 
         lines.push(formatTable(headers, rows))
 
-        return { content: [{ type: "text", text: lines.join("\n") }] }
+        return {
+          content: createDualContent(lines.join("\n"), {
+            tool: "find_slow_traces",
+            data: {
+              timeRange: { start: st, end: et },
+              stats: stats
+                ? {
+                    p50Ms: stats.p50DurationMs,
+                    p95Ms: stats.p95DurationMs,
+                    minMs: stats.minDurationMs,
+                    maxMs: stats.maxDurationMs,
+                  }
+                : undefined,
+              traces: traces.map((t) => ({
+                traceId: t.traceId,
+                rootSpanName: t.rootSpanName,
+                durationMs: Number(t.durationMicros) / 1000,
+                spanCount: Number(t.spanCount),
+                services: t.services,
+                hasError: Boolean(Number(t.hasError)),
+              })),
+            },
+          }),
+        }
       }),
   )
 }

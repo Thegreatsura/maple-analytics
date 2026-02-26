@@ -8,6 +8,7 @@ import { getSpamPatternsParam } from "@/lib/spam-patterns"
 import { defaultTimeRange } from "../lib/time"
 import { formatDurationFromMs, formatPercent, formatNumber, truncate } from "../lib/format"
 import { Effect } from "effect"
+import { createDualContent } from "../lib/structured-output"
 
 export function registerDiagnoseServiceTool(server: McpToolRegistrar) {
   server.tool(
@@ -137,7 +138,44 @@ export function registerDiagnoseServiceTool(server: McpToolRegistrar) {
           }
         }
 
-        return { content: [{ type: "text", text: lines.join("\n") }] }
+        return {
+          content: createDualContent(lines.join("\n"), {
+            tool: "diagnose_service",
+            data: {
+              serviceName: service_name,
+              timeRange: { start: st, end: et },
+              health: {
+                throughput,
+                errorRate,
+                errorCount,
+                p50Ms: p50,
+                p95Ms: p95,
+                p99Ms: p99,
+                apdex: avgApdex,
+              },
+              topErrors: errorsResult.data.map((e) => ({
+                errorType: e.errorType,
+                count: Number(e.count),
+              })),
+              recentTraces: tracesResult.data.map((t) => ({
+                traceId: t.traceId,
+                rootSpanName: t.rootSpanName,
+                durationMs: Number(t.durationMicros) / 1000,
+                spanCount: Number(t.spanCount),
+                services: t.services,
+                hasError: Boolean(Number(t.hasError)),
+              })),
+              recentLogs: logsResult.data.map((l) => ({
+                timestamp: String(l.timestamp),
+                severityText: l.severityText || "INFO",
+                serviceName: l.serviceName,
+                body: l.body,
+                traceId: l.traceId || undefined,
+                spanId: l.spanId || undefined,
+              })),
+            },
+          }),
+        }
       }),
   )
 }

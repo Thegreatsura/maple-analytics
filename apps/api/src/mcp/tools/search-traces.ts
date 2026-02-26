@@ -8,6 +8,7 @@ import { queryTinybird } from "../lib/query-tinybird"
 import { defaultTimeRange } from "../lib/time"
 import { formatDurationMs, formatTable } from "../lib/format"
 import { Effect } from "effect"
+import { createDualContent } from "../lib/structured-output"
 
 export function registerSearchTracesTool(server: McpToolRegistrar) {
   server.tool(
@@ -65,7 +66,22 @@ export function registerSearchTracesTool(server: McpToolRegistrar) {
 
         lines.push(formatTable(headers, rows))
 
-        return { content: [{ type: "text", text: lines.join("\n") }] }
+        return {
+          content: createDualContent(lines.join("\n"), {
+            tool: "search_traces",
+            data: {
+              timeRange: { start: st, end: et },
+              traces: traces.map((t) => ({
+                traceId: t.traceId,
+                rootSpanName: t.rootSpanName,
+                durationMs: Number(t.durationMicros) / 1000,
+                spanCount: Number(t.spanCount),
+                services: t.services,
+                hasError: Boolean(Number(t.hasError)),
+              })),
+            },
+          }),
+        }
       }),
   )
 }

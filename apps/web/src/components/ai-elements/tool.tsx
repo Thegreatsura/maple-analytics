@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import {
   ChartBarIcon,
   ChevronDownIcon,
@@ -16,6 +16,14 @@ import {
   ServerIcon,
 } from "@/components/icons"
 import type { IconComponent } from "@/components/icons"
+import type { StructuredToolOutput } from "@maple/domain"
+import { STRUCTURED_MARKER } from "./renderers"
+
+const LazyToolRenderer = lazy(() =>
+  import("./renderers/tool-renderer").then((m) => ({
+    default: m.ToolRenderer,
+  }))
+)
 
 // ---------------------------------------------------------------------------
 // Metadata
@@ -67,6 +75,32 @@ function deriveStatus(state: string): ToolStatus {
   }
 }
 
+function extractStructuredData(
+  output: unknown
+): StructuredToolOutput | null {
+  if (output == null || typeof output !== "object") return null
+  if (!("content" in (output as Record<string, unknown>))) return null
+  const content = (output as { content: unknown[] }).content
+  if (!Array.isArray(content)) return null
+
+  for (const item of content) {
+    if (typeof item !== "object" || item == null) continue
+    if (!("type" in item) || (item as { type: string }).type !== "text")
+      continue
+    if (!("text" in item)) continue
+    const text = (item as { text: string }).text
+    try {
+      const parsed = JSON.parse(text)
+      if (parsed && parsed[STRUCTURED_MARKER]) {
+        return parsed as StructuredToolOutput
+      }
+    } catch {
+      // Not JSON, skip
+    }
+  }
+  return null
+}
+
 function extractOutputText(output: unknown): string | null {
   if (output == null) return null
 
@@ -86,6 +120,14 @@ function extractOutputText(output: unknown): string | null {
             (c as { type: string }).type === "text" &&
             "text" in c
         )
+        .filter((c) => {
+          try {
+            const parsed = JSON.parse(c.text)
+            return !(parsed && parsed[STRUCTURED_MARKER])
+          } catch {
+            return true
+          }
+        })
         .map((c) => c.text)
         .join("\n")
     }
@@ -133,8 +175,10 @@ export function Tool(props: ToolProps) {
     input != null &&
     typeof input === "object" &&
     Object.keys(input as Record<string, unknown>).length > 0
+  const structuredData = extractStructuredData(output)
   const outputText = extractOutputText(output)
-  const hasContent = hasInput || outputText != null || errorText != null
+  const hasContent =
+    hasInput || structuredData != null || outputText != null || errorText != null
 
   return (
     <div className="my-2 overflow-hidden rounded-lg border border-border/60 bg-muted/30 text-xs">
@@ -208,12 +252,26 @@ export function Tool(props: ToolProps) {
           )}
 
           {/* Output */}
-          {outputText != null && (
+          {(structuredData || outputText != null) && (
             <div className="px-3 py-2">
-              <p className="mb-1 font-medium text-muted-foreground">Result</p>
-              <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-muted-foreground">
-                {outputText}
-              </pre>
+              {structuredData ? (
+                <Suspense
+                  fallback={
+                    <div className="text-muted-foreground">Loading...</div>
+                  }
+                >
+                  <LazyToolRenderer data={structuredData} />
+                </Suspense>
+              ) : outputText != null ? (
+                <>
+                  <p className="mb-1 font-medium text-muted-foreground">
+                    Result
+                  </p>
+                  <pre className="max-h-80 overflow-auto whitespace-pre-wrap text-muted-foreground">
+                    {outputText}
+                  </pre>
+                </>
+              ) : null}
             </div>
           )}
         </div>

@@ -7,6 +7,7 @@ import { queryTinybird } from "../lib/query-tinybird"
 import { defaultTimeRange } from "../lib/time"
 import { truncate, formatNumber } from "../lib/format"
 import { Effect } from "effect"
+import { createDualContent } from "../lib/structured-output"
 
 export function registerSearchLogsTool(server: McpToolRegistrar) {
   server.tool(
@@ -86,7 +87,29 @@ export function registerSearchLogsTool(server: McpToolRegistrar) {
           lines.push(``, `... ${formatNumber(total - logs.length)} more logs not shown`)
         }
 
-        return { content: [{ type: "text", text: lines.join("\n") }] }
+        return {
+          content: createDualContent(lines.join("\n"), {
+            tool: "search_logs",
+            data: {
+              timeRange: { start: st, end: et },
+              totalCount: total,
+              logs: logs.map((l) => ({
+                timestamp: String(l.timestamp),
+                severityText: l.severityText || "INFO",
+                serviceName: l.serviceName,
+                body: l.body,
+                traceId: l.traceId || undefined,
+                spanId: l.spanId || undefined,
+              })),
+              filters: {
+                ...(service && { service }),
+                ...(severity && { severity }),
+                ...(search && { search }),
+                ...(trace_id && { traceId: trace_id }),
+              },
+            },
+          }),
+        }
       }),
   )
 }

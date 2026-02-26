@@ -9,6 +9,7 @@ import { getSpamPatternsParam } from "@/lib/spam-patterns"
 import { defaultTimeRange } from "../lib/time"
 import { formatDurationMs, truncate } from "../lib/format"
 import { Effect } from "effect"
+import { createDualContent } from "../lib/structured-output"
 
 export function registerErrorDetailTool(server: McpToolRegistrar) {
   server.tool(
@@ -94,7 +95,29 @@ export function registerErrorDetailTool(server: McpToolRegistrar) {
           lines.push(``)
         }
 
-        return { content: [{ type: "text", text: lines.join("\n") }] }
+        return {
+          content: createDualContent(lines.join("\n"), {
+            tool: "error_detail",
+            data: {
+              timeRange: { start: st, end: et },
+              errorType: error_type,
+              traces: traces.map((t, i) => ({
+                traceId: t.traceId,
+                rootSpanName: t.rootSpanName,
+                durationMs: Number(t.durationMicros) / 1000,
+                spanCount: Number(t.spanCount),
+                services: t.services,
+                startTime: String(t.startTime),
+                errorMessage: t.errorMessage || undefined,
+                logs: (i < logsResults.length ? logsResults[i]!.data.slice(0, 5) : []).map((l) => ({
+                  timestamp: String(l.timestamp),
+                  severityText: l.severityText || "INFO",
+                  body: l.body,
+                })),
+              })),
+            },
+          }),
+        }
       }),
   )
 }

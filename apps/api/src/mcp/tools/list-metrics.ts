@@ -7,6 +7,7 @@ import { queryTinybird } from "../lib/query-tinybird"
 import { defaultTimeRange } from "../lib/time"
 import { formatNumber, formatTable } from "../lib/format"
 import { Effect } from "effect"
+import { createDualContent } from "../lib/structured-output"
 
 export function registerListMetricsTool(server: McpToolRegistrar) {
   server.tool(
@@ -81,7 +82,26 @@ export function registerListMetricsTool(server: McpToolRegistrar) {
 
         lines.push(formatTable(headers, rows))
 
-        return { content: [{ type: "text", text: lines.join("\n") }] }
+        return {
+          content: createDualContent(lines.join("\n"), {
+            tool: "list_metrics",
+            data: {
+              timeRange: { start: st, end: et },
+              summary: summary.map((s) => ({
+                metricType: s.metricType,
+                metricCount: Number(s.metricCount),
+                dataPointCount: Number(s.dataPointCount),
+              })),
+              metrics: metrics.map((m) => ({
+                metricName: m.metricName,
+                metricType: m.metricType,
+                serviceName: m.serviceName,
+                metricUnit: m.metricUnit || "",
+                dataPointCount: Number(m.dataPointCount),
+              })),
+            },
+          }),
+        }
       }),
   )
 }

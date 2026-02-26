@@ -5,6 +5,7 @@ import {
 import { queryTinybird } from "../lib/query-tinybird"
 import { formatDurationFromMs, truncate } from "../lib/format"
 import { Effect } from "effect"
+import { createDualContent } from "../lib/structured-output"
 
 interface SpanNode {
   spanId: string
@@ -108,7 +109,25 @@ export function registerInspectTraceTool(server: McpToolRegistrar) {
           }
         }
 
-        return { content: [{ type: "text", text: lines.join("\n") }] }
+        return {
+          content: createDualContent(lines.join("\n"), {
+            tool: "inspect_trace",
+            data: {
+              traceId: trace_id,
+              serviceCount: serviceSet.size,
+              spanCount: spans.length,
+              rootDurationMs: rootDuration,
+              spans: roots,
+              logs: logsResult.data.slice(0, 20).map((l) => ({
+                timestamp: String(l.timestamp),
+                severityText: l.severityText || "INFO",
+                serviceName: l.serviceName,
+                body: l.body,
+                spanId: l.spanId,
+              })),
+            },
+          }),
+        }
       }),
   )
 }
