@@ -1,4 +1,5 @@
 import {
+  McpTenantError,
   optionalBooleanParam,
   optionalNumberParam,
   optionalStringParam,
@@ -312,8 +313,18 @@ export function registerQueryDataTool(server: McpToolRegistrar) {
         const tenant = yield* Effect.gen(function* () {
           const req = yield* HttpServerRequest.HttpServerRequest
           const nativeReq = yield* HttpServerRequest.toWeb(req)
-          return yield* Effect.tryPromise(() => resolveMcpTenantContext(nativeReq))
-        }).pipe(Effect.orDie)
+          return yield* Effect.tryPromise({
+            try: () => resolveMcpTenantContext(nativeReq),
+            catch: (error) =>
+              new McpTenantError({
+                message: error instanceof Error ? error.message : String(error),
+              }),
+          })
+        }).pipe(
+          Effect.catchTag("RequestError", (error) =>
+            Effect.fail(new McpTenantError({ message: error.message })),
+          ),
+        )
 
         const exit = yield* Effect.promise(() =>
           QueryEngineRuntime.runPromiseExit(

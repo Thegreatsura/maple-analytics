@@ -14,16 +14,20 @@ import { registerFindSlowTracesTool } from "./tools/find-slow-traces"
 import { registerErrorDetailTool } from "./tools/error-detail"
 import { registerListMetricsTool } from "./tools/list-metrics"
 import { registerQueryDataTool } from "./tools/query-data"
-import type { McpToolRegistrar, McpToolResult } from "./tools/types"
+import type { McpToolError, McpToolRegistrar, McpToolResult } from "./tools/types"
 
 interface ToolDefinition {
   readonly name: string
   readonly description: string
   readonly schema: Schema.Struct.Fields
-  readonly handler: (params: unknown) => Effect.Effect<McpToolResult, never, any>
+  readonly handler: (params: unknown) => Effect.Effect<McpToolResult, McpToolError, any>
 }
 
 const toErrorMessage = (error: unknown): string => {
+  if (error instanceof Error && "error" in error && (error as any).error != null) {
+    const inner = (error as any).error
+    return inner instanceof Error ? inner.message : String(inner)
+  }
   if (error instanceof Error) return error.message
   return String(error)
 }
@@ -50,7 +54,7 @@ const collectToolDefinitions = (): ReadonlyArray<ToolDefinition> => {
         name,
         description,
         schema,
-        handler: handler as (params: unknown) => Effect.Effect<McpToolResult>,
+        handler: handler as (params: unknown) => Effect.Effect<McpToolResult, McpToolError>,
       })
     },
   }
@@ -91,25 +95,45 @@ export const McpToolsLive = Layer.effectDiscard(
 
           if (decoded._tag === "Left") {
             const errorMessage = ParseResult.TreeFormatter.formatErrorSync(decoded.left)
-
-            return Effect.succeed(
-              toCallToolResult({
-                isError: true,
-                content: [{ type: "text", text: `Invalid parameters: ${errorMessage}` }],
-              }),
+            return Effect.logWarning("Invalid parameters").pipe(
+              Effect.annotateLogs({ error: errorMessage }),
+              Effect.as(
+                toCallToolResult({
+                  isError: true,
+                  content: [{ type: "text", text: `Invalid parameters: ${errorMessage}` }],
+                }),
+              ),
             )
           }
 
           return definition.handler(decoded.right).pipe(
+            Effect.tap(() => Effect.logInfo("Tool completed")),
             Effect.map(toCallToolResult),
-            Effect.catchAllDefect((error) =>
-              Effect.succeed(
-                toCallToolResult({
-                  isError: true,
-                  content: [{ type: "text", text: `Error: ${toErrorMessage(error)}` }],
+            Effect.catchAll((error) =>
+              Effect.logError(`Tool error: ${error.message}`).pipe(
+                Effect.annotateLogs({
+                  errorTag: error._tag,
+                  ...("pipe" in error ? { pipe: error.pipe } : {}),
                 }),
+                Effect.as(
+                  toCallToolResult({
+                    isError: true,
+                    content: [{ type: "text", text: `${error._tag}: ${error.message}` }],
+                  }),
+                ),
               ),
             ),
+            Effect.catchAllDefect((error) =>
+              Effect.logError(`Tool defect: ${toErrorMessage(error)}`).pipe(
+                Effect.as(
+                  toCallToolResult({
+                    isError: true,
+                    content: [{ type: "text", text: `Error: ${toErrorMessage(error)}` }],
+                  }),
+                ),
+              ),
+            ),
+            Effect.annotateLogs({ tool: definition.name }),
           )
         },
       })
