@@ -11,8 +11,8 @@ import {
 import {
   Message,
   MessageContent,
-  MessageResponse,
 } from "@/components/ai-elements/message"
+import { RichText } from "@/components/ai-elements/rich-text"
 import {
   PromptInput,
   PromptInputTextarea,
@@ -115,7 +115,7 @@ export function ChatConversation({ tabId, onFirstMessage }: ChatConversationProp
                     <MessageContent>
                       {message.parts.map((part, i) => {
                         if (part.type === "text") {
-                          return <MessageResponse key={i}>{part.text}</MessageResponse>
+                          return <RichText key={i}>{part.text}</RichText>
                         }
                         if (part.type.startsWith("tool-") || part.type === "dynamic-tool") {
                           const toolPart = part as {
