@@ -27,6 +27,11 @@ const workerName =
       ? "maple-chat-agent-stg"
       : `maple-chat-agent-${app.stage}`
 
+const mapleApiUrl =
+  app.stage === "prd"
+    ? "https://api.maple.dev"
+    : process.env.MAPLE_API_URL ?? "http://localhost:3472"
+
 export const chatWorker = await Worker("chat-agent", {
   name: workerName,
   entrypoint: "./src/index.ts",
@@ -34,7 +39,7 @@ export const chatWorker = await Worker("chat-agent", {
   url: true,
   bindings: {
     ChatAgent: chatAgentDO,
-    MAPLE_API_URL: process.env.MAPLE_API_URL ?? "http://localhost:3472",
+    MAPLE_API_URL: mapleApiUrl,
     INTERNAL_SERVICE_TOKEN: alchemy.secret(process.env.INTERNAL_SERVICE_TOKEN),
     OPENROUTER_API_KEY: alchemy.secret(process.env.OPENROUTER_API_KEY),
   },
