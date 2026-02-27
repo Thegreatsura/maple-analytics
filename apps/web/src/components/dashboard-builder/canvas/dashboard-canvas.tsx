@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo } from "react"
 import {
-  Responsive,
+  GridLayout,
   useContainerWidth,
   verticalCompactor,
 } from "react-grid-layout"
@@ -136,12 +136,14 @@ export function DashboardCanvas({
   return (
     <div ref={containerRef}>
       {mounted && (
-        <Responsive
+        <GridLayout
           width={width}
-          layouts={{ lg: layouts }}
-          breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-          cols={{ lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }}
-          rowHeight={60}
+          layout={layouts}
+          gridConfig={{
+            cols: 12,
+            rowHeight: 60,
+            margin: [12, 12] as [number, number],
+          }}
           dragConfig={{
             enabled: mode === "edit",
             handle: ".widget-drag-handle",
@@ -153,7 +155,6 @@ export function DashboardCanvas({
             handles: ["se"],
           }}
           compactor={verticalCompactor}
-          margin={[12, 12] as [number, number]}
           onLayoutChange={(layout) =>
             onLayoutChange(
               layout.map((l) => ({
@@ -177,7 +178,7 @@ export function DashboardCanvas({
               />
             </div>
           ))}
-        </Responsive>
+        </GridLayout>
       )}
     </div>
   )

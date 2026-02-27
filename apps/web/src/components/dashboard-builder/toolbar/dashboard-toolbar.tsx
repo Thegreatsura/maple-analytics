@@ -1,4 +1,4 @@
-import { PlusIcon, PencilIcon, CheckIcon, GridIcon } from "@/components/icons"
+import { PlusIcon, PencilIcon, CheckIcon, GridIcon, ChatBubbleSparkleIcon } from "@/components/icons"
 
 import { Button } from "@maple/ui/components/ui/button"
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker"
@@ -12,6 +12,7 @@ interface DashboardToolbarProps {
   onToggleEdit: () => void
   onAddWidget: () => void
   onAutoLayout: () => void
+  onOpenAi?: () => void
 }
 
 function resolveForPicker(timeRange: TimeRange): {
@@ -33,6 +34,7 @@ export function DashboardToolbar({
   onToggleEdit,
   onAddWidget,
   onAutoLayout,
+  onOpenAi,
 }: DashboardToolbarProps) {
   const {
     state: { timeRange },
@@ -75,6 +77,12 @@ export function DashboardToolbar({
             Auto Layout
           </Button>
         </>
+      )}
+      {onOpenAi && (
+        <Button variant="outline" size="sm" onClick={onOpenAi}>
+          <ChatBubbleSparkleIcon size={14} data-icon="inline-start" />
+          AI
+        </Button>
       )}
       <Button
         variant={mode === "edit" ? "default" : "outline"}

@@ -29,6 +29,8 @@ interface DashboardLayoutProps {
   filterSidebar?: React.ReactNode
   /** Content pinned above the scrollable children (e.g. volume charts). */
   stickyContent?: React.ReactNode
+  /** Render a panel on the right side of the content area (e.g. AI chat). */
+  rightSidebar?: React.ReactNode
 }
 
 function parseSearchFromHref(href: string): { pathname: string; search?: Record<string, unknown> } {
@@ -48,6 +50,7 @@ export function DashboardLayout({
   headerActions,
   filterSidebar,
   stickyContent,
+  rightSidebar,
 }: DashboardLayoutProps) {
   const [isScrolled, setIsScrolled] = React.useState(false)
   const hasHeader = title || titleContent || description || headerActions
@@ -122,6 +125,7 @@ export function DashboardLayout({
               {children}
             </div>
           </main>
+          {rightSidebar}
         </div>
       </SidebarInset>
     </SidebarProvider>

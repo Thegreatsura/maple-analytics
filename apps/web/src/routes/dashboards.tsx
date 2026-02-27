@@ -19,6 +19,7 @@ import type {
   WidgetMode,
 } from "@/components/dashboard-builder/types"
 import { useDashboardStore } from "@/hooks/use-dashboard-store"
+import { DashboardAiPanel } from "@/components/dashboard-builder/ai"
 
 const dashboardsSearchSchema = Schema.Struct({
   dashboardId: Schema.optional(Schema.String),
@@ -54,6 +55,7 @@ function DashboardsPage() {
   const [chartPickerOpen, setChartPickerOpen] = useState(false)
   const [configureWidgetId, setConfigureWidgetId] = useState<string | null>(null)
   const [configureOpen, setConfigureOpen] = useState(false)
+  const [aiPanelOpen, setAiPanelOpen] = useState(false)
 
   const activeDashboardId = search.dashboardId
   const activeDashboard = dashboards.find((d) => d.id === activeDashboardId)
@@ -80,6 +82,7 @@ function DashboardsPage() {
     if (readOnly) return
     if (!activeDashboardId) return
     addWidget(activeDashboardId, visualization, dataSource, display)
+    if (mode === "view") setMode("edit")
   }
 
   const handleLayoutChange = (
@@ -201,7 +204,20 @@ function DashboardsPage() {
               }
               onAddWidget={() => setChartPickerOpen(true)}
               onAutoLayout={handleAutoLayout}
+              onOpenAi={() => setAiPanelOpen(true)}
             />
+          }
+          rightSidebar={
+            aiPanelOpen ? (
+              <DashboardAiPanel
+                onOpenChange={setAiPanelOpen}
+                dashboardId={activeDashboard.id}
+                dashboardName={activeDashboard.name}
+                widgets={activeDashboard.widgets}
+                onAddWidget={handleAddWidget}
+                onRemoveWidget={handleRemoveWidget}
+              />
+            ) : undefined
           }
         >
           {persistenceError && (
