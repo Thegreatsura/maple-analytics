@@ -11,7 +11,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@maple/ui/components/ui/breadcrumb"
-import { Link } from "@tanstack/react-router"
+import { Link, defaultParseSearch } from "@tanstack/react-router"
 
 export interface BreadcrumbItem {
   label: string
@@ -29,6 +29,14 @@ interface DashboardLayoutProps {
   filterSidebar?: React.ReactNode
   /** Content pinned above the scrollable children (e.g. volume charts). */
   stickyContent?: React.ReactNode
+}
+
+function parseSearchFromHref(href: string): { pathname: string; search?: Record<string, unknown> } {
+  const [pathname, queryString] = href.split("?")
+  if (!queryString) {
+    return { pathname }
+  }
+  return { pathname, search: defaultParseSearch(queryString) as Record<string, unknown> }
 }
 
 export function DashboardLayout({
@@ -58,9 +66,21 @@ export function DashboardLayout({
                   {index > 0 && <BreadcrumbSeparator />}
                   <BreadcrumbItem>
                     {item.href ? (
-                      <BreadcrumbLink render={<Link to={item.href} />}>
-                        {item.label}
-                      </BreadcrumbLink>
+                      (() => {
+                        const { pathname, search } = parseSearchFromHref(item.href)
+                        if (!search) {
+                          return (
+                            <BreadcrumbLink render={<Link to={pathname} />}>
+                              {item.label}
+                            </BreadcrumbLink>
+                          )
+                        }
+                        return (
+                          <BreadcrumbLink render={<Link to={pathname} search={search as never} />}>
+                            {item.label}
+                          </BreadcrumbLink>
+                        )
+                      })()
                     ) : (
                       <BreadcrumbPage>{item.label}</BreadcrumbPage>
                     )}
@@ -76,7 +96,7 @@ export function DashboardLayout({
               {filterSidebar}
             </aside>
           )}
-          <main className="flex min-h-0 flex-1 flex-col">
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col">
             {(hasHeader || stickyContent) && (
               <div className={`shrink-0 space-y-4 p-4 transition-shadow ${isScrolled ? "shadow-[0_2px_8px_rgba(0,0,0,0.08)]" : ""}`}>
                 {hasHeader && (

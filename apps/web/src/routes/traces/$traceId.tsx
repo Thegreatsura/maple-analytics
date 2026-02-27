@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router"
+import { createFileRoute, useNavigate, useRouterState } from "@tanstack/react-router"
 import { Result, useAtomValue } from "@effect-atom/atom-react"
 import { Schema } from "effect"
 import { toast } from "sonner"
@@ -22,6 +22,13 @@ const TraceDetailSearchSchema = Schema.Struct({
   spanId: Schema.optional(Schema.String),
 })
 
+function buildBackToTracesHref(searchStr: string): string {
+  const params = new URLSearchParams(searchStr)
+  params.delete("spanId")
+  const nextSearch = params.toString()
+  return nextSearch ? `/traces?${nextSearch}` : "/traces"
+}
+
 export const Route = createFileRoute("/traces/$traceId")({
   component: TraceDetailPage,
   validateSearch: Schema.standardSchemaV1(TraceDetailSearchSchema),
@@ -30,6 +37,8 @@ export const Route = createFileRoute("/traces/$traceId")({
 function TraceDetailPage() {
   const { traceId } = Route.useParams()
   const search = Route.useSearch()
+  const searchStr = useRouterState({ select: (state) => state.location.searchStr })
+  const backToTracesHref = buildBackToTracesHref(searchStr)
   const navigate = useNavigate({ from: Route.fullPath })
   const result = useAtomValue(getSpanHierarchyResultAtom({ data: { traceId } }))
 
@@ -37,7 +46,7 @@ function TraceDetailPage() {
     .onInitial(() => (
       <DashboardLayout
         breadcrumbs={[
-          { label: "Traces", href: "/traces" },
+          { label: "Traces", href: backToTracesHref },
           { label: "Loading..." },
         ]}
         title="Loading trace..."
@@ -67,7 +76,7 @@ function TraceDetailPage() {
     .onError((error) => (
       <DashboardLayout
         breadcrumbs={[
-          { label: "Traces", href: "/traces" },
+          { label: "Traces", href: backToTracesHref },
           { label: "Error" },
         ]}
         title="Error"
@@ -106,7 +115,7 @@ function TraceDetailPage() {
         return (
           <DashboardLayout
             breadcrumbs={[
-              { label: "Traces", href: "/traces" },
+              { label: "Traces", href: backToTracesHref },
               { label: traceId.slice(0, 8) },
             ]}
             title="Trace not found"
@@ -124,12 +133,12 @@ function TraceDetailPage() {
               >
                 {traceId}
               </Badge>
-              <Link
-                to="/traces"
+              <a
+                href={backToTracesHref}
                 className="mt-6 text-sm text-primary underline underline-offset-4 hover:text-primary/80"
               >
                 Back to Traces
-              </Link>
+              </a>
             </div>
           </DashboardLayout>
         )
@@ -139,7 +148,7 @@ function TraceDetailPage() {
         return (
           <DashboardLayout
             breadcrumbs={[
-              { label: "Traces", href: "/traces" },
+              { label: "Traces", href: backToTracesHref },
               { label: traceId.slice(0, 8) },
             ]}
             title="Root span not found"
@@ -161,12 +170,12 @@ function TraceDetailPage() {
                 This trace contains spans but the root span was not found.
                 It may not have been ingested yet or could have been dropped during sampling.
               </p>
-              <Link
-                to="/traces"
+              <a
+                href={backToTracesHref}
                 className="mt-6 text-sm text-primary underline underline-offset-4 hover:text-primary/80"
               >
                 Back to Traces
-              </Link>
+              </a>
             </div>
           </DashboardLayout>
         )
@@ -194,7 +203,7 @@ function TraceDetailPage() {
       return (
         <DashboardLayout
           breadcrumbs={[
-            { label: "Traces", href: "/traces" },
+            { label: "Traces", href: backToTracesHref },
             { label: traceId.slice(0, 8) },
           ]}
           title={rootSpan?.spanName ?? "Unknown Trace"}

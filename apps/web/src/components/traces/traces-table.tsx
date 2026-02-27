@@ -155,12 +155,17 @@ export function TracesTable({ filters }: TracesTableProps) {
                   <TableRow
                     key={trace.traceId}
                     className="cursor-pointer"
-                    onClick={() => navigate({ to: "/traces/$traceId", params: { traceId: trace.traceId } })}
+                    onClick={() => navigate({
+                      to: "/traces/$traceId",
+                      params: { traceId: trace.traceId },
+                      search: true,
+                    })}
                   >
                     <TableCell>
                       <Link
                         to="/traces/$traceId"
                         params={{ traceId: trace.traceId }}
+                        search={true}
                         className="font-mono text-xs text-primary underline decoration-primary/30 underline-offset-2 hover:decoration-primary"
                         onClick={(e) => e.stopPropagation()}
                       >
