@@ -3,6 +3,7 @@ import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
 import type { BaseChartProps } from "../_shared/chart-types"
 import { latencyTimeSeriesData } from "../_shared/sample-data"
+import { useIncompleteSegments, extendConfigWithIncomplete } from "../_shared/use-incomplete-segments"
 import {
   type ChartConfig,
   ChartContainer,
@@ -13,7 +14,9 @@ import {
 } from "../../ui/chart"
 import { formatLatency, inferBucketSeconds, inferRangeMs, formatBucketLabel } from "../../../lib/format"
 
-const chartConfig = {
+const VALUE_KEYS = ["p99LatencyMs", "p95LatencyMs", "p50LatencyMs"]
+
+const baseChartConfig = {
   p99LatencyMs: { label: "P99", color: "var(--chart-p99)" },
   p95LatencyMs: { label: "P95", color: "var(--chart-p95)" },
   p50LatencyMs: { label: "P50", color: "var(--chart-p50)" },
@@ -21,6 +24,13 @@ const chartConfig = {
 
 export function LatencyLineChart({ data, className, legend, tooltip }: BaseChartProps) {
   const chartData = data ?? latencyTimeSeriesData
+
+  const { data: processedData, hasIncomplete, incompleteKeys } = useIncompleteSegments(chartData, VALUE_KEYS)
+
+  const chartConfig = useMemo(
+    () => extendConfigWithIncomplete(baseChartConfig, incompleteKeys),
+    [incompleteKeys],
+  )
 
   const axisContext = useMemo(
     () => ({
@@ -32,7 +42,7 @@ export function LatencyLineChart({ data, className, legend, tooltip }: BaseChart
 
   return (
     <ChartContainer config={chartConfig} className={className}>
-      <LineChart data={chartData} accessibilityLayer>
+      <LineChart data={processedData} accessibilityLayer>
         <CartesianGrid vertical={false} />
         <XAxis
           dataKey="bucket"
@@ -56,14 +66,19 @@ export function LatencyLineChart({ data, className, legend, tooltip }: BaseChart
                   return formatBucketLabel(payload[0].payload.bucket, axisContext, "tooltip")
                 }}
                 formatter={(value, name, item) => {
-                  const config = chartConfig[name as keyof typeof chartConfig]
+                  const nameStr = String(name)
+                  const isIncomplete = nameStr.endsWith("_incomplete")
+                  const baseKey = isIncomplete ? nameStr.replace(/_incomplete$/, "") : nameStr
+                  if (isIncomplete && item.payload?.[baseKey] != null) return null
+                  if (!isIncomplete && value == null) return null
+                  const config = baseChartConfig[baseKey as keyof typeof baseChartConfig]
                   return (
                     <span className="flex items-center gap-2">
                       <span
                         className="shrink-0 size-2.5 rounded-[2px]"
-                        style={{ backgroundColor: item.color }}
+                        style={{ backgroundColor: config?.color ?? item.color }}
                       />
-                      <span className="text-muted-foreground">{config?.label ?? name}</span>
+                      <span className="text-muted-foreground">{config?.label ?? baseKey}</span>
                       <span className="font-mono font-medium">{formatLatency(value as number)}</span>
                     </span>
                   )
@@ -76,6 +91,9 @@ export function LatencyLineChart({ data, className, legend, tooltip }: BaseChart
         <Line type="monotone" dataKey="p99LatencyMs" stroke="var(--color-p99LatencyMs)" strokeWidth={2} dot={false} isAnimationActive={false} />
         <Line type="monotone" dataKey="p95LatencyMs" stroke="var(--color-p95LatencyMs)" strokeWidth={2} dot={false} isAnimationActive={false} />
         <Line type="monotone" dataKey="p50LatencyMs" stroke="var(--color-p50LatencyMs)" strokeWidth={2} dot={false} isAnimationActive={false} />
+        {hasIncomplete && <Line type="monotone" dataKey="p99LatencyMs_incomplete" stroke="var(--color-p99LatencyMs)" strokeWidth={2} strokeDasharray="4 4" dot={false} connectNulls legendType="none" isAnimationActive={false} />}
+        {hasIncomplete && <Line type="monotone" dataKey="p95LatencyMs_incomplete" stroke="var(--color-p95LatencyMs)" strokeWidth={2} strokeDasharray="4 4" dot={false} connectNulls legendType="none" isAnimationActive={false} />}
+        {hasIncomplete && <Line type="monotone" dataKey="p50LatencyMs_incomplete" stroke="var(--color-p50LatencyMs)" strokeWidth={2} strokeDasharray="4 4" dot={false} connectNulls legendType="none" isAnimationActive={false} />}
       </LineChart>
     </ChartContainer>
   )

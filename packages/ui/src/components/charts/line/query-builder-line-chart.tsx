@@ -2,6 +2,7 @@ import * as React from "react"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
 import type { BaseChartProps } from "../_shared/chart-types"
+import { useIncompleteSegments, extendConfigWithIncomplete } from "../_shared/use-incomplete-segments"
 import {
   type ChartConfig,
   ChartContainer,
@@ -70,6 +71,13 @@ export function QueryBuilderLineChart({ data, className, legend, tooltip }: Base
     }
   }, [data])
 
+  const valueKeys = React.useMemo(
+    () => seriesDefinitions.map((d) => d.chartKey),
+    [seriesDefinitions],
+  )
+
+  const { data: processedData, hasIncomplete, incompleteKeys } = useIncompleteSegments(chartData, valueKeys)
+
   const axisContext = React.useMemo(
     () => ({
       rangeMs: inferRangeMs(chartData),
@@ -83,14 +91,15 @@ export function QueryBuilderLineChart({ data, className, legend, tooltip }: Base
   )
 
   const chartConfig = React.useMemo(() => {
-    return seriesDefinitions.reduce((config, definition, index) => {
+    const base = seriesDefinitions.reduce((config, definition, index) => {
       config[definition.chartKey] = {
         label: definition.rawKey,
         color: `var(--chart-${(index % 5) + 1})`,
       }
       return config
     }, {} as ChartConfig)
-  }, [seriesDefinitions])
+    return extendConfigWithIncomplete(base, incompleteKeys)
+  }, [seriesDefinitions, incompleteKeys])
 
   const labelByChartKey = React.useMemo(() => {
     return new Map(
@@ -103,7 +112,7 @@ export function QueryBuilderLineChart({ data, className, legend, tooltip }: Base
 
   return (
     <ChartContainer config={chartConfig} className={className}>
-      <LineChart data={chartData} accessibilityLayer>
+      <LineChart data={processedData} accessibilityLayer>
         <CartesianGrid vertical={false} />
         <XAxis
           dataKey="bucket"
@@ -128,8 +137,13 @@ export function QueryBuilderLineChart({ data, className, legend, tooltip }: Base
                   const bucket = payload[0].payload.bucket
                   return formatBucketLabel(bucket, axisContext, "tooltip")
                 }}
-                formatter={(value, name) => {
-                  const label = labelByChartKey.get(String(name)) ?? String(name)
+                formatter={(value, name, item) => {
+                  const nameStr = String(name)
+                  const isIncomplete = nameStr.endsWith("_incomplete")
+                  const baseKey = isIncomplete ? nameStr.replace(/_incomplete$/, "") : nameStr
+                  if (isIncomplete && item.payload?.[baseKey] != null) return null
+                  if (!isIncomplete && value == null) return null
+                  const label = labelByChartKey.get(baseKey) ?? baseKey
                   return (
                     <span className="flex items-center gap-2">
                       <span className="text-muted-foreground">{label}</span>
@@ -154,6 +168,20 @@ export function QueryBuilderLineChart({ data, className, legend, tooltip }: Base
             stroke={`var(--color-${definition.chartKey})`}
             strokeWidth={2}
             dot={false}
+            isAnimationActive={false}
+          />
+        ))}
+        {hasIncomplete && seriesDefinitions.map((definition) => (
+          <Line
+            key={`${definition.chartKey}_incomplete`}
+            type="monotone"
+            dataKey={`${definition.chartKey}_incomplete`}
+            stroke={`var(--color-${definition.chartKey})`}
+            strokeWidth={2}
+            strokeDasharray="4 4"
+            dot={false}
+            connectNulls
+            legendType="none"
             isAnimationActive={false}
           />
         ))}

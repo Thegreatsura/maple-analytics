@@ -2,6 +2,7 @@ import * as React from "react"
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
 import type { BaseChartProps } from "../_shared/chart-types"
+import { useIncompleteSegments, extendConfigWithIncomplete } from "../_shared/use-incomplete-segments"
 import {
   type ChartConfig,
   ChartContainer,
@@ -59,6 +60,13 @@ export function QueryBuilderAreaChart({ data, className, legend, tooltip }: Base
     return { chartData, seriesDefinitions }
   }, [data])
 
+  const valueKeys = React.useMemo(
+    () => seriesDefinitions.map((d) => d.chartKey),
+    [seriesDefinitions],
+  )
+
+  const { data: processedData, hasIncomplete, incompleteKeys } = useIncompleteSegments(chartData, valueKeys)
+
   const axisContext = React.useMemo(
     () => ({
       rangeMs: inferRangeMs(chartData),
@@ -72,14 +80,15 @@ export function QueryBuilderAreaChart({ data, className, legend, tooltip }: Base
   )
 
   const chartConfig = React.useMemo(() => {
-    return seriesDefinitions.reduce((config, definition, index) => {
+    const base = seriesDefinitions.reduce((config, definition, index) => {
       config[definition.chartKey] = {
         label: definition.rawKey,
         color: `var(--chart-${(index % 5) + 1})`,
       }
       return config
     }, {} as ChartConfig)
-  }, [seriesDefinitions])
+    return extendConfigWithIncomplete(base, incompleteKeys)
+  }, [seriesDefinitions, incompleteKeys])
 
   const labelByChartKey = React.useMemo(() => {
     return new Map(
@@ -89,12 +98,18 @@ export function QueryBuilderAreaChart({ data, className, legend, tooltip }: Base
 
   return (
     <ChartContainer config={chartConfig} className={className}>
-      <AreaChart data={chartData} accessibilityLayer>
+      <AreaChart data={processedData} accessibilityLayer>
         <defs>
           {seriesDefinitions.map((definition) => (
             <linearGradient key={definition.chartKey} id={`fill-${definition.chartKey}`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor={`var(--color-${definition.chartKey})`} stopOpacity={0.8} />
               <stop offset="95%" stopColor={`var(--color-${definition.chartKey})`} stopOpacity={0.1} />
+            </linearGradient>
+          ))}
+          {hasIncomplete && seriesDefinitions.map((definition) => (
+            <linearGradient key={`${definition.chartKey}_incomplete`} id={`fill-${definition.chartKey}_incomplete`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={`var(--color-${definition.chartKey})`} stopOpacity={0.15} />
+              <stop offset="95%" stopColor={`var(--color-${definition.chartKey})`} stopOpacity={0} />
             </linearGradient>
           ))}
         </defs>
@@ -121,8 +136,13 @@ export function QueryBuilderAreaChart({ data, className, legend, tooltip }: Base
                   if (!payload?.[0]?.payload?.bucket) return ""
                   return formatBucketLabel(payload[0].payload.bucket, axisContext, "tooltip")
                 }}
-                formatter={(value, name) => {
-                  const label = labelByChartKey.get(String(name)) ?? String(name)
+                formatter={(value, name, item) => {
+                  const nameStr = String(name)
+                  const isIncomplete = nameStr.endsWith("_incomplete")
+                  const baseKey = isIncomplete ? nameStr.replace(/_incomplete$/, "") : nameStr
+                  if (isIncomplete && item.payload?.[baseKey] != null) return null
+                  if (!isIncomplete && value == null) return null
+                  const label = labelByChartKey.get(baseKey) ?? baseKey
                   return (
                     <span className="flex items-center gap-2">
                       <span className="text-muted-foreground">{label}</span>
@@ -147,6 +167,21 @@ export function QueryBuilderAreaChart({ data, className, legend, tooltip }: Base
             stroke={`var(--color-${definition.chartKey})`}
             fill={`url(#fill-${definition.chartKey})`}
             strokeWidth={2}
+            isAnimationActive={false}
+          />
+        ))}
+        {hasIncomplete && seriesDefinitions.map((definition) => (
+          <Area
+            key={`${definition.chartKey}_incomplete`}
+            type="monotone"
+            dataKey={`${definition.chartKey}_incomplete`}
+            stroke={`var(--color-${definition.chartKey})`}
+            fill={`url(#fill-${definition.chartKey}_incomplete)`}
+            strokeWidth={2}
+            strokeDasharray="4 4"
+            dot={false}
+            connectNulls
+            legendType="none"
             isAnimationActive={false}
           />
         ))}

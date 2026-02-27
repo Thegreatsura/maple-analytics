@@ -4,6 +4,7 @@ import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
 import type { BaseChartProps } from "../_shared/chart-types"
 import { apdexTimeSeriesData } from "../_shared/sample-data"
 import { VerticalGradient } from "../_shared/svg-patterns"
+import { useIncompleteSegments, extendConfigWithIncomplete } from "../_shared/use-incomplete-segments"
 import {
   type ChartConfig,
   ChartContainer,
@@ -14,14 +15,24 @@ import {
 } from "../../ui/chart"
 import { inferBucketSeconds, inferRangeMs, formatBucketLabel } from "../../../lib/format"
 
-const chartConfig = {
+const VALUE_KEYS = ["apdexScore"]
+
+const baseChartConfig = {
   apdexScore: { label: "Apdex", color: "var(--chart-apdex)" },
 } satisfies ChartConfig
 
 export function ApdexAreaChart({ data, className, legend, tooltip }: BaseChartProps) {
   const id = useId()
   const gradientId = `apdexGradient-${id.replace(/:/g, "")}`
+  const fadedGradientId = `apdexGradientFaded-${id.replace(/:/g, "")}`
   const chartData = data ?? apdexTimeSeriesData
+
+  const { data: processedData, hasIncomplete, incompleteKeys } = useIncompleteSegments(chartData, VALUE_KEYS)
+
+  const chartConfig = useMemo(
+    () => extendConfigWithIncomplete(baseChartConfig, incompleteKeys),
+    [incompleteKeys],
+  )
 
   const axisContext = useMemo(
     () => ({
@@ -33,9 +44,12 @@ export function ApdexAreaChart({ data, className, legend, tooltip }: BaseChartPr
 
   return (
     <ChartContainer config={chartConfig} className={className}>
-      <AreaChart data={chartData} accessibilityLayer>
+      <AreaChart data={processedData} accessibilityLayer>
         <defs>
           <VerticalGradient id={gradientId} color="var(--color-apdexScore)" />
+          {hasIncomplete && (
+            <VerticalGradient id={fadedGradientId} color="var(--color-apdexScore)" startOpacity={0.15} endOpacity={0} />
+          )}
         </defs>
         <CartesianGrid vertical={false} />
         <XAxis
@@ -54,16 +68,23 @@ export function ApdexAreaChart({ data, className, legend, tooltip }: BaseChartPr
                   if (!payload?.[0]?.payload?.bucket) return ""
                   return formatBucketLabel(payload[0].payload.bucket, axisContext, "tooltip")
                 }}
-                formatter={(value, _name, item) => (
-                  <span className="flex items-center gap-2">
-                    <span
-                      className="shrink-0 size-2.5 rounded-[2px]"
-                      style={{ backgroundColor: item.color }}
-                    />
-                    <span className="text-muted-foreground">Apdex</span>
-                    <span className="font-mono font-medium">{Number(value).toFixed(2)}</span>
-                  </span>
-                )}
+                formatter={(value, name, item) => {
+                  const nameStr = String(name)
+                  const isIncomplete = nameStr.endsWith("_incomplete")
+                  const baseKey = isIncomplete ? nameStr.replace(/_incomplete$/, "") : nameStr
+                  if (isIncomplete && item.payload?.[baseKey] != null) return null
+                  if (!isIncomplete && value == null) return null
+                  return (
+                    <span className="flex items-center gap-2">
+                      <span
+                        className="shrink-0 size-2.5 rounded-[2px]"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      <span className="text-muted-foreground">Apdex</span>
+                      <span className="font-mono font-medium">{Number(value).toFixed(2)}</span>
+                    </span>
+                  )
+                }}
               />
             }
           />
@@ -76,6 +97,20 @@ export function ApdexAreaChart({ data, className, legend, tooltip }: BaseChartPr
           fill={`url(#${gradientId})`}
           isAnimationActive={false}
         />
+        {hasIncomplete && (
+          <Area
+            type="monotone"
+            dataKey="apdexScore_incomplete"
+            stroke="var(--color-apdexScore)"
+            fill={`url(#${fadedGradientId})`}
+            strokeWidth={2}
+            strokeDasharray="4 4"
+            dot={false}
+            connectNulls
+            legendType="none"
+            isAnimationActive={false}
+          />
+        )}
       </AreaChart>
     </ChartContainer>
   )
