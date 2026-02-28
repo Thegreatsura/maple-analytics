@@ -19,13 +19,13 @@ const dashboardBuilderTools = {
       visualization: z.enum(["stat", "chart", "table"]),
       dataSource: z.object({
         endpoint: z.string().describe("One of the available DataSourceEndpoint values"),
-        params: z.record(z.unknown()).optional(),
+        params: z.record(z.string(), z.unknown()).optional(),
         transform: z.object({
           reduceToValue: z.object({
             field: z.string(),
             aggregate: z.enum(["sum", "first", "count", "avg", "max", "min"]),
           }).optional(),
-          fieldMap: z.record(z.string()).optional(),
+          fieldMap: z.record(z.string(), z.string()).optional(),
           flattenSeries: z.object({ valueField: z.string() }).optional(),
           limit: z.number().optional(),
           sortBy: z.object({
