@@ -20,6 +20,8 @@ import {
   getResourceAttributeValuesResultAtom,
 } from "@/lib/services/atoms/tinybird-query-atoms"
 
+const ContainsMatchMode = Schema.optional(Schema.Literal("contains"))
+
 const tracesSearchSchema = Schema.Struct({
   services: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
   spanNames: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
@@ -37,6 +39,11 @@ const tracesSearchSchema = Schema.Struct({
   attributeValue: Schema.optional(Schema.String),
   resourceAttributeKey: Schema.optional(Schema.String),
   resourceAttributeValue: Schema.optional(Schema.String),
+  serviceMatchMode: ContainsMatchMode,
+  spanNameMatchMode: ContainsMatchMode,
+  deploymentEnvMatchMode: ContainsMatchMode,
+  attributeValueMatchMode: ContainsMatchMode,
+  resourceAttributeValueMatchMode: ContainsMatchMode,
 })
 
 export type TracesSearchParams = Schema.Schema.Type<typeof tracesSearchSchema>

@@ -247,7 +247,13 @@ function findLastConjunctionBoundary(expression: string, cursor: number): number
   return boundary
 }
 
-function findFirstUnquotedEqual(segment: string): number {
+interface OperatorMatch {
+  position: number
+  length: number
+  operator: "=" | "contains"
+}
+
+function findFirstOperator(segment: string): OperatorMatch | null {
   let quote: "\"" | "'" | null = null
 
   for (let index = 0; index < segment.length; index += 1) {
@@ -266,11 +272,19 @@ function findFirstUnquotedEqual(segment: string): number {
     }
 
     if (char === "=") {
-      return index
+      return { position: index, length: 1, operator: "=" }
+    }
+
+    if (segment.slice(index, index + 8).toLowerCase() === "contains") {
+      const before = index === 0 ? undefined : segment[index - 1]
+      const after = segment[index + 8]
+      if (isSpace(before) && (isSpace(after) || after === undefined)) {
+        return { position: index, length: 8, operator: "contains" }
+      }
     }
   }
 
-  return -1
+  return null
 }
 
 function findClosingQuote(input: string, quote: "\"" | "'"): number {
@@ -303,8 +317,8 @@ function parseWhereClauseContext(
     }
   }
 
-  const equalIndex = findFirstUnquotedEqual(trimmedSegment)
-  if (equalIndex === -1) {
+  const operatorMatch = findFirstOperator(trimmedSegment)
+  if (!operatorMatch) {
     const keyPattern = trimmedSegment.match(/^([^\s=]+)(\s*)(.*)$/)
 
     if (!keyPattern) {
@@ -349,7 +363,7 @@ function parseWhereClauseContext(
     }
   }
 
-  const keyToken = trimmedSegment.slice(0, equalIndex).trim()
+  const keyToken = trimmedSegment.slice(0, operatorMatch.position).trim()
   if (!keyToken) {
     return {
       context: "key",
@@ -360,11 +374,11 @@ function parseWhereClauseContext(
     }
   }
 
-  const valueTail = trimmedSegment.slice(equalIndex + 1)
+  const valueTail = trimmedSegment.slice(operatorMatch.position + operatorMatch.length)
   const valueTailLeadingWhitespace = valueTail.match(/^\s*/)?.[0].length ?? 0
   const trimmedValueTail = valueTail.slice(valueTailLeadingWhitespace)
   const valueStart =
-    segmentStart + leadingWhitespace + equalIndex + 1 + valueTailLeadingWhitespace
+    segmentStart + leadingWhitespace + operatorMatch.position + operatorMatch.length + valueTailLeadingWhitespace
 
   if (!trimmedValueTail) {
     return {
@@ -810,7 +824,14 @@ function buildSuggestions(
         kind: "operator",
         label: "=",
         insertText: "=",
-        description: "Equality operator",
+        description: "Exact match",
+      },
+      {
+        id: "operator:contains",
+        kind: "operator",
+        label: "contains",
+        insertText: "contains",
+        description: "Substring match",
       },
     ]
 

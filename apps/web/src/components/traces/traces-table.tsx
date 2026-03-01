@@ -117,6 +117,11 @@ export function TracesTable({ filters }: TracesTableProps) {
         startTime: effectiveStartTime,
         endTime: effectiveEndTime,
         rootOnly: filters?.rootOnly,
+        serviceMatchMode: filters?.serviceMatchMode,
+        spanNameMatchMode: filters?.spanNameMatchMode,
+        deploymentEnvMatchMode: filters?.deploymentEnvMatchMode,
+        attributeValueMatchMode: filters?.attributeValueMatchMode,
+        resourceAttributeValueMatchMode: filters?.resourceAttributeValueMatchMode,
       },
     }),
   )

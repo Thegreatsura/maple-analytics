@@ -15,7 +15,14 @@ export interface TracesSearchLike {
   attributeValue?: string
   resourceAttributeKey?: string
   resourceAttributeValue?: string
+  serviceMatchMode?: FilterMatchMode
+  spanNameMatchMode?: FilterMatchMode
+  deploymentEnvMatchMode?: FilterMatchMode
+  attributeValueMatchMode?: FilterMatchMode
+  resourceAttributeValueMatchMode?: FilterMatchMode
 }
+
+export type FilterMatchMode = "contains"
 
 export interface ParsedWhereClauseFilters {
   service?: string
@@ -31,12 +38,13 @@ export interface ParsedWhereClauseFilters {
   attributeValue?: string
   resourceAttributeKey?: string
   resourceAttributeValue?: string
+  matchModes?: Partial<Record<string, FilterMatchMode>>
 }
 
 const TRUE_VALUES = new Set(["1", "true", "yes", "y"])
 const FALSE_VALUES = new Set(["0", "false", "no", "n"])
 
-const CLAUSE_RE = /^([a-zA-Z0-9_.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s]+))$/
+const CLAUSE_RE = /^([a-zA-Z0-9_.-]+)\s*(=|contains)\s*(?:"([^"]*)"|'([^']*)'|([^\s]+))$/i
 
 function parseBoolean(value: string): boolean | null {
   const normalized = value.trim().toLowerCase()
@@ -95,7 +103,7 @@ export function parseWhereClause(whereClause: string | undefined): {
       continue
     }
 
-    const unquotedToken = match[4]
+    const unquotedToken = match[5]
     if (
       unquotedToken &&
       (unquotedToken.startsWith("\"") || unquotedToken.startsWith("'"))
@@ -105,18 +113,29 @@ export function parseWhereClause(whereClause: string | undefined): {
     }
 
     const rawKey = match[1]?.trim().toLowerCase()
-    const rawValue = (match[2] ?? match[3] ?? match[4] ?? "").trim()
+    const rawOperator = match[2]?.toLowerCase()
+    const rawValue = (match[3] ?? match[4] ?? match[5] ?? "").trim()
+    const isContains = rawOperator === "contains"
     if (!rawKey || !rawValue) {
       continue
     }
 
+    function setMatchMode(key: string) {
+      if (isContains) {
+        parsed.matchModes ??= {}
+        parsed.matchModes[key] = "contains"
+      }
+    }
+
     if (rawKey === "service" || rawKey === "service.name") {
       parsed.service = rawValue
+      setMatchMode("service")
       continue
     }
 
     if (rawKey === "span" || rawKey === "span.name") {
       parsed.spanName = rawValue
+      setMatchMode("spanName")
       continue
     }
 
@@ -126,16 +145,19 @@ export function parseWhereClause(whereClause: string | undefined): {
       rawKey === "env"
     ) {
       parsed.deploymentEnv = rawValue
+      setMatchMode("deploymentEnv")
       continue
     }
 
     if (rawKey === "http.method") {
       parsed.httpMethod = rawValue
+      setMatchMode("httpMethod")
       continue
     }
 
     if (rawKey === "http.status_code") {
       parsed.httpStatusCode = rawValue
+      setMatchMode("httpStatusCode")
       continue
     }
 
@@ -187,6 +209,7 @@ export function parseWhereClause(whereClause: string | undefined): {
 
       parsed.attributeKey = attributeKey
       parsed.attributeValue = rawValue
+      setMatchMode("attributeValue")
       continue
     }
 
@@ -198,6 +221,7 @@ export function parseWhereClause(whereClause: string | undefined): {
 
       parsed.resourceAttributeKey = resourceKey
       parsed.resourceAttributeValue = rawValue
+      setMatchMode("resourceAttributeValue")
     }
   }
 
@@ -209,25 +233,30 @@ export function parseWhereClause(whereClause: string | undefined): {
 
 export function toWhereClause(filters: ParsedWhereClauseFilters): string | undefined {
   const clauses: string[] = []
+  const modes = filters.matchModes ?? {}
+
+  function op(key: string): string {
+    return modes[key] === "contains" ? "contains" : "="
+  }
 
   if (filters.service) {
-    clauses.push(`service.name = ${quoteValue(filters.service)}`)
+    clauses.push(`service.name ${op("service")} ${quoteValue(filters.service)}`)
   }
 
   if (filters.spanName) {
-    clauses.push(`span.name = ${quoteValue(filters.spanName)}`)
+    clauses.push(`span.name ${op("spanName")} ${quoteValue(filters.spanName)}`)
   }
 
   if (filters.deploymentEnv) {
-    clauses.push(`deployment.environment = ${quoteValue(filters.deploymentEnv)}`)
+    clauses.push(`deployment.environment ${op("deploymentEnv")} ${quoteValue(filters.deploymentEnv)}`)
   }
 
   if (filters.httpMethod) {
-    clauses.push(`http.method = ${quoteValue(filters.httpMethod)}`)
+    clauses.push(`http.method ${op("httpMethod")} ${quoteValue(filters.httpMethod)}`)
   }
 
   if (filters.httpStatusCode) {
-    clauses.push(`http.status_code = ${quoteValue(filters.httpStatusCode)}`)
+    clauses.push(`http.status_code ${op("httpStatusCode")} ${quoteValue(filters.httpStatusCode)}`)
   }
 
   if (filters.hasError === true) {
@@ -248,13 +277,13 @@ export function toWhereClause(filters: ParsedWhereClauseFilters): string | undef
 
   if (filters.attributeKey && filters.attributeValue) {
     clauses.push(
-      `attr.${filters.attributeKey} = ${quoteValue(filters.attributeValue)}`,
+      `attr.${filters.attributeKey} ${op("attributeValue")} ${quoteValue(filters.attributeValue)}`,
     )
   }
 
   if (filters.resourceAttributeKey && filters.resourceAttributeValue) {
     clauses.push(
-      `resource.${filters.resourceAttributeKey} = ${quoteValue(filters.resourceAttributeValue)}`,
+      `resource.${filters.resourceAttributeKey} ${op("resourceAttributeValue")} ${quoteValue(filters.resourceAttributeValue)}`,
     )
   }
 
@@ -293,10 +322,16 @@ export function applyWhereClause(
       attributeValue: undefined,
       resourceAttributeKey: undefined,
       resourceAttributeValue: undefined,
+      serviceMatchMode: undefined,
+      spanNameMatchMode: undefined,
+      deploymentEnvMatchMode: undefined,
+      attributeValueMatchMode: undefined,
+      resourceAttributeValueMatchMode: undefined,
     }
   }
 
   const { filters } = parseWhereClause(trimmed)
+  const modes = filters.matchModes ?? {}
 
   return {
     ...search,
@@ -314,5 +349,10 @@ export function applyWhereClause(
     attributeValue: filters.attributeValue ?? search.attributeValue,
     resourceAttributeKey: filters.resourceAttributeKey ?? search.resourceAttributeKey,
     resourceAttributeValue: filters.resourceAttributeValue ?? search.resourceAttributeValue,
+    serviceMatchMode: filters.service ? modes.service : search.serviceMatchMode,
+    spanNameMatchMode: filters.spanName ? modes.spanName : search.spanNameMatchMode,
+    deploymentEnvMatchMode: filters.deploymentEnv ? modes.deploymentEnv : search.deploymentEnvMatchMode,
+    attributeValueMatchMode: filters.attributeValue ? modes.attributeValue : search.attributeValueMatchMode,
+    resourceAttributeValueMatchMode: filters.resourceAttributeValue ? modes.resourceAttributeValue : search.resourceAttributeValueMatchMode,
   }
 }

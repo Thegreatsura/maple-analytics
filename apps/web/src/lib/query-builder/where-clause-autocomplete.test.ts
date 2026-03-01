@@ -28,7 +28,7 @@ describe("where clause autocomplete", () => {
     })
 
     expect(result.context).toBe("operator")
-    expect(result.suggestions.map((item) => item.insertText)).toEqual(["="])
+    expect(result.suggestions.map((item) => item.insertText)).toEqual(["=", "contains"])
   })
 
   it("suggests values for the active key", () => {

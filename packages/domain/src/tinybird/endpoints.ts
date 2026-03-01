@@ -31,6 +31,11 @@ export const listTraces = defineEndpoint("list_traces", {
     resource_filter_key: p.string().optional().describe("Filter where ResourceAttributes[key] = value"),
     resource_filter_value: p.string().optional().describe("Value for resource attribute filter"),
     root_only: p.boolean().optional().describe("Filter to root traces only (spans with no parent)"),
+    service_match_mode: p.string().optional().describe("Match mode for service filter: 'contains' for substring match"),
+    span_name_match_mode: p.string().optional().describe("Match mode for span name filter: 'contains' for substring match"),
+    deployment_env_match_mode: p.string().optional().describe("Match mode for deployment env filter: 'contains' for substring match"),
+    attribute_value_match_mode: p.string().optional().describe("Match mode for attribute value filter: 'contains' for substring match"),
+    resource_value_match_mode: p.string().optional().describe("Match mode for resource value filter: 'contains' for substring match"),
   },
   nodes: [
     node({
@@ -61,7 +66,11 @@ export const listTraces = defineEndpoint("list_traces", {
           groupUniqArrayIf(ResourceAttributes['deployment.environment'], ResourceAttributes['deployment.environment'] != '') AS deploymentEnvs,
           {% if defined(attribute_filter_key) %}
           max(if(
+            {% if defined(attribute_value_match_mode) and attribute_value_match_mode == "contains" %}
+            positionCaseInsensitive(SpanAttributes[{{String(attribute_filter_key)}}], {{String(attribute_filter_value, "")}}) > 0,
+            {% else %}
             SpanAttributes[{{String(attribute_filter_key)}}] = {{String(attribute_filter_value, "")}},
+            {% end %}
             1,
             0
           )) AS matchesAttributeFilter,
@@ -70,7 +79,11 @@ export const listTraces = defineEndpoint("list_traces", {
           {% end %}
           {% if defined(resource_filter_key) %}
           max(if(
+            {% if defined(resource_value_match_mode) and resource_value_match_mode == "contains" %}
+            positionCaseInsensitive(ResourceAttributes[{{String(resource_filter_key)}}], {{String(resource_filter_value, "")}}) > 0,
+            {% else %}
             ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, "")}},
+            {% end %}
             1,
             0
           )) AS matchesResourceFilter,
@@ -82,7 +95,11 @@ export const listTraces = defineEndpoint("list_traces", {
         WHERE TraceId != ''
           AND OrgId = {{String(org_id, "")}}
         {% if defined(service) %}
+          {% if defined(service_match_mode) and service_match_mode == "contains" %}
+          AND positionCaseInsensitive(ServiceName, {{String(service, "")}}) > 0
+          {% else %}
           AND ServiceName = {{String(service, "")}}
+          {% end %}
         {% end %}
         {% if defined(start_time) %}
           AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
@@ -111,7 +128,11 @@ export const listTraces = defineEndpoint("list_traces", {
           AND rootSpanCount > 0
         {% end %}
         {% if defined(span_name) %}
+          {% if defined(span_name_match_mode) and span_name_match_mode == "contains" %}
+          AND positionCaseInsensitive(rootSpanName, {{String(span_name, "")}}) > 0
+          {% else %}
           AND rootSpanName = {{String(span_name, "")}}
+          {% end %}
         {% end %}
         {% if defined(has_error) and has_error %}
           AND hasError = 1
@@ -129,7 +150,11 @@ export const listTraces = defineEndpoint("list_traces", {
           AND has(httpStatusCodes, {{String(http_status_code, "")}})
         {% end %}
         {% if defined(deployment_env) %}
+          {% if defined(deployment_env_match_mode) and deployment_env_match_mode == "contains" %}
+          AND arrayExists(x -> positionCaseInsensitive(x, {{String(deployment_env, "")}}) > 0, deploymentEnvs)
+          {% else %}
           AND has(deploymentEnvs, {{String(deployment_env, "")}})
+          {% end %}
         {% end %}
         {% if defined(attribute_filter_key) %}
           AND matchesAttributeFilter = 1
@@ -1101,6 +1126,11 @@ export const tracesFacets = defineEndpoint("traces_facets", {
     attribute_filter_value: p.string().optional().describe("Value for attribute filter"),
     resource_filter_key: p.string().optional().describe("Filter where ResourceAttributes[key] = value"),
     resource_filter_value: p.string().optional().describe("Value for resource attribute filter"),
+    service_match_mode: p.string().optional().describe("Match mode for service filter: 'contains' for substring match"),
+    span_name_match_mode: p.string().optional().describe("Match mode for span name filter: 'contains' for substring match"),
+    deployment_env_match_mode: p.string().optional().describe("Match mode for deployment env filter: 'contains' for substring match"),
+    attribute_value_match_mode: p.string().optional().describe("Match mode for attribute value filter: 'contains' for substring match"),
+    resource_value_match_mode: p.string().optional().describe("Match mode for resource value filter: 'contains' for substring match"),
   },
   nodes: [
     node({
@@ -1127,7 +1157,11 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           )) AS hasError,
           {% if defined(attribute_filter_key) %}
           max(if(
+            {% if defined(attribute_value_match_mode) and attribute_value_match_mode == "contains" %}
+            positionCaseInsensitive(SpanAttributes[{{String(attribute_filter_key)}}], {{String(attribute_filter_value, "")}}) > 0,
+            {% else %}
             SpanAttributes[{{String(attribute_filter_key)}}] = {{String(attribute_filter_value, "")}},
+            {% end %}
             1,
             0
           )) AS matchesAttributeFilter,
@@ -1136,7 +1170,11 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           {% end %}
           {% if defined(resource_filter_key) %}
           max(if(
+            {% if defined(resource_value_match_mode) and resource_value_match_mode == "contains" %}
+            positionCaseInsensitive(ResourceAttributes[{{String(resource_filter_key)}}], {{String(resource_filter_value, "")}}) > 0,
+            {% else %}
             ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, "")}},
+            {% end %}
             1,
             0
           )) AS matchesResourceFilter,
@@ -1173,7 +1211,11 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           AND matchesResourceFilter = 1
         {% end %}
         {% if defined(span_name) %}
+          {% if defined(span_name_match_mode) and span_name_match_mode == "contains" %}
+          AND positionCaseInsensitive(rootSpanName, {{String(span_name)}}) > 0
+          {% else %}
           AND rootSpanName = {{String(span_name)}}
+          {% end %}
         {% end %}
         {% if defined(has_error) and has_error %}
           AND hasError = 1
@@ -1191,7 +1233,11 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           AND has(httpStatusCodes, {{String(http_status_code)}})
         {% end %}
         {% if defined(deployment_env) %}
+          {% if defined(deployment_env_match_mode) and deployment_env_match_mode == "contains" %}
+          AND arrayExists(x -> positionCaseInsensitive(x, {{String(deployment_env)}}) > 0, deploymentEnvs)
+          {% else %}
           AND has(deploymentEnvs, {{String(deployment_env)}})
+          {% end %}
         {% end %}
         GROUP BY service
         ORDER BY count DESC
@@ -1214,7 +1260,11 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           AND matchesResourceFilter = 1
         {% end %}
         {% if defined(service) %}
+          {% if defined(service_match_mode) and service_match_mode == "contains" %}
+          AND arrayExists(x -> positionCaseInsensitive(x, {{String(service)}}) > 0, services)
+          {% else %}
           AND has(services, {{String(service)}})
+          {% end %}
         {% end %}
         {% if defined(has_error) and has_error %}
           AND hasError = 1
@@ -1232,7 +1282,11 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           AND has(httpStatusCodes, {{String(http_status_code)}})
         {% end %}
         {% if defined(deployment_env) %}
+          {% if defined(deployment_env_match_mode) and deployment_env_match_mode == "contains" %}
+          AND arrayExists(x -> positionCaseInsensitive(x, {{String(deployment_env)}}) > 0, deploymentEnvs)
+          {% else %}
           AND has(deploymentEnvs, {{String(deployment_env)}})
+          {% end %}
         {% end %}
         GROUP BY rootSpanName
         ORDER BY count DESC
@@ -1256,10 +1310,18 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           AND matchesResourceFilter = 1
         {% end %}
         {% if defined(service) %}
+          {% if defined(service_match_mode) and service_match_mode == "contains" %}
+          AND arrayExists(x -> positionCaseInsensitive(x, {{String(service)}}) > 0, services)
+          {% else %}
           AND has(services, {{String(service)}})
+          {% end %}
         {% end %}
         {% if defined(span_name) %}
+          {% if defined(span_name_match_mode) and span_name_match_mode == "contains" %}
+          AND positionCaseInsensitive(rootSpanName, {{String(span_name)}}) > 0
+          {% else %}
           AND rootSpanName = {{String(span_name)}}
+          {% end %}
         {% end %}
         {% if defined(has_error) and has_error %}
           AND hasError = 1
@@ -1274,7 +1336,11 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           AND has(httpStatusCodes, {{String(http_status_code)}})
         {% end %}
         {% if defined(deployment_env) %}
+          {% if defined(deployment_env_match_mode) and deployment_env_match_mode == "contains" %}
+          AND arrayExists(x -> positionCaseInsensitive(x, {{String(deployment_env)}}) > 0, deploymentEnvs)
+          {% else %}
           AND has(deploymentEnvs, {{String(deployment_env)}})
+          {% end %}
         {% end %}
         GROUP BY method
         ORDER BY count DESC
@@ -1298,10 +1364,18 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           AND matchesResourceFilter = 1
         {% end %}
         {% if defined(service) %}
+          {% if defined(service_match_mode) and service_match_mode == "contains" %}
+          AND arrayExists(x -> positionCaseInsensitive(x, {{String(service)}}) > 0, services)
+          {% else %}
           AND has(services, {{String(service)}})
+          {% end %}
         {% end %}
         {% if defined(span_name) %}
+          {% if defined(span_name_match_mode) and span_name_match_mode == "contains" %}
+          AND positionCaseInsensitive(rootSpanName, {{String(span_name)}}) > 0
+          {% else %}
           AND rootSpanName = {{String(span_name)}}
+          {% end %}
         {% end %}
         {% if defined(has_error) and has_error %}
           AND hasError = 1
@@ -1316,7 +1390,11 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           AND has(httpMethods, {{String(http_method)}})
         {% end %}
         {% if defined(deployment_env) %}
+          {% if defined(deployment_env_match_mode) and deployment_env_match_mode == "contains" %}
+          AND arrayExists(x -> positionCaseInsensitive(x, {{String(deployment_env)}}) > 0, deploymentEnvs)
+          {% else %}
           AND has(deploymentEnvs, {{String(deployment_env)}})
+          {% end %}
         {% end %}
         GROUP BY status
         ORDER BY count DESC
@@ -1340,10 +1418,18 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           AND matchesResourceFilter = 1
         {% end %}
         {% if defined(service) %}
+          {% if defined(service_match_mode) and service_match_mode == "contains" %}
+          AND arrayExists(x -> positionCaseInsensitive(x, {{String(service)}}) > 0, services)
+          {% else %}
           AND has(services, {{String(service)}})
+          {% end %}
         {% end %}
         {% if defined(span_name) %}
+          {% if defined(span_name_match_mode) and span_name_match_mode == "contains" %}
+          AND positionCaseInsensitive(rootSpanName, {{String(span_name)}}) > 0
+          {% else %}
           AND rootSpanName = {{String(span_name)}}
+          {% end %}
         {% end %}
         {% if defined(has_error) and has_error %}
           AND hasError = 1
@@ -1381,10 +1467,18 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           AND matchesResourceFilter = 1
         {% end %}
         {% if defined(service) %}
+          {% if defined(service_match_mode) and service_match_mode == "contains" %}
+          AND arrayExists(x -> positionCaseInsensitive(x, {{String(service)}}) > 0, services)
+          {% else %}
           AND has(services, {{String(service)}})
+          {% end %}
         {% end %}
         {% if defined(span_name) %}
+          {% if defined(span_name_match_mode) and span_name_match_mode == "contains" %}
+          AND positionCaseInsensitive(rootSpanName, {{String(span_name)}}) > 0
+          {% else %}
           AND rootSpanName = {{String(span_name)}}
+          {% end %}
         {% end %}
         {% if defined(min_duration_ms) %}
           AND durationMs >= {{Float64(min_duration_ms)}}
@@ -1399,7 +1493,11 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           AND has(httpStatusCodes, {{String(http_status_code)}})
         {% end %}
         {% if defined(deployment_env) %}
+          {% if defined(deployment_env_match_mode) and deployment_env_match_mode == "contains" %}
+          AND arrayExists(x -> positionCaseInsensitive(x, {{String(deployment_env)}}) > 0, deploymentEnvs)
+          {% else %}
           AND has(deploymentEnvs, {{String(deployment_env)}})
+          {% end %}
         {% end %}
       `,
     }),
@@ -1449,6 +1547,11 @@ export const tracesDurationStats = defineEndpoint("traces_duration_stats", {
     attribute_filter_value: p.string().optional().describe("Value for attribute filter"),
     resource_filter_key: p.string().optional().describe("Filter where ResourceAttributes[key] = value"),
     resource_filter_value: p.string().optional().describe("Value for resource attribute filter"),
+    service_match_mode: p.string().optional().describe("Match mode for service filter: 'contains' for substring match"),
+    span_name_match_mode: p.string().optional().describe("Match mode for span name filter: 'contains' for substring match"),
+    deployment_env_match_mode: p.string().optional().describe("Match mode for deployment env filter: 'contains' for substring match"),
+    attribute_value_match_mode: p.string().optional().describe("Match mode for attribute value filter: 'contains' for substring match"),
+    resource_value_match_mode: p.string().optional().describe("Match mode for resource value filter: 'contains' for substring match"),
   },
   nodes: [
     node({
@@ -1473,10 +1576,18 @@ export const tracesDurationStats = defineEndpoint("traces_duration_stats", {
             AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
           {% end %}
           {% if defined(service) %}
+            {% if defined(service_match_mode) and service_match_mode == "contains" %}
+            AND positionCaseInsensitive(ServiceName, {{String(service)}}) > 0
+            {% else %}
             AND ServiceName = {{String(service)}}
+            {% end %}
           {% end %}
           {% if defined(span_name) %}
+            {% if defined(span_name_match_mode) and span_name_match_mode == "contains" %}
+            AND ParentSpanId = '' AND positionCaseInsensitive(SpanName, {{String(span_name)}}) > 0
+            {% else %}
             AND ParentSpanId = '' AND SpanName = {{String(span_name)}}
+            {% end %}
           {% end %}
           {% if defined(has_error) and has_error %}
             AND TraceId IN (
@@ -1500,13 +1611,21 @@ export const tracesDurationStats = defineEndpoint("traces_duration_stats", {
             AND SpanAttributes['http.status_code'] = {{String(http_status_code)}}
           {% end %}
           {% if defined(deployment_env) %}
+            {% if defined(deployment_env_match_mode) and deployment_env_match_mode == "contains" %}
+            AND positionCaseInsensitive(ResourceAttributes['deployment.environment'], {{String(deployment_env)}}) > 0
+            {% else %}
             AND ResourceAttributes['deployment.environment'] = {{String(deployment_env)}}
+            {% end %}
           {% end %}
           {% if defined(attribute_filter_key) %}
             AND TraceId IN (
               SELECT TraceId FROM traces WHERE TraceId != ''
               AND OrgId = {{String(org_id, "")}}
+              {% if defined(attribute_value_match_mode) and attribute_value_match_mode == "contains" %}
+              AND positionCaseInsensitive(SpanAttributes[{{String(attribute_filter_key)}}], {{String(attribute_filter_value, "")}}) > 0
+              {% else %}
               AND SpanAttributes[{{String(attribute_filter_key)}}] = {{String(attribute_filter_value, "")}}
+              {% end %}
               {% if defined(start_time) %}
                 AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
               {% end %}
@@ -1520,7 +1639,11 @@ export const tracesDurationStats = defineEndpoint("traces_duration_stats", {
             AND TraceId IN (
               SELECT TraceId FROM traces WHERE TraceId != ''
               AND OrgId = {{String(org_id, "")}}
+              {% if defined(resource_value_match_mode) and resource_value_match_mode == "contains" %}
+              AND positionCaseInsensitive(ResourceAttributes[{{String(resource_filter_key)}}], {{String(resource_filter_value, "")}}) > 0
+              {% else %}
               AND ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, "")}}
+              {% end %}
               {% if defined(start_time) %}
                 AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
               {% end %}

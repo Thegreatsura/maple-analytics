@@ -116,6 +116,53 @@ describe("parseWhereClause", () => {
     expect(filters.attributeKey).toBe("http.route")
     expect(filters.attributeValue).toBe("/api/orders")
   })
+
+  it("parses contains operator for service.name", () => {
+    const { filters } = parseWhereClause('service.name contains "check"')
+    expect(filters.service).toBe("check")
+    expect(filters.matchModes).toEqual({ service: "contains" })
+  })
+
+  it("parses contains operator for span.name", () => {
+    const { filters } = parseWhereClause('span.name contains "GET"')
+    expect(filters.spanName).toBe("GET")
+    expect(filters.matchModes).toEqual({ spanName: "contains" })
+  })
+
+  it("parses contains operator case-insensitively", () => {
+    const { filters } = parseWhereClause('service.name CONTAINS "check"')
+    expect(filters.service).toBe("check")
+    expect(filters.matchModes).toEqual({ service: "contains" })
+  })
+
+  it("parses mixed = and contains operators", () => {
+    const { filters } = parseWhereClause(
+      'service.name contains "check" AND span.name = "GET /orders"',
+    )
+    expect(filters.service).toBe("check")
+    expect(filters.spanName).toBe("GET /orders")
+    expect(filters.matchModes).toEqual({ service: "contains" })
+  })
+
+  it("parses contains for attr.* keys", () => {
+    const { filters } = parseWhereClause('attr.http.route contains "/api"')
+    expect(filters.attributeKey).toBe("http.route")
+    expect(filters.attributeValue).toBe("/api")
+    expect(filters.matchModes).toEqual({ attributeValue: "contains" })
+  })
+
+  it("parses contains for resource.* keys", () => {
+    const { filters } = parseWhereClause('resource.service.version contains "1.2"')
+    expect(filters.resourceAttributeKey).toBe("service.version")
+    expect(filters.resourceAttributeValue).toBe("1.2")
+    expect(filters.matchModes).toEqual({ resourceAttributeValue: "contains" })
+  })
+
+  it("does not set matchModes for = operator", () => {
+    const { filters } = parseWhereClause('service.name = "checkout"')
+    expect(filters.service).toBe("checkout")
+    expect(filters.matchModes).toBeUndefined()
+  })
 })
 
 describe("toWhereClause", () => {
@@ -159,6 +206,32 @@ describe("toWhereClause", () => {
       resourceAttributeValue: "1.2.3",
     })
     expect(clause).toBe('attr.http.route = "/orders/:id" AND resource.service.version = "1.2.3"')
+  })
+
+  it("uses contains operator when matchModes is set", () => {
+    const clause = toWhereClause({
+      service: "check",
+      matchModes: { service: "contains" },
+    })
+    expect(clause).toBe('service.name contains "check"')
+  })
+
+  it("mixes = and contains operators", () => {
+    const clause = toWhereClause({
+      service: "check",
+      spanName: "GET /orders",
+      matchModes: { service: "contains" },
+    })
+    expect(clause).toBe('service.name contains "check" AND span.name = "GET /orders"')
+  })
+
+  it("uses contains for attr.* when matchModes is set", () => {
+    const clause = toWhereClause({
+      attributeKey: "http.route",
+      attributeValue: "/api",
+      matchModes: { attributeValue: "contains" },
+    })
+    expect(clause).toBe('attr.http.route contains "/api"')
   })
 })
 
@@ -256,5 +329,45 @@ describe("applyWhereClause", () => {
 
     expect(result.resourceAttributeKey).toBeUndefined()
     expect(result.resourceAttributeValue).toBeUndefined()
+  })
+
+  it("sets serviceMatchMode when contains is used", () => {
+    const result = applyWhereClause(
+      {},
+      'service.name contains "check"',
+    )
+
+    expect(result.services).toEqual(["check"])
+    expect(result.serviceMatchMode).toBe("contains")
+  })
+
+  it("does not set matchMode for = operator", () => {
+    const result = applyWhereClause(
+      {},
+      'service.name = "checkout"',
+    )
+
+    expect(result.services).toEqual(["checkout"])
+    expect(result.serviceMatchMode).toBeUndefined()
+  })
+
+  it("clears matchMode params when clause is empty", () => {
+    const result = applyWhereClause(
+      { serviceMatchMode: "contains" as const },
+      "",
+    )
+
+    expect(result.serviceMatchMode).toBeUndefined()
+  })
+
+  it("sets attributeValueMatchMode when contains is used", () => {
+    const result = applyWhereClause(
+      {},
+      'attr.http.route contains "/api"',
+    )
+
+    expect(result.attributeKey).toBe("http.route")
+    expect(result.attributeValue).toBe("/api")
+    expect(result.attributeValueMatchMode).toBe("contains")
   })
 })
