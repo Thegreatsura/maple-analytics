@@ -11,6 +11,7 @@ import { Skeleton } from "@maple/ui/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@maple/ui/components/ui/tabs"
 import { ScrollArea } from "@maple/ui/components/ui/scroll-area"
 import { type Log, type LogsResponse } from "@/api/tinybird/logs"
+import { LogDetailSheet } from "@/components/logs/log-detail-sheet"
 import { formatDuration } from "@/lib/format"
 import { cn } from "@maple/ui/utils"
 import { getCacheInfo, cacheResultStyles } from "@/lib/cache"
@@ -49,19 +50,22 @@ const severityStyles: Record<string, string> = {
   FATAL: "text-red-700",
 }
 
-function LogEntry({ log, timeZone }: { log: Log; timeZone: string }) {
+function LogEntry({ log, timeZone, onClick }: { log: Log; timeZone: string; onClick?: (log: Log) => void }) {
   const severityStyle = severityStyles[log.severityText] ?? "text-gray-500"
 
   return (
-    <div className="border-b py-2 px-2 last:border-b-0 hover:bg-muted/30">
+    <div
+      className="border-b py-2 px-2 last:border-b-0 hover:bg-muted/30 cursor-pointer"
+      onClick={() => onClick?.(log)}
+    >
       <div className="flex items-center gap-2 text-[10px] text-muted-foreground mb-1">
         <span>{formatTimestampInTimezone(log.timestamp, { timeZone })}</span>
         <Badge variant="outline" className={cn("text-[10px] px-1 py-0", severityStyle)}>
           {log.severityText}
         </Badge>
       </div>
-      <p className="font-mono text-xs whitespace-pre-wrap break-all">
-        <CopyableValue value={log.body}>{log.body}</CopyableValue>
+      <p className="font-mono text-xs whitespace-pre-wrap break-all line-clamp-3">
+        {log.body}
       </p>
     </div>
   )
@@ -171,48 +175,61 @@ function SpanLogs({
   spanId: string
   timeZone: string
 }) {
+  const [selectedLog, setSelectedLog] = useState<Log | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
+
+  const handleLogClick = (log: Log) => {
+    setSelectedLog(log)
+    setSheetOpen(true)
+  }
+
   const logsResult = useAtomValue(
     traceId && spanId
       ? listLogsResultAtom({ data: { traceId, spanId, limit: 100 } })
       : disabledResultAtom<LogsResponse>(),
   )
 
-  return Result.builder(logsResult)
-    .onInitial(() => (
-      <div className="space-y-2 p-2">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="space-y-1">
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="h-4 w-full" />
+  return (
+    <>
+      {Result.builder(logsResult)
+        .onInitial(() => (
+          <div className="space-y-2 p-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="space-y-1">
+                <Skeleton className="h-3 w-24" />
+                <Skeleton className="h-4 w-full" />
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-    ))
-    .onError(() => (
-      <div className="p-4 text-center text-sm text-red-500">
-        Failed to load logs
-      </div>
-    ))
-    .onSuccess((data) => {
-      const logs = data.data
-
-      if (logs.length === 0) {
-        return (
-          <div className="p-4 text-center text-sm text-muted-foreground">
-            No logs found for this span
+        ))
+        .onError(() => (
+          <div className="p-4 text-center text-sm text-red-500">
+            Failed to load logs
           </div>
-        )
-      }
+        ))
+        .onSuccess((data) => {
+          const logs = data.data
 
-      return (
-        <div className="divide-y">
-          {logs.map((log, i) => (
-            <LogEntry key={`${log.timestamp}-${i}`} log={log} timeZone={timeZone} />
-          ))}
-        </div>
-      )
-    })
-    .render()
+          if (logs.length === 0) {
+            return (
+              <div className="p-4 text-center text-sm text-muted-foreground">
+                No logs found for this span
+              </div>
+            )
+          }
+
+          return (
+            <div className="divide-y">
+              {logs.map((log, i) => (
+                <LogEntry key={`${log.timestamp}-${i}`} log={log} timeZone={timeZone} onClick={handleLogClick} />
+              ))}
+            </div>
+          )
+        })
+        .render()}
+      <LogDetailSheet log={selectedLog} open={sheetOpen} onOpenChange={setSheetOpen} />
+    </>
+  )
 }
 
 export function SpanDetailPanel({ span, onClose }: SpanDetailPanelProps) {
