@@ -1,5 +1,6 @@
 import { formatDuration } from "@/lib/format"
 import { getServiceLegendColor, calculateSelfTime } from "@maple/ui/colors"
+import { getHttpInfo } from "@maple/ui/lib/http"
 import type { SpanNode } from "@/api/tinybird/traces"
 
 interface TraceTimelineTooltipProps {
@@ -35,9 +36,7 @@ export function TraceTimelineTooltipContent({
     ? new Date(span.startTime).getTime() - new Date(traceStartTime).getTime()
     : null
 
-  const httpMethod = span.spanAttributes["http.method"] || span.spanAttributes["http.request.method"]
-  const httpStatus = span.spanAttributes["http.status_code"] || span.spanAttributes["http.response.status_code"]
-  const httpRoute = span.spanAttributes["http.route"] || span.spanAttributes["http.target"] || span.spanAttributes["url.path"]
+  const httpInfo = getHttpInfo(span.spanName, span.spanAttributes)
 
   return (
     <div className="space-y-2 font-mono text-xs">
@@ -115,30 +114,26 @@ export function TraceTimelineTooltipContent({
       </div>
 
       {/* HTTP details */}
-      {(httpMethod || httpStatus || httpRoute) && (
+      {httpInfo && (
         <div className="border-t border-border pt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px]">
-          {httpMethod && (
-            <>
-              <span className="text-muted-foreground">Method</span>
-              <span className="font-medium">{httpMethod}</span>
-            </>
-          )}
-          {httpStatus && (
+          <span className="text-muted-foreground">Method</span>
+          <span className="font-medium">{httpInfo.method}</span>
+          {httpInfo.statusCode != null && (
             <>
               <span className="text-muted-foreground">HTTP</span>
               <span className={
-                Number(httpStatus) >= 400 ? "text-red-500" :
-                Number(httpStatus) >= 300 ? "text-yellow-500" :
+                httpInfo.statusCode >= 400 ? "text-red-500" :
+                httpInfo.statusCode >= 300 ? "text-yellow-500" :
                 "text-green-500"
               }>
-                {httpStatus}
+                {httpInfo.statusCode}
               </span>
             </>
           )}
-          {httpRoute && (
+          {httpInfo.route && (
             <>
               <span className="text-muted-foreground">Route</span>
-              <span className="truncate max-w-[180px]">{httpRoute}</span>
+              <span className="truncate max-w-[180px]">{httpInfo.route}</span>
             </>
           )}
         </div>

@@ -81,14 +81,12 @@ export function SpanHierarchy({
       <div className="flex items-center border-b bg-muted/30 px-2 py-1.5 text-xs font-medium text-muted-foreground">
         {/* Left section header */}
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          <div className="w-5 shrink-0" />
-          <span className="shrink-0">Service</span>
-          <span className="shrink-0 w-14">Kind</span>
-          <span className="flex-1">Span Name</span>
+          <div className="w-6 shrink-0" />
+          <span className="flex-1">Span</span>
         </div>
         {/* Right section header (fixed widths matching rows) */}
         <div className="flex items-center gap-2 shrink-0 ml-2">
-          <span className="w-32 text-center">Duration</span>
+          <span className="w-48 text-center">Duration</span>
           <span className="w-16 text-right">Time</span>
           <span className="w-14 text-center">Status</span>
         </div>

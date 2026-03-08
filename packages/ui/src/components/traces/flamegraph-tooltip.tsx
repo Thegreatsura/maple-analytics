@@ -1,5 +1,6 @@
 import { formatDuration } from "../../lib/format"
 import { getServiceLegendColor, calculateSelfTime } from "../../lib/colors"
+import { getHttpInfo } from "../../lib/http"
 import type { SpanNode } from "../../lib/types"
 
 interface FlamegraphTooltipProps {
@@ -35,9 +36,7 @@ export function FlamegraphTooltipContent({
     ? new Date(span.startTime).getTime() - new Date(traceStartTime).getTime()
     : null
 
-  const httpMethod = span.spanAttributes["http.method"] || span.spanAttributes["http.request.method"]
-  const httpStatus = span.spanAttributes["http.status_code"] || span.spanAttributes["http.response.status_code"]
-  const httpRoute = span.spanAttributes["http.route"] || span.spanAttributes["http.target"] || span.spanAttributes["url.path"]
+  const httpInfo = getHttpInfo(span.spanName, span.spanAttributes)
 
   return (
     <div className="space-y-2 font-mono text-xs">
@@ -93,26 +92,22 @@ export function FlamegraphTooltipContent({
         </span>
       </div>
 
-      {(httpMethod || httpStatus || httpRoute) && (
+      {httpInfo && (
         <div className="border-t border-border pt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px]">
-          {httpMethod && (
-            <>
-              <span className="text-muted-foreground">Method</span>
-              <span className="font-medium">{httpMethod}</span>
-            </>
-          )}
-          {httpStatus && (
+          <span className="text-muted-foreground">Method</span>
+          <span className="font-medium">{httpInfo.method}</span>
+          {httpInfo.statusCode != null && (
             <>
               <span className="text-muted-foreground">HTTP</span>
-              <span className={Number(httpStatus) >= 400 ? "text-red-500" : Number(httpStatus) >= 300 ? "text-yellow-500" : "text-green-500"}>
-                {httpStatus}
+              <span className={httpInfo.statusCode >= 400 ? "text-red-500" : httpInfo.statusCode >= 300 ? "text-yellow-500" : "text-green-500"}>
+                {httpInfo.statusCode}
               </span>
             </>
           )}
-          {httpRoute && (
+          {httpInfo.route && (
             <>
               <span className="text-muted-foreground">Route</span>
-              <span className="truncate max-w-[180px]">{httpRoute}</span>
+              <span className="truncate max-w-[180px]">{httpInfo.route}</span>
             </>
           )}
         </div>

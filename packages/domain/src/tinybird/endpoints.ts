@@ -59,8 +59,38 @@ export const listTraces = defineEndpoint("list_traces", {
               ),
               SpanName
             ),
-            if(ParentSpanId = '', 0, 1)
+            tuple(if(ParentSpanId = '', 0, 1), Timestamp)
           ) AS rootSpanName,
+          argMin(SpanKind, tuple(if(ParentSpanId = '', 0, 1), Timestamp)) AS rootSpanKind,
+          argMin(StatusCode, tuple(if(ParentSpanId = '', 0, 1), Timestamp)) AS rootSpanStatusCode,
+          argMin(
+            if(
+              SpanAttributes['http.method'] != '',
+              SpanAttributes['http.method'],
+              SpanAttributes['http.request.method']
+            ),
+            tuple(if(ParentSpanId = '', 0, 1), Timestamp)
+          ) AS rootHttpMethod,
+          argMin(
+            if(
+              SpanAttributes['http.route'] != '',
+              SpanAttributes['http.route'],
+              if(
+                SpanAttributes['url.path'] != '',
+                SpanAttributes['url.path'],
+                SpanAttributes['http.target']
+              )
+            ),
+            tuple(if(ParentSpanId = '', 0, 1), Timestamp)
+          ) AS rootHttpRoute,
+          argMin(
+            if(
+              SpanAttributes['http.status_code'] != '',
+              SpanAttributes['http.status_code'],
+              SpanAttributes['http.response.status_code']
+            ),
+            tuple(if(ParentSpanId = '', 0, 1), Timestamp)
+          ) AS rootHttpStatusCode,
           max(if(
             StatusCode = 'Error'
             OR (SpanAttributes['http.status_code'] != '' AND toUInt16OrZero(SpanAttributes['http.status_code']) >= 500),
@@ -126,6 +156,11 @@ export const listTraces = defineEndpoint("list_traces", {
           spanCount,
           services,
           rootSpanName,
+          rootSpanKind,
+          rootSpanStatusCode,
+          rootHttpMethod,
+          rootHttpRoute,
+          rootHttpStatusCode,
           hasError
         FROM base_traces
         WHERE 1=1
@@ -181,6 +216,11 @@ export const listTraces = defineEndpoint("list_traces", {
     spanCount: t.uint64(),
     services: t.array(t.string()),
     rootSpanName: t.string(),
+    rootSpanKind: t.string(),
+    rootSpanStatusCode: t.string(),
+    rootHttpMethod: t.string(),
+    rootHttpRoute: t.string(),
+    rootHttpStatusCode: t.string(),
     hasError: t.uint8(),
   },
 });

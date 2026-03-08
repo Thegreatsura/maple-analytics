@@ -17,6 +17,8 @@ import { formatDuration } from "@/lib/format"
 import { type Span, type SpanNode } from "@/api/tinybird/traces"
 import { getSpanHierarchyResultAtom } from "@/lib/services/atoms/tinybird-query-atoms"
 import { findSpanById } from "@/components/traces/flow-utils"
+import { HttpSpanLabel } from "@/components/traces/http-span-label"
+import { getHttpInfo } from "@maple/ui/lib/http"
 
 const TraceDetailSearchSchema = Schema.Struct({
   spanId: Schema.optional(Schema.String),
@@ -203,6 +205,7 @@ function TraceDetailPage() {
 
       const services = [...new Set(data.spans.map((s: Span) => s.serviceName))]
       const rootSpan = data.rootSpans[0]
+      const rootHttpInfo = rootSpan ? getHttpInfo(rootSpan.spanName, rootSpan.spanAttributes) : null
       const deploymentEnv = rootSpan?.resourceAttributes?.["deployment.environment"]
       const commitSha = rootSpan?.resourceAttributes?.["deployment.commit_sha"]
       const hasError = data.spans.some((s: Span) => {
@@ -226,7 +229,19 @@ function TraceDetailPage() {
             { label: "Traces", href: backToTracesHref },
             { label: traceId.slice(0, 8) },
           ]}
-          title={rootSpan?.spanName ?? "Unknown Trace"}
+          title={rootHttpInfo ? undefined : rootSpan?.spanName ?? "Unknown Trace"}
+          titleContent={
+            rootHttpInfo ? (
+              <h1 className="min-w-0">
+                <HttpSpanLabel
+                  spanName={rootSpan.spanName}
+                  spanAttributes={rootSpan.spanAttributes}
+                  className="gap-3 text-2xl font-bold tracking-tight"
+                  textClassName="text-2xl font-bold tracking-tight"
+                />
+              </h1>
+            ) : undefined
+          }
           description={`${data.spans.length} spans across ${services.length} service${services.length !== 1 ? "s" : ""}`}
           headerActions={
             <Badge

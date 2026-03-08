@@ -17,6 +17,7 @@ import { listTracesResultAtom } from "@/lib/services/atoms/tinybird-query-atoms"
 import type { TracesSearchParams } from "@/routes/traces"
 import { useTimezonePreference } from "@/hooks/use-timezone-preference"
 import { formatTimestampInTimezone } from "@/lib/timezone-format"
+import { HttpSpanLabel } from "./http-span-label"
 
 function formatDuration(ms: number): string {
   if (ms < 1) {
@@ -190,7 +191,11 @@ export function TracesTable({ filters }: TracesTableProps) {
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span className="font-mono text-xs">{trace.rootSpanName || "Unknown"}</span>
+                        <HttpSpanLabel
+                          spanName={trace.rootSpan.name || trace.rootSpanName || "Unknown"}
+                          spanAttributes={trace.rootSpan.attributes}
+                          textClassName="text-xs"
+                        />
                         <span className="text-[10px] text-muted-foreground">
                           {formatTimestampInTimezone(trace.startTime, {
                             timeZone: effectiveTimezone,

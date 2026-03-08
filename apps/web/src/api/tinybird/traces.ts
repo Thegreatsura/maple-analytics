@@ -11,6 +11,7 @@ import {
   decodeInput,
   runTinybirdQuery,
 } from "@/api/tinybird/effect-utils"
+import { getHttpInfo, type HttpInfo } from "@maple/ui/lib/http"
 
 const ContainsMatchMode = Schema.optional(Schema.Literal("contains"))
 
@@ -46,6 +47,14 @@ export type ListTracesInput = Schema.Schema.Type<typeof ListTracesInputSchema>
 const DEFAULT_LIMIT = 100
 const DEFAULT_OFFSET = 0
 
+export interface TraceRootSpanSummary {
+  name: string
+  kind: string
+  statusCode: string
+  attributes: Record<string, string>
+  http: HttpInfo | null
+}
+
 export interface Trace {
   traceId: string
   startTime: string
@@ -53,6 +62,7 @@ export interface Trace {
   durationMs: number
   spanCount: number
   services: string[]
+  rootSpan: TraceRootSpanSummary
   rootSpanName: string
   hasError: boolean
 }
@@ -65,7 +75,27 @@ export interface TracesResponse {
   }
 }
 
+function buildRootSpanAttributes(raw: ListTracesOutput): Record<string, string> {
+  const attributes: Record<string, string> = {}
+
+  if (raw.rootHttpMethod) {
+    attributes["http.method"] = raw.rootHttpMethod
+  }
+
+  if (raw.rootHttpRoute) {
+    attributes["http.route"] = raw.rootHttpRoute
+  }
+
+  if (raw.rootHttpStatusCode) {
+    attributes["http.status_code"] = raw.rootHttpStatusCode
+  }
+
+  return attributes
+}
+
 function transformTrace(raw: ListTracesOutput): Trace {
+  const rootSpanAttributes = buildRootSpanAttributes(raw)
+
   return {
     traceId: raw.traceId,
     startTime: String(raw.startTime),
@@ -73,6 +103,13 @@ function transformTrace(raw: ListTracesOutput): Trace {
     durationMs: Number(raw.durationMicros) / 1000,
     spanCount: Number(raw.spanCount),
     services: raw.services,
+    rootSpan: {
+      name: raw.rootSpanName,
+      kind: raw.rootSpanKind,
+      statusCode: raw.rootSpanStatusCode,
+      attributes: rootSpanAttributes,
+      http: getHttpInfo(raw.rootSpanName, rootSpanAttributes),
+    },
     rootSpanName: raw.rootSpanName,
     hasError: Number(raw.hasError) === 1,
   }

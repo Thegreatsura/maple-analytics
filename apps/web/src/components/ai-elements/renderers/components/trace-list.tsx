@@ -1,6 +1,7 @@
 import type { BaseComponentProps } from "@json-render/react"
 import { cn } from "@maple/ui/utils"
 import { formatDuration } from "@/lib/format"
+import { HttpSpanLabel } from "@/components/traces/http-span-label"
 
 interface TraceListProps {
   traces: Array<{
@@ -62,8 +63,8 @@ export function TraceList({ props }: BaseComponentProps<TraceListProps>) {
                     <span className="ml-1 inline-block size-1.5 rounded-full bg-red-500" />
                   )}
                 </td>
-                <td className="max-w-[160px] truncate py-1 pr-2">
-                  {trace.rootSpanName}
+                <td className="max-w-[160px] py-1 pr-2">
+                  <HttpSpanLabel spanName={trace.rootSpanName} />
                 </td>
                 <td
                   className={cn(

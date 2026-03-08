@@ -20,6 +20,7 @@ import {
   getErrorDetailTracesResultAtom,
   getErrorsByTypeResultAtom,
 } from "@/lib/services/atoms/tinybird-query-atoms"
+import { HttpSpanLabel } from "@/components/traces/http-span-label"
 
 function formatNumber(num: number): string {
   if (num >= 1_000_000) {
@@ -137,7 +138,7 @@ function ErrorDetailPanel({ errorRow, filters }: { errorRow: ErrorByType; filter
                       <span className="font-mono text-xs text-muted-foreground shrink-0">
                         {trace.traceId.slice(0, 8)}
                       </span>
-                      <span className="truncate">{trace.rootSpanName}</span>
+                      <HttpSpanLabel spanName={trace.rootSpanName} />
                     </div>
                     <div className="flex items-center gap-4 shrink-0 text-muted-foreground">
                       <span className="text-xs">

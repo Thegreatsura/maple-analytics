@@ -16,6 +16,7 @@ import { formatDuration } from "@/lib/format"
 import { getSpanColorStyle, extractClassName } from "@maple/ui/colors"
 import { getCacheInfo, cacheResultStyles, CACHE_OPERATION_COLORS } from "@/lib/cache"
 import type { CacheInfo } from "@/lib/cache"
+import { getHttpInfo, HTTP_METHOD_COLORS } from "@maple/ui/lib/http"
 import type { FlowNodeData, AggregatedDuration } from "./flow-utils"
 
 /**
@@ -71,15 +72,6 @@ const SPAN_KIND_LABELS: Record<string, string> = {
   SPAN_KIND_INTERNAL: "Internal",
 }
 
-const HTTP_METHOD_COLORS: Record<string, string> = {
-  GET: "bg-emerald-500",
-  POST: "bg-blue-500",
-  PUT: "bg-amber-500",
-  PATCH: "bg-amber-500",
-  DELETE: "bg-red-500",
-  HEAD: "bg-purple-500",
-  OPTIONS: "bg-gray-500",
-}
 
 function CacheSystemIcon({ system, size = 12 }: { system: CacheInfo["system"]; size?: number }) {
   const name = system?.toLowerCase()
@@ -162,32 +154,18 @@ export const FlowSpanNode = memo(function FlowSpanNode({
 
   const kindLabel = SPAN_KIND_LABELS[span.spanKind] || span.spanKind.replace("SPAN_KIND_", "")
 
-  // Check for HTTP request span
-  // First try standard OTel attributes
-  let httpMethod = span.spanAttributes["http.method"] as string | undefined
-  let httpRoute = (span.spanAttributes["http.route"] || span.spanAttributes["http.target"]) as string | undefined
-  const httpStatusCode = span.spanAttributes["http.status_code"] as string | number | undefined
-
-  // Also check if span name starts with HTTP method (e.g., "POST /api/users")
-  const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
-  const spanNameParts = span.spanName.split(" ")
-  if (!httpMethod && spanNameParts.length >= 2 && HTTP_METHODS.includes(spanNameParts[0].toUpperCase())) {
-    httpMethod = spanNameParts[0].toUpperCase()
-    httpRoute = spanNameParts.slice(1).join(" ")
-  }
-
-  const isHttpRequest = !!httpMethod
+  // Detect HTTP span info
+  const httpInfo = getHttpInfo(span.spanName, span.spanAttributes)
+  const isHttpRequest = !!httpInfo
 
   // Detect cache span
   const cacheInfo = getCacheInfo(span.spanAttributes)
   const isCacheSpan = !!cacheInfo
 
-  // Detect error state from statusCode OR HTTP status code >= 400
-  // Note: OpenTelemetry uses "Error" (not "ERROR") for error status
-  const httpStatusNum = httpStatusCode !== undefined
-    ? (typeof httpStatusCode === "string" ? parseInt(httpStatusCode) : httpStatusCode)
-    : undefined
-  const isError = span.statusCode === "Error" || (httpStatusNum !== undefined && httpStatusNum >= 400)
+  // Detect error state: respect OTel status as source of truth
+  // Only fall back to HTTP status >= 500 when OTel status is not explicitly "Ok"
+  const isError = span.statusCode === "Error"
+    || (span.statusCode !== "Ok" && (httpInfo?.isError ?? false))
 
   const colorStyle = isError
     ? {}
@@ -280,22 +258,22 @@ export const FlowSpanNode = memo(function FlowSpanNode({
                 )}
               </div>
             </>
-          ) : isHttpRequest && httpMethod ? (
+          ) : isHttpRequest && httpInfo ? (
             <>
               <div className="flex items-center gap-2">
                 <span
                   className={cn(
                     "px-2 py-0.5 rounded font-mono text-[11px] font-bold text-white shrink-0",
-                    HTTP_METHOD_COLORS[httpMethod.toUpperCase()] || "bg-gray-500"
+                    HTTP_METHOD_COLORS[httpInfo.method] || "bg-gray-500"
                   )}
                 >
-                  {httpMethod.toUpperCase()}
+                  {httpInfo.method}
                 </span>
                 <span
                   className="font-mono text-xs text-foreground truncate"
-                  title={httpRoute || span.spanName}
+                  title={httpInfo.route || span.spanName}
                 >
-                  {httpRoute || span.spanName}
+                  {httpInfo.route || span.spanName}
                 </span>
               </div>
               <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground tabular-nums">
@@ -303,23 +281,23 @@ export const FlowSpanNode = memo(function FlowSpanNode({
                   const { main, tooltip } = formatCombinedDuration(isCombined, span.durationMs, aggregatedDuration)
                   return <span title={tooltip}>{main}</span>
                 })()}
-                {httpStatusCode !== undefined && (
+                {httpInfo.statusCode != null && (
                   <span
                     className={cn(
                       "px-1.5 py-0.5 rounded font-mono font-bold",
-                      httpStatusNum !== undefined && httpStatusNum >= 200 && httpStatusNum < 300 &&
+                      httpInfo.statusCode >= 200 && httpInfo.statusCode < 300 &&
                         "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-                      httpStatusNum !== undefined && httpStatusNum >= 300 && httpStatusNum < 400 &&
+                      httpInfo.statusCode >= 300 && httpInfo.statusCode < 400 &&
                         "bg-blue-500/15 text-blue-600 dark:text-blue-400",
-                      httpStatusNum !== undefined && httpStatusNum >= 400 && httpStatusNum < 500 &&
+                      httpInfo.statusCode >= 400 && httpInfo.statusCode < 500 &&
                         "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-                      httpStatusNum !== undefined && httpStatusNum >= 500 &&
+                      httpInfo.statusCode >= 500 &&
                         "bg-red-500/15 text-red-600 dark:text-red-400",
-                      (httpStatusNum === undefined || httpStatusNum < 200) &&
+                      httpInfo.statusCode < 200 &&
                         "text-muted-foreground"
                     )}
                   >
-                    {httpStatusCode}
+                    {httpInfo.statusCode}
                   </span>
                 )}
               </div>
@@ -370,7 +348,7 @@ export const FlowSpanNode = memo(function FlowSpanNode({
             <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-500/15 text-red-600 dark:text-red-400">
               Error
             </span>
-          ) : span.statusCode === "Ok" || (httpStatusNum !== undefined && httpStatusNum >= 200 && httpStatusNum < 400) ? (
+          ) : span.statusCode === "Ok" || (httpInfo?.statusCode != null && httpInfo.statusCode >= 200 && httpInfo.statusCode < 400) ? (
             <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
               OK
             </span>

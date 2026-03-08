@@ -5,6 +5,7 @@ import { Button } from "@maple/ui/components/ui/button"
 import { cn } from "@maple/ui/utils"
 import { formatDuration } from "@/lib/format"
 import { getCacheInfo, cacheResultStyles } from "@/lib/cache"
+import { getHttpInfo, HTTP_METHOD_COLORS } from "@maple/ui/lib/http"
 import type { SpanNode } from "@/api/tinybird/traces"
 
 interface SpanRowProps {
@@ -84,7 +85,7 @@ export function SpanRow({
         </div>
 
         <div className="flex items-center gap-2 shrink-0 ml-2">
-          <div className="w-32" />
+          <div className="w-48" />
           <span className="w-16 text-right font-mono text-[10px] text-muted-foreground/50 truncate" title={span.spanId}>
             {span.spanId.slice(0, 8)}
           </span>
@@ -107,6 +108,7 @@ export function SpanRow({
     : 0
 
   const cacheInfo = getCacheInfo(span.spanAttributes)
+  const httpInfo = getHttpInfo(span.spanName, span.spanAttributes)
   const statusStyle = statusStyles[span.statusCode] ?? statusStyles.Unset
   const kindLabel = kindLabels[span.spanKind] ?? span.spanKind?.replace("SPAN_KIND_", "") ?? "Unknown"
 
@@ -153,31 +155,43 @@ export function SpanRow({
           variant="outline"
           className="shrink-0 font-mono text-[10px] px-1.5"
         >
-          {span.serviceName}
+          {span.serviceName} · {kindLabel}
         </Badge>
 
-        <span className="shrink-0 text-[10px] text-muted-foreground w-14">
-          {kindLabel}
-        </span>
-
-        <span className="flex-1 truncate font-mono text-xs" title={span.spanName}>
-          {span.spanName}
-        </span>
+        {httpInfo ? (
+          <span className="flex-1 flex items-center gap-1.5 min-w-0 font-mono text-xs" title={httpInfo.route || span.spanName}>
+            <span className={cn(
+              "px-1 py-0.5 rounded text-[10px] font-bold text-white shrink-0 leading-none",
+              HTTP_METHOD_COLORS[httpInfo.method] || "bg-gray-500"
+            )}>
+              {httpInfo.method}
+            </span>
+            <span className="truncate">{httpInfo.route || span.spanName}</span>
+          </span>
+        ) : (
+          <span className="flex-1 truncate font-mono text-xs" title={span.spanName}>
+            {span.spanName}
+          </span>
+        )}
       </div>
 
       {/* Right section: Duration bar + Duration text + Status (fixed widths, anchored right) */}
       <div className="flex items-center gap-2 shrink-0 ml-2">
-        <div className="w-32 h-2 bg-muted rounded-full overflow-hidden relative">
+        <div className="w-48 h-1 bg-muted overflow-hidden relative">
           <div
             className={cn(
-              "h-full rounded-full absolute",
-              span.statusCode === "Error"
+              "h-full absolute",
+              httpInfo?.statusCode && httpInfo.statusCode >= 500
                 ? "bg-red-500"
-                : cacheInfo?.result === "hit"
+                : httpInfo?.statusCode && httpInfo.statusCode >= 400
                   ? "bg-amber-500"
-                  : cacheInfo?.result === "miss"
-                    ? "bg-sky-500"
-                    : "bg-primary"
+                  : span.statusCode === "Error"
+                    ? "bg-red-500"
+                    : cacheInfo?.result === "hit"
+                      ? "bg-amber-500"
+                      : cacheInfo?.result === "miss"
+                        ? "bg-sky-500"
+                        : "bg-primary"
             )}
             style={{
               left: `${leftPercent}%`,
@@ -197,6 +211,19 @@ export function SpanRow({
           >
             {cacheInfo.result === "hit" ? "HIT" : "MISS"}
           </Badge>
+        ) : httpInfo?.statusCode ? (
+          <span className={cn(
+            "w-14 text-center font-mono text-xs font-medium",
+            httpInfo.statusCode >= 500
+              ? "text-red-600 dark:text-red-400"
+              : httpInfo.statusCode >= 400
+                ? "text-amber-600 dark:text-amber-400"
+                : httpInfo.statusCode >= 300
+                  ? "text-blue-600 dark:text-blue-400"
+                  : "text-emerald-600 dark:text-emerald-400"
+          )}>
+            {httpInfo.statusCode}
+          </span>
         ) : (
           <Badge
             variant="outline"

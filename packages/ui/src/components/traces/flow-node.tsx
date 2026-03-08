@@ -13,6 +13,7 @@ import {
 import { cn } from "../../lib/utils"
 import { formatDuration } from "../../lib/format"
 import { getSpanColorStyle, extractClassName } from "../../lib/colors"
+import { getHttpInfo, HTTP_METHOD_COLORS } from "../../lib/http"
 import type { FlowNodeData, AggregatedDuration } from "./flow-utils"
 
 function formatCombinedDuration(
@@ -58,16 +59,6 @@ const SPAN_KIND_LABELS: Record<string, string> = {
   SPAN_KIND_INTERNAL: "Internal",
 }
 
-const HTTP_METHOD_COLORS: Record<string, string> = {
-  GET: "bg-emerald-500",
-  POST: "bg-blue-500",
-  PUT: "bg-amber-500",
-  PATCH: "bg-amber-500",
-  DELETE: "bg-red-500",
-  HEAD: "bg-purple-500",
-  OPTIONS: "bg-gray-500",
-}
-
 interface FlowSpanNodeProps {
   data: FlowNodeData
 }
@@ -76,24 +67,10 @@ export const FlowSpanNode = memo(function FlowSpanNode({ data }: FlowSpanNodePro
   const { span, services, isSelected, count, aggregatedDuration } = data
   const isCombined = count > 1
   const kindLabel = SPAN_KIND_LABELS[span.spanKind] || span.spanKind.replace("SPAN_KIND_", "")
-
-  let httpMethod = span.spanAttributes["http.method"] as string | undefined
-  let httpRoute = (span.spanAttributes["http.route"] || span.spanAttributes["http.target"]) as string | undefined
-  const httpStatusCode = span.spanAttributes["http.status_code"] as string | number | undefined
-
-  const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
-  const spanNameParts = span.spanName.split(" ")
-  if (!httpMethod && spanNameParts.length >= 2 && HTTP_METHODS.includes(spanNameParts[0].toUpperCase())) {
-    httpMethod = spanNameParts[0].toUpperCase()
-    httpRoute = spanNameParts.slice(1).join(" ")
-  }
-
-  const isHttpRequest = !!httpMethod
-
-  const httpStatusNum = httpStatusCode !== undefined
-    ? (typeof httpStatusCode === "string" ? parseInt(httpStatusCode) : httpStatusCode)
-    : undefined
-  const isError = span.statusCode === "Error" || (httpStatusNum !== undefined && httpStatusNum >= 400)
+  const httpInfo = getHttpInfo(span.spanName, span.spanAttributes)
+  const isHttpRequest = !!httpInfo
+  const isError = span.statusCode === "Error"
+    || (span.statusCode !== "Ok" && (httpInfo?.isError ?? false))
 
   const colorStyle = isError ? {} : getSpanColorStyle(span.spanName, span.serviceName, services)
   const SpanIcon = getSpanIcon(span.spanKind, isHttpRequest, isError)
@@ -139,17 +116,17 @@ export const FlowSpanNode = memo(function FlowSpanNode({ data }: FlowSpanNodePro
           isError ? "border-red-500/40" : "border-foreground/20"
         )}>
           <div className="flex-1 px-3 py-2.5 bg-card">
-            {isHttpRequest && httpMethod ? (
+            {isHttpRequest && httpInfo ? (
               <>
                 <div className="flex items-center gap-2">
                   <span className={cn(
                     "px-2 py-0.5 font-mono text-[11px] font-bold text-white shrink-0",
-                    HTTP_METHOD_COLORS[httpMethod.toUpperCase()] || "bg-gray-500"
+                    HTTP_METHOD_COLORS[httpInfo.method] || "bg-gray-500"
                   )}>
-                    {httpMethod.toUpperCase()}
+                    {httpInfo.method}
                   </span>
-                  <span className="font-mono text-xs text-foreground truncate" title={httpRoute || span.spanName}>
-                    {httpRoute || span.spanName}
+                  <span className="font-mono text-xs text-foreground truncate" title={httpInfo.route || span.spanName}>
+                    {httpInfo.route || span.spanName}
                   </span>
                 </div>
                 <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground tabular-nums">
@@ -157,16 +134,16 @@ export const FlowSpanNode = memo(function FlowSpanNode({ data }: FlowSpanNodePro
                     const { main, tooltip } = formatCombinedDuration(isCombined, span.durationMs, aggregatedDuration)
                     return <span title={tooltip}>{main}</span>
                   })()}
-                  {httpStatusCode !== undefined && (
+                  {httpInfo.statusCode != null && (
                     <span className={cn(
                       "px-1.5 py-0.5 font-mono font-bold",
-                      httpStatusNum !== undefined && httpStatusNum >= 200 && httpStatusNum < 300 && "bg-emerald-500/15 text-emerald-400",
-                      httpStatusNum !== undefined && httpStatusNum >= 300 && httpStatusNum < 400 && "bg-blue-500/15 text-blue-400",
-                      httpStatusNum !== undefined && httpStatusNum >= 400 && httpStatusNum < 500 && "bg-amber-500/15 text-amber-400",
-                      httpStatusNum !== undefined && httpStatusNum >= 500 && "bg-red-500/15 text-red-400",
-                      (httpStatusNum === undefined || httpStatusNum < 200) && "text-muted-foreground"
+                      httpInfo.statusCode >= 200 && httpInfo.statusCode < 300 && "bg-emerald-500/15 text-emerald-400",
+                      httpInfo.statusCode >= 300 && httpInfo.statusCode < 400 && "bg-blue-500/15 text-blue-400",
+                      httpInfo.statusCode >= 400 && httpInfo.statusCode < 500 && "bg-amber-500/15 text-amber-400",
+                      httpInfo.statusCode >= 500 && "bg-red-500/15 text-red-400",
+                      httpInfo.statusCode < 200 && "text-muted-foreground"
                     )}>
-                      {httpStatusCode}
+                      {httpInfo.statusCode}
                     </span>
                   )}
                 </div>
@@ -210,7 +187,7 @@ export const FlowSpanNode = memo(function FlowSpanNode({ data }: FlowSpanNodePro
           <div className="flex items-center justify-between px-3 py-1.5 bg-muted/30 border-t border-dashed border-foreground/10 text-[10px]">
             {isError ? (
               <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-red-500/15 text-red-400">Error</span>
-            ) : span.statusCode === "Ok" || (httpStatusNum !== undefined && httpStatusNum >= 200 && httpStatusNum < 400) ? (
+            ) : span.statusCode === "Ok" || (httpInfo?.statusCode != null && httpInfo.statusCode >= 200 && httpInfo.statusCode < 400) ? (
               <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-500/15 text-emerald-400">OK</span>
             ) : (
               <span className="px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{span.statusCode}</span>
