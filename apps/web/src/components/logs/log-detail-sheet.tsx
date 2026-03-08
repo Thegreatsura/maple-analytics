@@ -85,7 +85,7 @@ export function LogDetailSheet({ log, open, onOpenChange }: LogDetailSheetProps)
         )}
 
         {/* Scrollable content */}
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1 overflow-hidden">
           <div className="p-3 space-y-3">
             {/* Message */}
             <div className="space-y-1">
