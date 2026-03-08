@@ -5,17 +5,17 @@ import {
 import { queryTinybird } from "../lib/query-tinybird"
 import { defaultTimeRange } from "../lib/time"
 import { formatDurationFromMs, formatPercent, formatNumber, formatTable } from "../lib/format"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
 
 export function registerServiceOverviewTool(server: McpToolRegistrar) {
   server.tool(
     "service_overview",
     "List all services with health metrics: latency (P50/P95/P99), error rate, and throughput.",
-    {
+    Schema.Struct({
       start_time: optionalStringParam("Start of time range (YYYY-MM-DD HH:mm:ss)"),
       end_time: optionalStringParam("End of time range (YYYY-MM-DD HH:mm:ss)"),
-    },
+    }),
     ({ start_time, end_time }) =>
       Effect.gen(function* () {
         const { startTime, endTime } = defaultTimeRange(1)

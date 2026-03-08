@@ -10,151 +10,288 @@ import {
 import { defaultTimeRange } from "../lib/time"
 import { formatDurationFromMs, formatNumber, formatPercent, formatTable } from "../lib/format"
 import { HttpServerRequest } from "@effect/platform"
-import { Cause, Effect, Exit, ManagedRuntime, Option } from "effect"
+import { Cause, Effect, Exit, ManagedRuntime, Option, ParseResult, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
 import { resolveMcpTenantContext } from "@/mcp/lib/resolve-tenant"
 import { QueryEngineService } from "@/services/QueryEngineService"
-import type {
-  LogsFilters,
-  MetricsFilters,
-  QueryEngineExecuteResponse,
+import {
+  MetricType,
+  MetricsMetric,
   QuerySpec,
-  TracesFilters,
+  TracesMetric,
+  type LogsFilters,
+  type MetricsFilters,
+  type QueryEngineExecuteResponse,
+  type QuerySpec as QuerySpecType,
+  type TracesFilters,
 } from "@maple/domain"
 
 const QueryEngineRuntime = ManagedRuntime.make(QueryEngineService.Default)
 
-type FlatParams = {
-  source: string
-  kind: string
-  start_time?: string
-  end_time?: string
-  metric?: string
-  group_by?: string
-  bucket_seconds?: number
-  limit?: number
-  service_name?: string
-  span_name?: string
-  root_spans_only?: boolean
-  environments?: string
-  commit_shas?: string
-  attribute_key?: string
-  attribute_value?: string
-  severity?: string
-  metric_name?: string
-  metric_type?: string
+const commonTimeRangeFields = {
+  start_time: optionalStringParam("Start time (YYYY-MM-DD HH:mm:ss). Defaults to 1 hour ago"),
+  end_time: optionalStringParam("End time (YYYY-MM-DD HH:mm:ss). Defaults to now"),
 }
 
-function buildQuerySpec(
-  source: "traces" | "logs" | "metrics",
-  kind: "timeseries" | "breakdown",
-  params: FlatParams,
-): { spec: QuerySpec } | { error: string } {
-  if (source === "traces") {
+const commonTraceFilterFields = {
+  service_name: optionalStringParam("Filter by service name"),
+  span_name: optionalStringParam("Filter by span name"),
+  root_spans_only: optionalBooleanParam("Only root spans"),
+  environments: optionalStringParam("Comma-separated environments"),
+  commit_shas: optionalStringParam("Comma-separated commit SHAs"),
+  attribute_key: optionalStringParam("Attribute key for filtering or grouping"),
+  attribute_value: optionalStringParam("Attribute value filter; requires attribute_key"),
+}
+
+const tracesTimeseriesArgsSchema = Schema.Struct({
+  source: Schema.Literal("traces").annotations({ description: "Data source: traces" }),
+  kind: Schema.Literal("timeseries").annotations({ description: "Query type: timeseries" }),
+  metric: Schema.optional(TracesMetric).annotations({
+    description:
+      "Metric: count, avg_duration, p50_duration, p95_duration, p99_duration, or error_rate. Defaults to count.",
+  }),
+  group_by: Schema.optional(
+    Schema.Literal("service", "span_name", "status_code", "http_method", "attribute", "none"),
+  ).annotations({
+    description:
+      "Grouping: service, span_name, status_code, http_method, attribute, or none. Defaults to none.",
+  }),
+  bucket_seconds: optionalNumberParam("Bucket size in seconds (auto-computed if omitted)"),
+  ...commonTimeRangeFields,
+  ...commonTraceFilterFields,
+})
+
+const tracesBreakdownArgsSchema = Schema.Struct({
+  source: Schema.Literal("traces").annotations({ description: "Data source: traces" }),
+  kind: Schema.Literal("breakdown").annotations({ description: "Query type: breakdown" }),
+  metric: Schema.optional(TracesMetric).annotations({
+    description:
+      "Metric: count, avg_duration, p50_duration, p95_duration, p99_duration, or error_rate. Defaults to count.",
+  }),
+  group_by: Schema.optional(
+    Schema.Literal("service", "span_name", "status_code", "http_method", "attribute"),
+  ).annotations({
+    description:
+      "Grouping: service, span_name, status_code, http_method, or attribute. Defaults to service.",
+  }),
+  limit: optionalNumberParam("Max breakdown rows (default 10, max 100)"),
+  ...commonTimeRangeFields,
+  ...commonTraceFilterFields,
+})
+
+const logsTimeseriesArgsSchema = Schema.Struct({
+  source: Schema.Literal("logs").annotations({ description: "Data source: logs" }),
+  kind: Schema.Literal("timeseries").annotations({ description: "Query type: timeseries" }),
+  metric: Schema.optional(Schema.Literal("count")).annotations({
+    description: "Metric: count. Defaults to count.",
+  }),
+  group_by: Schema.optional(Schema.Literal("service", "severity", "none")).annotations({
+    description: "Grouping: service, severity, or none. Defaults to none.",
+  }),
+  bucket_seconds: optionalNumberParam("Bucket size in seconds (auto-computed if omitted)"),
+  ...commonTimeRangeFields,
+  service_name: optionalStringParam("Filter by service name"),
+  severity: optionalStringParam("Filter by severity (e.g. ERROR, WARN, INFO)"),
+})
+
+const logsBreakdownArgsSchema = Schema.Struct({
+  source: Schema.Literal("logs").annotations({ description: "Data source: logs" }),
+  kind: Schema.Literal("breakdown").annotations({ description: "Query type: breakdown" }),
+  metric: Schema.optional(Schema.Literal("count")).annotations({
+    description: "Metric: count. Defaults to count.",
+  }),
+  group_by: Schema.optional(Schema.Literal("service", "severity")).annotations({
+    description: "Grouping: service or severity. Defaults to service.",
+  }),
+  limit: optionalNumberParam("Max breakdown rows (default 10, max 100)"),
+  ...commonTimeRangeFields,
+  service_name: optionalStringParam("Filter by service name"),
+  severity: optionalStringParam("Filter by severity (e.g. ERROR, WARN, INFO)"),
+})
+
+const metricsTimeseriesArgsSchema = Schema.Struct({
+  source: Schema.Literal("metrics").annotations({ description: "Data source: metrics" }),
+  kind: Schema.Literal("timeseries").annotations({ description: "Query type: timeseries" }),
+  metric: Schema.optional(MetricsMetric).annotations({
+    description: "Metric: avg, sum, min, max, or count. Defaults to avg.",
+  }),
+  group_by: Schema.optional(Schema.Literal("service", "none")).annotations({
+    description: "Grouping: service or none. Defaults to none.",
+  }),
+  bucket_seconds: optionalNumberParam("Bucket size in seconds (auto-computed if omitted)"),
+  ...commonTimeRangeFields,
+  service_name: optionalStringParam("Filter by service name"),
+  metric_name: requiredStringParam("Metric name. Use list_metrics first to discover it."),
+  metric_type: MetricType.annotations({
+    description: "Metric type: sum, gauge, histogram, or exponential_histogram.",
+  }),
+})
+
+const metricsBreakdownArgsSchema = Schema.Struct({
+  source: Schema.Literal("metrics").annotations({ description: "Data source: metrics" }),
+  kind: Schema.Literal("breakdown").annotations({ description: "Query type: breakdown" }),
+  metric: Schema.optional(Schema.Literal("avg", "sum", "count")).annotations({
+    description: "Metric: avg, sum, or count. Defaults to avg.",
+  }),
+  group_by: Schema.optional(Schema.Literal("service")).annotations({
+    description: "Grouping: service. Defaults to service.",
+  }),
+  limit: optionalNumberParam("Max breakdown rows (default 10, max 100)"),
+  ...commonTimeRangeFields,
+  service_name: optionalStringParam("Filter by service name"),
+  metric_name: requiredStringParam("Metric name. Use list_metrics first to discover it."),
+  metric_type: MetricType.annotations({
+    description: "Metric type: sum, gauge, histogram, or exponential_histogram.",
+  }),
+})
+
+export const queryDataArgsSchema = Schema.Union(
+  tracesTimeseriesArgsSchema,
+  tracesBreakdownArgsSchema,
+  logsTimeseriesArgsSchema,
+  logsBreakdownArgsSchema,
+  metricsTimeseriesArgsSchema,
+  metricsBreakdownArgsSchema,
+)
+
+export type QueryDataArgs = Schema.Schema.Type<typeof queryDataArgsSchema>
+
+const queryDataToolDescription =
+  "Execute a structured observability query with only supported combinations. " +
+  "Supported queries: traces timeseries, traces breakdown, logs timeseries, logs breakdown, metrics timeseries, and metrics breakdown. " +
+  "Metrics breakdown only supports metric=avg|sum|count grouped by service. " +
+  "Example: traces timeseries grouped by service to compare traffic over time. " +
+  "Example: call list_metrics first, then query a specific metric timeseries with metric_name and metric_type."
+
+const querySpecDecoder = Schema.validateEither(QuerySpec)
+
+const splitCsv = (value: string): Array<string> =>
+  value.split(",").map((entry) => entry.trim()).filter((entry) => entry.length > 0)
+
+const resolveTenant = Effect.gen(function* () {
+  const req = yield* HttpServerRequest.HttpServerRequest
+  const nativeReq = yield* HttpServerRequest.toWeb(req)
+  return yield* Effect.tryPromise({
+    try: () => resolveMcpTenantContext(nativeReq),
+    catch: (error) =>
+      new McpTenantError({
+        message: error instanceof Error ? error.message : String(error),
+      }),
+  })
+}).pipe(
+  Effect.catchTag("RequestError", (error) =>
+    Effect.fail(new McpTenantError({ message: error.message })),
+  ),
+)
+
+export function buildQuerySpec(args: QueryDataArgs): { spec: QuerySpecType } | { error: string } {
+  const attributeKey = "attribute_key" in args ? args.attribute_key : undefined
+  const attributeValue = "attribute_value" in args ? args.attribute_value : undefined
+
+  if (attributeValue && !attributeKey) {
+    return { error: "`attribute_value` requires `attribute_key`." }
+  }
+
+  if ("group_by" in args && args.group_by === "attribute" && !attributeKey) {
+    return { error: "`group_by=attribute` requires `attribute_key`." }
+  }
+
+  if (args.source === "traces") {
     const filters: TracesFilters = {
-      ...(params.service_name && { serviceName: params.service_name }),
-      ...(params.span_name && { spanName: params.span_name }),
-      ...(params.root_spans_only && { rootSpansOnly: params.root_spans_only }),
-      ...(params.environments && {
-        environments: params.environments.split(",").map((s) => s.trim()),
-      }),
-      ...(params.commit_shas && {
-        commitShas: params.commit_shas.split(",").map((s) => s.trim()),
-      }),
-      ...(params.attribute_key && { attributeKey: params.attribute_key }),
-      ...(params.attribute_value && { attributeValue: params.attribute_value }),
+      ...(args.service_name && { serviceName: args.service_name }),
+      ...(args.span_name && { spanName: args.span_name }),
+      ...(args.root_spans_only && { rootSpansOnly: args.root_spans_only }),
+      ...(args.environments && { environments: splitCsv(args.environments) }),
+      ...(args.commit_shas && { commitShas: splitCsv(args.commit_shas) }),
+      ...(attributeKey && { attributeKey }),
+      ...(attributeValue && { attributeValue }),
     }
-    const metric = (params.metric ?? "count") as QuerySpec["metric"]
     const hasFilters = Object.keys(filters).length > 0
 
-    if (kind === "timeseries") {
+    if (args.kind === "timeseries") {
       return {
         spec: {
           kind: "timeseries",
           source: "traces",
-          metric: metric as any,
-          groupBy: (params.group_by ?? "none") as any,
+          metric: args.metric ?? "count",
+          groupBy: args.group_by ?? "none",
           ...(hasFilters && { filters }),
-          ...(params.bucket_seconds && { bucketSeconds: params.bucket_seconds }),
+          ...(args.bucket_seconds && { bucketSeconds: args.bucket_seconds }),
         },
       }
     }
-    const groupBy = params.group_by && params.group_by !== "none" ? params.group_by : "service"
+
     return {
       spec: {
         kind: "breakdown",
         source: "traces",
-        metric: metric as any,
-        groupBy: groupBy as any,
+        metric: args.metric ?? "count",
+        groupBy: args.group_by ?? "service",
         ...(hasFilters && { filters }),
-        ...(params.limit && { limit: params.limit }),
+        ...(args.limit && { limit: args.limit }),
       },
     }
   }
 
-  if (source === "logs") {
+  if (args.source === "logs") {
     const filters: LogsFilters = {
-      ...(params.service_name && { serviceName: params.service_name }),
-      ...(params.severity && { severity: params.severity }),
+      ...(args.service_name && { serviceName: args.service_name }),
+      ...(args.severity && { severity: args.severity }),
     }
     const hasFilters = Object.keys(filters).length > 0
 
-    if (kind === "timeseries") {
+    if (args.kind === "timeseries") {
       return {
         spec: {
           kind: "timeseries",
           source: "logs",
           metric: "count",
-          groupBy: (params.group_by ?? "none") as any,
+          groupBy: args.group_by ?? "none",
           ...(hasFilters && { filters }),
-          ...(params.bucket_seconds && { bucketSeconds: params.bucket_seconds }),
+          ...(args.bucket_seconds && { bucketSeconds: args.bucket_seconds }),
         },
       }
     }
-    const groupBy = params.group_by && params.group_by !== "none" ? params.group_by : "service"
+
     return {
       spec: {
         kind: "breakdown",
         source: "logs",
         metric: "count",
-        groupBy: groupBy as any,
+        groupBy: args.group_by ?? "service",
         ...(hasFilters && { filters }),
-        ...(params.limit && { limit: params.limit }),
+        ...(args.limit && { limit: args.limit }),
       },
     }
   }
 
-  // source === "metrics"
-  if (!params.metric_name) return { error: "metric_name is required when source='metrics'" }
-  if (!params.metric_type) return { error: "metric_type is required when source='metrics'" }
-
   const filters: MetricsFilters = {
-    metricName: params.metric_name,
-    metricType: params.metric_type as any,
-    ...(params.service_name && { serviceName: params.service_name }),
+    metricName: args.metric_name,
+    metricType: args.metric_type,
+    ...(args.service_name && { serviceName: args.service_name }),
   }
-  const metric = params.metric ?? "avg"
 
-  if (kind === "timeseries") {
+  if (args.kind === "timeseries") {
     return {
       spec: {
         kind: "timeseries",
         source: "metrics",
-        metric: metric as any,
-        groupBy: (params.group_by ?? "none") as any,
+        metric: args.metric ?? "avg",
+        groupBy: args.group_by ?? "none",
         filters,
-        ...(params.bucket_seconds && { bucketSeconds: params.bucket_seconds }),
+        ...(args.bucket_seconds && { bucketSeconds: args.bucket_seconds }),
       },
     }
   }
+
   return {
     spec: {
       kind: "breakdown",
       source: "metrics",
-      metric: (["avg", "sum", "count"].includes(metric) ? metric : "avg") as any,
+      metric: args.metric ?? "avg",
       groupBy: "service",
       filters,
-      ...(params.limit && { limit: params.limit }),
+      ...(args.limit && { limit: args.limit }),
     },
   }
 }
@@ -185,6 +322,21 @@ function formatQueryResult(
 ): McpToolResult {
   const result = response.result
   const metricLabel = metric ?? (source === "metrics" ? "avg" : "count")
+  const structuredResult = result.kind === "timeseries"
+    ? {
+        kind: "timeseries" as const,
+        data: result.data.map((point) => ({
+          bucket: point.bucket,
+          series: { ...point.series },
+        })),
+      }
+    : {
+        kind: "breakdown" as const,
+        data: result.data.map((item) => ({
+          name: item.name,
+          value: item.value,
+        })),
+      }
 
   const structuredData = {
     tool: "query_data" as const,
@@ -194,7 +346,7 @@ function formatQueryResult(
       kind,
       metric: metricLabel,
       groupBy,
-      result: result as any,
+      result: structuredResult,
     },
   }
 
@@ -204,19 +356,18 @@ function formatQueryResult(
   ]
 
   if (result.kind === "timeseries") {
-    const data = result.data as Array<{ bucket: string; series: Record<string, number> }>
-    if (data.length === 0) {
+    if (result.data.length === 0) {
       lines.push("", "No data points found.")
       return { content: createDualContent(lines.join("\n"), structuredData) }
     }
 
-    const seriesKeys = [...new Set(data.flatMap((d) => Object.keys(d.series)))]
+    const seriesKeys = [...new Set(result.data.flatMap((point) => Object.keys(point.series)))]
     if (seriesKeys.length === 0) seriesKeys.push("value")
 
-    lines.push(`Data points: ${data.length}`, "")
+    lines.push(`Data points: ${result.data.length}`, "")
 
     const headers = ["Bucket", ...seriesKeys]
-    const rows = data.map((point) => [
+    const rows = result.data.map((point) => [
       formatBucket(point.bucket),
       ...seriesKeys.map((key) =>
         formatMetricValue(metricLabel, point.series[key] ?? 0),
@@ -227,124 +378,62 @@ function formatQueryResult(
     return { content: createDualContent(lines.join("\n"), structuredData) }
   }
 
-  if (result.kind === "breakdown") {
-    const data = result.data as Array<{ name: string; value: number }>
-    if (data.length === 0) {
-      lines.push("", "No data found.")
-      return { content: createDualContent(lines.join("\n"), structuredData) }
-    }
-
-    if (groupBy) lines.push(`Grouped by: ${groupBy}`)
-    lines.push("")
-
-    const headers = ["Name", metricLabel]
-    const rows = data.map((item) => [
-      item.name,
-      formatMetricValue(metricLabel, item.value),
-    ])
-
-    lines.push(formatTable(headers, rows))
+  if (result.data.length === 0) {
+    lines.push("", "No data found.")
     return { content: createDualContent(lines.join("\n"), structuredData) }
   }
 
-  lines.push("", "Unexpected result format.")
-  return { content: [{ type: "text", text: lines.join("\n") }] }
+  if (groupBy) lines.push(`Grouped by: ${groupBy}`)
+  lines.push("")
+
+  const headers = ["Name", metricLabel]
+  const rows = result.data.map((item) => [
+    item.name,
+    formatMetricValue(metricLabel, item.value),
+  ])
+
+  lines.push(formatTable(headers, rows))
+  return { content: createDualContent(lines.join("\n"), structuredData) }
+}
+
+function toInvalidQuerySpecMessage(error: ParseResult.ParseError): string {
+  return `Invalid query specification:\n${ParseResult.TreeFormatter.formatErrorSync(error)}`
 }
 
 export function registerQueryDataTool(server: McpToolRegistrar) {
   server.tool(
     "query_data",
-    "Execute a structured observability query against traces, logs, or metrics. " +
-      "Supports timeseries (bucketed over time) and breakdown (grouped aggregations) queries. " +
-      "For traces: metric can be count, avg_duration, p50_duration, p95_duration, p99_duration, error_rate. " +
-      "For logs: metric is always count. " +
-      "For metrics: metric can be avg, sum, min, max, count (requires metric_name and metric_type). " +
-      "Timeseries auto-computes bucket size targeting ~40 data points if bucket_seconds is omitted.",
-    {
-      source: requiredStringParam("Data source: 'traces', 'logs', or 'metrics'"),
-      kind: requiredStringParam("Query type: 'timeseries' or 'breakdown'"),
-      start_time: optionalStringParam("Start time (YYYY-MM-DD HH:mm:ss). Defaults to 1 hour ago"),
-      end_time: optionalStringParam("End time (YYYY-MM-DD HH:mm:ss). Defaults to now"),
-      metric: optionalStringParam(
-        "Metric to compute. " +
-          "Traces: count, avg_duration, p50_duration, p95_duration, p99_duration, error_rate (default: count). " +
-          "Logs: always count. " +
-          "Metrics: avg, sum, min, max, count (default: avg)",
-      ),
-      group_by: optionalStringParam(
-        "Grouping dimension. " +
-          "Traces: service, span_name, status_code, http_method, attribute, none. " +
-          "Logs: service, severity, none. " +
-          "Metrics: service, none. " +
-          "Breakdown queries default to 'service' if omitted",
-      ),
-      bucket_seconds: optionalNumberParam("Bucket size in seconds for timeseries (auto-computed if omitted)"),
-      limit: optionalNumberParam("Max breakdown rows (default 10, max 100)"),
-      service_name: optionalStringParam("Filter by service name"),
-      span_name: optionalStringParam("Filter by span name (traces only)"),
-      root_spans_only: optionalBooleanParam("Only root spans (traces only)"),
-      environments: optionalStringParam("Comma-separated environments (traces only)"),
-      commit_shas: optionalStringParam("Comma-separated commit SHAs (traces only)"),
-      attribute_key: optionalStringParam("Attribute key for filtering/grouping (traces only)"),
-      attribute_value: optionalStringParam("Attribute value filter (traces only, requires attribute_key)"),
-      severity: optionalStringParam("Severity filter (logs only, e.g. ERROR, WARN)"),
-      metric_name: optionalStringParam("Metric name (required when source='metrics')"),
-      metric_type: optionalStringParam(
-        "Metric type: sum, gauge, histogram, exponential_histogram (required when source='metrics')",
-      ),
-    },
+    queryDataToolDescription,
+    queryDataArgsSchema,
     (params) =>
       Effect.gen(function* () {
-        const source = params.source as "traces" | "logs" | "metrics"
-        const kind = params.kind as "timeseries" | "breakdown"
-
-        if (!["traces", "logs", "metrics"].includes(source)) {
-          return {
-            isError: true,
-            content: [{ type: "text" as const, text: "Invalid source. Must be 'traces', 'logs', or 'metrics'." }],
-          }
-        }
-        if (!["timeseries", "breakdown"].includes(kind)) {
-          return {
-            isError: true,
-            content: [{ type: "text" as const, text: "Invalid kind. Must be 'timeseries' or 'breakdown'." }],
-          }
-        }
-
         const { startTime, endTime } = defaultTimeRange(1)
         const st = params.start_time ?? startTime
         const et = params.end_time ?? endTime
 
-        const query = buildQuerySpec(source, kind, params as FlatParams)
+        const query = buildQuerySpec(params)
         if ("error" in query) {
           return {
             isError: true,
-            content: [{ type: "text" as const, text: query.error }],
+            content: [{ type: "text", text: query.error }],
           }
         }
 
-        const tenant = yield* Effect.gen(function* () {
-          const req = yield* HttpServerRequest.HttpServerRequest
-          const nativeReq = yield* HttpServerRequest.toWeb(req)
-          return yield* Effect.tryPromise({
-            try: () => resolveMcpTenantContext(nativeReq),
-            catch: (error) =>
-              new McpTenantError({
-                message: error instanceof Error ? error.message : String(error),
-              }),
-          })
-        }).pipe(
-          Effect.catchTag("RequestError", (error) =>
-            Effect.fail(new McpTenantError({ message: error.message })),
-          ),
-        )
+        const decodedQuery = querySpecDecoder(query.spec)
+        if (decodedQuery._tag === "Left") {
+          return {
+            isError: true,
+            content: [{ type: "text", text: toInvalidQuerySpecMessage(decodedQuery.left) }],
+          }
+        }
 
+        const tenant = yield* resolveTenant
         const exit = yield* Effect.promise(() =>
           QueryEngineRuntime.runPromiseExit(
             QueryEngineService.execute(tenant, {
               startTime: st,
               endTime: et,
-              query: query.spec,
+              query: decodedQuery.right,
             }),
           ),
         )
@@ -356,16 +445,25 @@ export function registerQueryDataTool(server: McpToolRegistrar) {
             const details = tagged.details ? `\n${tagged.details.join("\n")}` : ""
             return {
               isError: true,
-              content: [{ type: "text" as const, text: `${tagged._tag}: ${tagged.message}${details}` }],
+              content: [{ type: "text", text: `${tagged._tag}: ${tagged.message}${details}` }],
             }
           }
+
           return {
             isError: true,
-            content: [{ type: "text" as const, text: "Query execution failed unexpectedly." }],
+            content: [{ type: "text", text: "Query execution failed unexpectedly." }],
           }
         }
 
-        return formatQueryResult(exit.value, source, kind, params.metric, st, et, params.group_by)
+        return formatQueryResult(
+          exit.value,
+          params.source,
+          params.kind,
+          params.metric,
+          st,
+          et,
+          "group_by" in params ? params.group_by : undefined,
+        )
       }),
   )
 }

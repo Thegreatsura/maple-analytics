@@ -19,7 +19,7 @@ import type { McpToolError, McpToolRegistrar, McpToolResult } from "./tools/type
 interface ToolDefinition {
   readonly name: string
   readonly description: string
-  readonly schema: Schema.Struct.Fields
+  readonly schema: Schema.Schema.AnyNoContext
   readonly handler: (params: unknown) => Effect.Effect<McpToolResult, McpToolError, any>
 }
 
@@ -41,9 +41,29 @@ const toCallToolResult = (result: McpToolResult): typeof McpSchema.CallToolResul
     })),
   })
 
-const toInputSchema = (shape: Schema.Struct.Fields): Record<string, unknown> => {
-  const { $schema, ...schema } = JSONSchema.make(Schema.Struct(shape))
-  return schema
+const toInputSchema = (schema: Schema.Schema.AnyNoContext): Record<string, unknown> => {
+  const { $schema, ...jsonSchema } = JSONSchema.make(schema)
+  return jsonSchema
+}
+
+const toDecodeErrorMessage = (definition: ToolDefinition, error: ParseResult.ParseError): string => {
+  const base = ParseResult.TreeFormatter.formatErrorSync(error)
+
+  if (definition.name !== "query_data") {
+    return base
+  }
+
+  return [
+    base,
+    "Supported combinations:",
+    "- traces timeseries: metric=count|avg_duration|p50_duration|p95_duration|p99_duration|error_rate, group_by=service|span_name|status_code|http_method|attribute|none",
+    "- traces breakdown: metric=count|avg_duration|p50_duration|p95_duration|p99_duration|error_rate, group_by=service|span_name|status_code|http_method|attribute",
+    "- logs timeseries: metric=count, group_by=service|severity|none",
+    "- logs breakdown: metric=count, group_by=service|severity",
+    "- metrics timeseries: metric=avg|sum|min|max|count, group_by=service|none",
+    "- metrics breakdown: metric=avg|sum|count, group_by=service",
+    "Use `list_metrics` first to discover `metric_name` and `metric_type`.",
+  ].join("\n")
 }
 
 const collectToolDefinitions = (): ReadonlyArray<ToolDefinition> => {
@@ -81,8 +101,7 @@ export const McpToolsLive = Layer.effectDiscard(
     const server = yield* EffectMcpServer.McpServer
 
     for (const definition of toolDefinitions) {
-      const parameterSchema = Schema.Struct(definition.schema)
-      const decode = Schema.validateEither(parameterSchema)
+      const decode = Schema.validateEither(definition.schema)
 
       yield* server.addTool({
         tool: new McpSchema.Tool({
@@ -94,7 +113,7 @@ export const McpToolsLive = Layer.effectDiscard(
           const decoded = decode(payload)
 
           if (decoded._tag === "Left") {
-            const errorMessage = ParseResult.TreeFormatter.formatErrorSync(decoded.left)
+            const errorMessage = toDecodeErrorMessage(definition, decoded.left)
             return Effect.logWarning("Invalid parameters").pipe(
               Effect.annotateLogs({ error: errorMessage }),
               Effect.as(

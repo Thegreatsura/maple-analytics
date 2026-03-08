@@ -7,19 +7,19 @@ import { queryTinybird } from "../lib/query-tinybird"
 import { getSpamPatternsParam } from "@/lib/spam-patterns"
 import { defaultTimeRange } from "../lib/time"
 import { formatNumber, formatTable } from "../lib/format"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
 
 export function registerFindErrorsTool(server: McpToolRegistrar) {
   server.tool(
     "find_errors",
     "Find and categorize errors by type, with counts, affected services, and timestamps.",
-    {
+    Schema.Struct({
       start_time: optionalStringParam("Start of time range (YYYY-MM-DD HH:mm:ss)"),
       end_time: optionalStringParam("End of time range (YYYY-MM-DD HH:mm:ss)"),
       service: optionalStringParam("Filter to a specific service"),
       limit: optionalNumberParam("Max results (default 20)"),
-    },
+    }),
     ({ start_time, end_time, service, limit }) =>
       Effect.gen(function* () {
         const { startTime, endTime } = defaultTimeRange(1)

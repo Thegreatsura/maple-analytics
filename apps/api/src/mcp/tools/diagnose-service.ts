@@ -7,18 +7,18 @@ import { queryTinybird } from "../lib/query-tinybird"
 import { getSpamPatternsParam } from "@/lib/spam-patterns"
 import { defaultTimeRange } from "../lib/time"
 import { formatDurationFromMs, formatPercent, formatNumber, truncate } from "../lib/format"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
 
 export function registerDiagnoseServiceTool(server: McpToolRegistrar) {
   server.tool(
     "diagnose_service",
     "Deep investigation of a single service: health metrics, top errors, recent logs, slow traces, and Apdex score.",
-    {
+    Schema.Struct({
       service_name: requiredStringParam("The service name to diagnose"),
       start_time: optionalStringParam("Start of time range (YYYY-MM-DD HH:mm:ss)"),
       end_time: optionalStringParam("End of time range (YYYY-MM-DD HH:mm:ss)"),
-    },
+    }),
     ({ service_name, start_time, end_time }) =>
       Effect.gen(function* () {
         const { startTime, endTime } = defaultTimeRange(1)

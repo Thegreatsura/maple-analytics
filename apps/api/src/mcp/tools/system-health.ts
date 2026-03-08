@@ -6,17 +6,17 @@ import { queryTinybird } from "../lib/query-tinybird"
 import { getSpamPatternsParam } from "@/lib/spam-patterns"
 import { defaultTimeRange } from "../lib/time"
 import { formatPercent, formatDurationFromMs, formatNumber } from "../lib/format"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
 
 export function registerSystemHealthTool(server: McpToolRegistrar) {
   server.tool(
     "system_health",
     "Get an overall health snapshot of the system: error rate, active services, latency stats, and top errors.",
-    {
+    Schema.Struct({
       start_time: optionalStringParam("Start of time range (YYYY-MM-DD HH:mm:ss)"),
       end_time: optionalStringParam("End of time range (YYYY-MM-DD HH:mm:ss)"),
-    },
+    }),
     ({ start_time, end_time }) =>
       Effect.gen(function* () {
         const { startTime, endTime } = defaultTimeRange(1)

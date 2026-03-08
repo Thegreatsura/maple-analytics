@@ -6,7 +6,7 @@ import {
 import { queryTinybird } from "../lib/query-tinybird"
 import { defaultTimeRange } from "../lib/time"
 import { formatDurationMs, formatDurationFromMs, formatTable } from "../lib/format"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
 
 const SYSTEM_SPAN_PATTERNS = ["ClusterCron"]
@@ -19,12 +19,12 @@ export function registerFindSlowTracesTool(server: McpToolRegistrar) {
   server.tool(
     "find_slow_traces",
     "Find the slowest traces with percentile context (P50, P95 benchmarks).",
-    {
+    Schema.Struct({
       start_time: optionalStringParam("Start of time range (YYYY-MM-DD HH:mm:ss)"),
       end_time: optionalStringParam("End of time range (YYYY-MM-DD HH:mm:ss)"),
       service: optionalStringParam("Filter by service name"),
       limit: optionalNumberParam("Max results (default 10)"),
-    },
+    }),
     ({ start_time, end_time, service, limit }) =>
       Effect.gen(function* () {
         const { startTime, endTime } = defaultTimeRange(1)

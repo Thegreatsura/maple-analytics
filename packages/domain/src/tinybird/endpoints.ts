@@ -2308,6 +2308,7 @@ export const customTracesTimeseries = defineEndpoint("custom_traces_timeseries",
     group_by_service: p.string().optional().describe("Group by ServiceName"),
     group_by_span_name: p.string().optional().describe("Group by SpanName"),
     group_by_status_code: p.string().optional().describe("Group by StatusCode"),
+    group_by_http_method: p.string().optional().describe("Group by http.method"),
     root_only: p.string().optional().describe("Filter to root spans only"),
     environments: p.string().optional().describe("Comma-separated environments filter"),
     commit_shas: p.string().optional().describe("Comma-separated commit SHA filter"),
@@ -2329,6 +2330,8 @@ export const customTracesTimeseries = defineEndpoint("custom_traces_timeseries",
             SpanName
           {% elif defined(group_by_status_code) %}
             StatusCode
+          {% elif defined(group_by_http_method) %}
+            SpanAttributes['http.method']
           {% elif defined(group_by_attribute) %}
             SpanAttributes[{{String(group_by_attribute)}}]
           {% else %}

@@ -6,21 +6,21 @@ import {
 import { queryTinybird } from "../lib/query-tinybird"
 import { defaultTimeRange } from "../lib/time"
 import { formatNumber, formatTable } from "../lib/format"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
 
 export function registerListMetricsTool(server: McpToolRegistrar) {
   server.tool(
     "list_metrics",
     "Discover available metrics with type, service, description, and data point counts.",
-    {
+    Schema.Struct({
       start_time: optionalStringParam("Start of time range (YYYY-MM-DD HH:mm:ss)"),
       end_time: optionalStringParam("End of time range (YYYY-MM-DD HH:mm:ss)"),
       service: optionalStringParam("Filter by service name"),
       search: optionalStringParam("Search in metric name"),
       metric_type: optionalStringParam("Filter by type (sum, gauge, histogram, exponential_histogram)"),
       limit: optionalNumberParam("Max results (default 50)"),
-    },
+    }),
     ({ start_time, end_time, service, search, metric_type, limit }) =>
       Effect.gen(function* () {
         const { startTime, endTime } = defaultTimeRange(1)

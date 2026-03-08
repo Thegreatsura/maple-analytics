@@ -6,14 +6,14 @@ import {
 import { queryTinybird } from "../lib/query-tinybird"
 import { defaultTimeRange } from "../lib/time"
 import { truncate, formatNumber } from "../lib/format"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
 
 export function registerSearchLogsTool(server: McpToolRegistrar) {
   server.tool(
     "search_logs",
     "Search and filter logs by service, severity, time range, or body text.",
-    {
+    Schema.Struct({
       start_time: optionalStringParam("Start of time range (YYYY-MM-DD HH:mm:ss)"),
       end_time: optionalStringParam("End of time range (YYYY-MM-DD HH:mm:ss)"),
       service: optionalStringParam("Filter by service name"),
@@ -21,7 +21,7 @@ export function registerSearchLogsTool(server: McpToolRegistrar) {
       search: optionalStringParam("Search text in log body"),
       trace_id: optionalStringParam("Filter by trace ID"),
       limit: optionalNumberParam("Max results (default 30)"),
-    },
+    }),
     ({ start_time, end_time, service, severity, search, trace_id, limit }) =>
       Effect.gen(function* () {
         const { startTime, endTime } = defaultTimeRange(1)

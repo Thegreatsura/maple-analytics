@@ -60,7 +60,7 @@ const MCP_TOOLS = [
   {
     name: "query_data",
     description:
-      "Execute structured observability queries against traces, logs, or metrics with timeseries and breakdown support.",
+      "Execute supported structured queries across traces, logs, and metrics. Use list_metrics first for metric_name and metric_type; metrics breakdown supports avg, sum, and count grouped by service.",
   },
 ] as const
 

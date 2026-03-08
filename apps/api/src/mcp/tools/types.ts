@@ -19,11 +19,11 @@ export interface McpToolResult {
 }
 
 export interface McpToolRegistrar {
-  tool<TFields extends Schema.Struct.Fields>(
+  tool<TSchema extends Schema.Schema.AnyNoContext>(
     name: string,
     description: string,
-    schema: TFields,
-    handler: (params: Schema.Struct.Type<TFields>) => Effect.Effect<McpToolResult, McpToolError, any>,
+    schema: TSchema,
+    handler: (params: Schema.Schema.Type<TSchema>) => Effect.Effect<McpToolResult, McpToolError, any>,
   ): void
 }
 

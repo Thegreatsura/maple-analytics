@@ -292,6 +292,26 @@ function TraceDetailPage() {
                 {hasError ? "Error" : "OK"}
               </Badge>
 
+              {rootHttpInfo?.statusCode != null && (
+                <>
+                  <span className="ml-4 text-xs text-muted-foreground">HTTP:</span>
+                  <Badge
+                    variant="secondary"
+                    className={
+                      rootHttpInfo.statusCode >= 500
+                        ? "bg-red-500/10 text-red-600 dark:bg-red-400/10 dark:text-red-400"
+                        : rootHttpInfo.statusCode >= 400
+                          ? "bg-amber-500/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-400"
+                          : rootHttpInfo.statusCode >= 300
+                            ? "bg-blue-500/10 text-blue-600 dark:bg-blue-400/10 dark:text-blue-400"
+                            : "bg-green-500/10 text-green-600 dark:bg-green-400/10 dark:text-green-400"
+                    }
+                  >
+                    {rootHttpInfo.statusCode}
+                  </Badge>
+                </>
+              )}
+
               {deploymentEnv && (
                 <>
                   <span className="ml-4 text-xs text-muted-foreground">Environment:</span>

@@ -8,20 +8,20 @@ import { queryTinybird } from "../lib/query-tinybird"
 import { getSpamPatternsParam } from "@/lib/spam-patterns"
 import { defaultTimeRange } from "../lib/time"
 import { formatDurationMs, truncate } from "../lib/format"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
 
 export function registerErrorDetailTool(server: McpToolRegistrar) {
   server.tool(
     "error_detail",
     "Investigate a specific error type: shows sample traces with their metadata and correlated logs.",
-    {
+    Schema.Struct({
       error_type: requiredStringParam("The error type / StatusMessage to investigate"),
       start_time: optionalStringParam("Start of time range (YYYY-MM-DD HH:mm:ss)"),
       end_time: optionalStringParam("End of time range (YYYY-MM-DD HH:mm:ss)"),
       service: optionalStringParam("Filter by service name"),
       limit: optionalNumberParam("Max sample traces (default 5)"),
-    },
+    }),
     ({ error_type, start_time, end_time, service, limit }) =>
       Effect.gen(function* () {
         const { startTime, endTime } = defaultTimeRange(1)

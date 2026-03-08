@@ -55,6 +55,25 @@ function StatusBadge({ hasError }: { hasError: boolean }) {
   )
 }
 
+function HttpStatusBadge({ statusCode }: { statusCode: number }) {
+  return (
+    <Badge
+      variant="secondary"
+      className={
+        statusCode >= 500
+          ? "bg-red-500/10 text-red-600 dark:bg-red-400/10 dark:text-red-400"
+          : statusCode >= 400
+            ? "bg-amber-500/10 text-amber-600 dark:bg-amber-400/10 dark:text-amber-400"
+            : statusCode >= 300
+              ? "bg-blue-500/10 text-blue-600 dark:bg-blue-400/10 dark:text-blue-400"
+              : "bg-green-500/10 text-green-600 dark:bg-green-400/10 dark:text-green-400"
+      }
+    >
+      {statusCode}
+    </Badge>
+  )
+}
+
 interface TracesTableProps {
   filters?: TracesSearchParams
 }
@@ -228,7 +247,11 @@ export function TracesTable({ filters }: TracesTableProps) {
                       {trace.spanCount}
                     </TableCell>
                     <TableCell>
-                      <StatusBadge hasError={trace.hasError} />
+                      {trace.rootSpan.http?.statusCode != null ? (
+                        <HttpStatusBadge statusCode={trace.rootSpan.http.statusCode} />
+                      ) : (
+                        <StatusBadge hasError={trace.hasError} />
+                      )}
                     </TableCell>
                   </TableRow>
                 ))

@@ -25,6 +25,16 @@ interface BucketFillOptions {
   readonly bucketSeconds: number
 }
 
+interface MetricTimeseriesRow {
+  readonly bucket: string | Date
+  readonly serviceName: string
+  readonly avgValue: number
+  readonly minValue: number
+  readonly maxValue: number
+  readonly sumValue: number
+  readonly dataPointCount: number
+}
+
 const MAX_RANGE_SECONDS = 60 * 60 * 24 * 31
 const MAX_TIMESERIES_POINTS = 1_500
 
@@ -201,6 +211,58 @@ function groupTimeSeriesRows<T extends { bucket: string | Date; groupName: strin
   }))
 }
 
+function collapseMetricTimeseriesRows(
+  rows: ReadonlyArray<MetricTimeseriesRow>,
+  metric: QuerySpec["metric"],
+): Array<{ bucket: string; groupName: "all"; value: number }> {
+  const bucketMap = new Map<
+    string,
+    {
+      sumValue: number
+      dataPointCount: number
+      minValue: number
+      maxValue: number
+    }
+  >()
+
+  for (const row of rows) {
+    const bucket = normalizeBucket(row.bucket)
+    const current = bucketMap.get(bucket)
+    if (current) {
+      current.sumValue += Number(row.sumValue)
+      current.dataPointCount += Number(row.dataPointCount)
+      current.minValue = Math.min(current.minValue, Number(row.minValue))
+      current.maxValue = Math.max(current.maxValue, Number(row.maxValue))
+    } else {
+      bucketMap.set(bucket, {
+        sumValue: Number(row.sumValue),
+        dataPointCount: Number(row.dataPointCount),
+        minValue: Number(row.minValue),
+        maxValue: Number(row.maxValue),
+      })
+    }
+  }
+
+  return [...bucketMap.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([bucket, value]) => ({
+      bucket,
+      groupName: "all" as const,
+      value:
+        metric === "count"
+          ? value.dataPointCount
+          : metric === "sum"
+            ? value.sumValue
+            : metric === "min"
+              ? value.minValue
+              : metric === "max"
+                ? value.maxValue
+                : value.dataPointCount > 0
+                  ? value.sumValue / value.dataPointCount
+                  : 0,
+    }))
+}
+
 const validate = Effect.fn("QueryEngineService.validate")(function* (
   request: QueryEngineExecuteRequest,
 ): Effect.fn.Return<TimeRangeBounds, QueryEngineValidationError> {
@@ -273,6 +335,7 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
           group_by_service: request.query.groupBy === "service" ? "1" : undefined,
           group_by_span_name: request.query.groupBy === "span_name" ? "1" : undefined,
           group_by_status_code: request.query.groupBy === "status_code" ? "1" : undefined,
+          group_by_http_method: request.query.groupBy === "http_method" ? "1" : undefined,
           group_by_attribute:
             request.query.groupBy === "attribute"
               ? request.query.filters?.attributeKey
@@ -355,12 +418,13 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
         count: "dataPointCount",
       } as const
       const valueField = metricValueField[request.query.metric]
-
-      return {
-        result: {
-          kind: "timeseries",
-          source: "metrics",
-          data: groupTimeSeriesRows(
+      const data = request.query.groupBy === "none"
+        ? groupTimeSeriesRows(
+            collapseMetricTimeseriesRows(result as Array<MetricTimeseriesRow>, request.query.metric),
+            (row) => row.value,
+            fillOptions,
+          )
+        : groupTimeSeriesRows(
             result.map((row) => ({
               bucket: row.bucket,
               groupName: row.serviceName,
@@ -368,7 +432,13 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
             })),
             (row) => row.value,
             fillOptions,
-          ),
+          )
+
+      return {
+        result: {
+          kind: "timeseries",
+          source: "metrics",
+          data,
         },
       }
     }

@@ -7,14 +7,14 @@ import {
 import { queryTinybird } from "../lib/query-tinybird"
 import { defaultTimeRange } from "../lib/time"
 import { formatDurationMs, formatTable } from "../lib/format"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
 
 export function registerSearchTracesTool(server: McpToolRegistrar) {
   server.tool(
     "search_traces",
     "Search and filter traces by service, duration, error status, HTTP method, and more.",
-    {
+    Schema.Struct({
       start_time: optionalStringParam("Start of time range (YYYY-MM-DD HH:mm:ss)"),
       end_time: optionalStringParam("End of time range (YYYY-MM-DD HH:mm:ss)"),
       service: optionalStringParam("Filter by service name"),
@@ -24,7 +24,7 @@ export function registerSearchTracesTool(server: McpToolRegistrar) {
       http_method: optionalStringParam("Filter by HTTP method (GET, POST, etc.)"),
       span_name: optionalStringParam("Filter by root span name"),
       limit: optionalNumberParam("Max results (default 20)"),
-    },
+    }),
     (params) =>
       Effect.gen(function* () {
         const { startTime, endTime } = defaultTimeRange(1)

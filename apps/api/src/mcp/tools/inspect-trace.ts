@@ -4,7 +4,7 @@ import {
 } from "./types"
 import { queryTinybird } from "../lib/query-tinybird"
 import { formatDurationFromMs, truncate } from "../lib/format"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
 
 interface SpanNode {
@@ -22,9 +22,9 @@ export function registerInspectTraceTool(server: McpToolRegistrar) {
   server.tool(
     "inspect_trace",
     "Deep-dive into a trace: shows the full span tree with durations and status, plus correlated logs.",
-    {
+    Schema.Struct({
       trace_id: requiredStringParam("The trace ID to inspect"),
-    },
+    }),
     ({ trace_id }) =>
       Effect.gen(function* () {
         const [spansResult, logsResult] = yield* Effect.all(
