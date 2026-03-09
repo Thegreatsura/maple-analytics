@@ -3,7 +3,7 @@ import type { IconProps } from "./icon"
 function RocketIcon({ size = 24, className, ...props }: IconProps) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-      width={size} height={size} className={className} fill="none" {...props}>
+      width={size} height={size} className={className} fill="none" aria-hidden="true" {...props}>
       <path d="m10.001,7h-3.038c-.608,0-1.183.277-1.563.752l-3.602,4.51,4.553,1.089" stroke="currentColor" strokeMiterlimit="10" strokeWidth="2" />
       <path d="m17,13.999v3.038c0,.608-.277,1.183-.752,1.563l-4.51,3.602-1.089-4.553" stroke="currentColor" strokeMiterlimit="10" strokeWidth="2" />
       <circle cx="15.5" cy="8.5" r=".5" fill="currentColor" stroke="currentColor" strokeLinecap="square" strokeMiterlimit="10" strokeWidth="2" />

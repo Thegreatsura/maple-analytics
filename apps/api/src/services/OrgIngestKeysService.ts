@@ -1,9 +1,12 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto"
+import { randomBytes } from "node:crypto"
 import { SqliteDrizzle } from "@effect/sql-drizzle/Sqlite"
 import {
+  IsoDateTimeString,
   IngestKeyEncryptionError,
+  OrgId,
   IngestKeyPersistenceError,
   IngestKeysResponse,
+  UserId,
 } from "@maple/domain/http"
 import {
   createIngestKeyId,
@@ -14,15 +17,15 @@ import {
   type ResolvedIngestKey,
 } from "@maple/db"
 import { eq } from "drizzle-orm"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Option, Redacted, Schema } from "effect"
+import {
+  decryptAes256Gcm,
+  encryptAes256Gcm,
+  parseBase64Aes256GcmKey,
+  type EncryptedValue,
+} from "./Crypto"
 import { DatabaseLive } from "./DatabaseLive"
 import { Env } from "./Env"
-
-interface EncryptedPrivateKey {
-  readonly ciphertext: string
-  readonly iv: string
-  readonly tag: string
-}
 
 const toPersistenceError = (error: unknown) =>
   new IngestKeyPersistenceError({
@@ -33,32 +36,21 @@ const toPersistenceError = (error: unknown) =>
 const toEncryptionError = (message: string) =>
   new IngestKeyEncryptionError({ message })
 
+const decodeOrgIdSync = Schema.decodeUnknownSync(OrgId)
+const decodeIsoDateTimeStringSync = Schema.decodeUnknownSync(IsoDateTimeString)
+
 const parseEncryptionKey = (
   raw: string,
 ): Effect.Effect<Buffer, IngestKeyEncryptionError> =>
-  Effect.try({
-    try: () => {
-      const trimmed = raw.trim()
-      if (trimmed.length === 0) {
-        throw new Error("MAPLE_INGEST_KEY_ENCRYPTION_KEY is required")
-      }
-
-      const decoded = Buffer.from(trimmed, "base64")
-      if (decoded.length !== 32) {
-        throw new Error(
-          "MAPLE_INGEST_KEY_ENCRYPTION_KEY must be base64 for exactly 32 bytes",
-        )
-      }
-
-      return decoded
-    },
-    catch: (error) =>
-      toEncryptionError(
-        error instanceof Error
-          ? error.message
-          : "Invalid ingest key encryption key",
-      ),
-  })
+  parseBase64Aes256GcmKey(raw, (message) =>
+    toEncryptionError(
+      message === "Expected a non-empty base64 encryption key"
+        ? "MAPLE_INGEST_KEY_ENCRYPTION_KEY is required"
+        : message === "Expected base64 for exactly 32 bytes"
+          ? "MAPLE_INGEST_KEY_ENCRYPTION_KEY must be base64 for exactly 32 bytes"
+          : message,
+    ),
+  )
 
 const parseLookupHmacKey = (
   raw: string,
@@ -76,52 +68,18 @@ const parseLookupHmacKey = (
 const encryptPrivateKey = (
   plaintext: string,
   encryptionKey: Buffer,
-): Effect.Effect<EncryptedPrivateKey, IngestKeyEncryptionError> =>
-  Effect.try({
-    try: () => {
-      const iv = randomBytes(12)
-      const cipher = createCipheriv("aes-256-gcm", encryptionKey, iv)
-      const ciphertext = Buffer.concat([
-        cipher.update(plaintext, "utf8"),
-        cipher.final(),
-      ])
-
-      return {
-        ciphertext: ciphertext.toString("base64"),
-        iv: iv.toString("base64"),
-        tag: cipher.getAuthTag().toString("base64"),
-      }
-    },
-    catch: (error) =>
-      toEncryptionError(
-        error instanceof Error
-          ? error.message
-          : "Failed to encrypt private ingest key",
-      ),
-  })
+): Effect.Effect<EncryptedValue, IngestKeyEncryptionError> =>
+  encryptAes256Gcm(plaintext, encryptionKey, () =>
+    toEncryptionError("Failed to encrypt private ingest key"),
+  )
 
 const decryptPrivateKey = (
-  encrypted: EncryptedPrivateKey,
+  encrypted: EncryptedValue,
   encryptionKey: Buffer,
 ): Effect.Effect<string, IngestKeyEncryptionError> =>
-  Effect.try({
-    try: () => {
-      const decipher = createDecipheriv(
-        "aes-256-gcm",
-        encryptionKey,
-        Buffer.from(encrypted.iv, "base64"),
-      )
-      decipher.setAuthTag(Buffer.from(encrypted.tag, "base64"))
-
-      const plaintext = Buffer.concat([
-        decipher.update(Buffer.from(encrypted.ciphertext, "base64")),
-        decipher.final(),
-      ])
-
-      return plaintext.toString("utf8")
-    },
-    catch: () => toEncryptionError("Failed to decrypt private ingest key"),
-  })
+  decryptAes256Gcm(encrypted, encryptionKey, () =>
+    toEncryptionError("Failed to decrypt private ingest key"),
+  )
 
 const generatePublicKey = () => `maple_pk_${randomBytes(24).toString("base64url")}`
 const generatePrivateKey = () => `maple_sk_${randomBytes(24).toString("base64url")}`
@@ -135,14 +93,14 @@ export class OrgIngestKeysService extends Effect.Service<OrgIngestKeysService>()
       const db = yield* SqliteDrizzle
       const env = yield* Env
       const encryptionKey = yield* parseEncryptionKey(
-        env.MAPLE_INGEST_KEY_ENCRYPTION_KEY,
+        Redacted.value(env.MAPLE_INGEST_KEY_ENCRYPTION_KEY),
       )
       const lookupHmacKey = yield* parseLookupHmacKey(
-        env.MAPLE_INGEST_KEY_LOOKUP_HMAC_KEY,
+        Redacted.value(env.MAPLE_INGEST_KEY_LOOKUP_HMAC_KEY),
       )
 
       const selectRow = Effect.fn("OrgIngestKeysService.selectRow")(function* (
-        orgId: string,
+        orgId: OrgId,
       ) {
         const rows = yield* db
           .select()
@@ -151,7 +109,7 @@ export class OrgIngestKeysService extends Effect.Service<OrgIngestKeysService>()
           .limit(1)
           .pipe(Effect.mapError(toPersistenceError))
 
-        return rows[0]
+        return Option.fromNullable(rows[0])
       })
 
       const toResponse = Effect.fn("OrgIngestKeysService.toResponse")(function* (
@@ -169,17 +127,21 @@ export class OrgIngestKeysService extends Effect.Service<OrgIngestKeysService>()
         return new IngestKeysResponse({
           publicKey: row.publicKey,
           privateKey,
-          publicRotatedAt: new Date(row.publicRotatedAt).toISOString(),
-          privateRotatedAt: new Date(row.privateRotatedAt).toISOString(),
+          publicRotatedAt: decodeIsoDateTimeStringSync(
+            new Date(row.publicRotatedAt).toISOString(),
+          ),
+          privateRotatedAt: decodeIsoDateTimeStringSync(
+            new Date(row.privateRotatedAt).toISOString(),
+          ),
         })
       })
 
       const ensureRow = Effect.fn("OrgIngestKeysService.ensureRow")(function* (
-        orgId: string,
-        userId: string,
+        orgId: OrgId,
+        userId: UserId,
       ) {
         const existing = yield* selectRow(orgId)
-        if (existing) return existing
+        if (Option.isSome(existing)) return existing.value
 
         const now = Date.now()
         const publicKey = generatePublicKey()
@@ -209,7 +171,7 @@ export class OrgIngestKeysService extends Effect.Service<OrgIngestKeysService>()
           .pipe(Effect.mapError(toPersistenceError))
 
         const row = yield* selectRow(orgId)
-        if (!row) {
+        if (Option.isNone(row)) {
           return yield* Effect.fail(
             new IngestKeyPersistenceError({
               message: "Failed to create org ingest keys",
@@ -217,20 +179,20 @@ export class OrgIngestKeysService extends Effect.Service<OrgIngestKeysService>()
           )
         }
 
-        return row
+        return row.value
       })
 
       const getOrCreate = Effect.fn("OrgIngestKeysService.getOrCreate")(function* (
-        orgId: string,
-        userId: string,
+        orgId: OrgId,
+        userId: UserId,
       ) {
         const row = yield* ensureRow(orgId, userId)
         return yield* toResponse(row)
       })
 
       const rerollPublic = Effect.fn("OrgIngestKeysService.rerollPublic")(function* (
-        orgId: string,
-        userId: string,
+        orgId: OrgId,
+        userId: UserId,
       ) {
         yield* ensureRow(orgId, userId)
 
@@ -251,7 +213,7 @@ export class OrgIngestKeysService extends Effect.Service<OrgIngestKeysService>()
           .pipe(Effect.mapError(toPersistenceError))
 
         const row = yield* selectRow(orgId)
-        if (!row) {
+        if (Option.isNone(row)) {
           return yield* Effect.fail(
             new IngestKeyPersistenceError({
               message: "Failed to load rerolled public ingest key",
@@ -259,12 +221,12 @@ export class OrgIngestKeysService extends Effect.Service<OrgIngestKeysService>()
           )
         }
 
-        return yield* toResponse(row)
+        return yield* toResponse(row.value)
       })
 
       const rerollPrivate = Effect.fn("OrgIngestKeysService.rerollPrivate")(function* (
-        orgId: string,
-        userId: string,
+        orgId: OrgId,
+        userId: UserId,
       ) {
         yield* ensureRow(orgId, userId)
 
@@ -288,7 +250,7 @@ export class OrgIngestKeysService extends Effect.Service<OrgIngestKeysService>()
           .pipe(Effect.mapError(toPersistenceError))
 
         const row = yield* selectRow(orgId)
-        if (!row) {
+        if (Option.isNone(row)) {
           return yield* Effect.fail(
             new IngestKeyPersistenceError({
               message: "Failed to load rerolled private ingest key",
@@ -296,14 +258,14 @@ export class OrgIngestKeysService extends Effect.Service<OrgIngestKeysService>()
           )
         }
 
-        return yield* toResponse(row)
+        return yield* toResponse(row.value)
       })
 
       const resolveIngestKey = Effect.fn("OrgIngestKeysService.resolveIngestKey")(function* (
         rawKey: string,
       ) {
         const keyType = inferIngestKeyType(rawKey)
-        if (!keyType) return null
+        if (!keyType) return Option.none()
 
         const keyHash = hashIngestKey(rawKey, lookupHmacKey)
         const rows = yield* db
@@ -317,14 +279,14 @@ export class OrgIngestKeysService extends Effect.Service<OrgIngestKeysService>()
           .limit(1)
           .pipe(Effect.mapError(toPersistenceError))
 
-        const row = rows[0]
-        if (!row) return null
+        const row = Option.fromNullable(rows[0])
+        if (Option.isNone(row)) return Option.none()
 
-        return {
-          orgId: row.orgId,
+        return Option.some({
+          orgId: decodeOrgIdSync(row.value.orgId),
           keyType,
           keyId: createIngestKeyId(keyHash),
-        } satisfies ResolvedIngestKey
+        } satisfies ResolvedIngestKey)
       })
 
       return {

@@ -4,12 +4,14 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { ConfigError } from "effect/ConfigError";
-import { ConfigProvider, Effect, Layer } from "effect";
+import { ConfigProvider, Effect, Layer, Schema } from "effect";
 import { hashCloudflareLogpushSecret } from "@maple/db";
 import {
   CloudflareLogpushEncryptionError,
   CloudflareLogpushNotFoundError,
   CloudflareLogpushValidationError,
+  OrgId,
+  UserId,
 } from "@maple/domain/http";
 import { Env } from "./Env";
 import { CloudflareLogpushService } from "./CloudflareLogpushService";
@@ -73,12 +75,15 @@ const makeLayer = (
     Layer.provide(makeConfigProvider(url, ingestPublicUrl)),
   );
 
+const asOrgId = Schema.decodeUnknownSync(OrgId);
+const asUserId = Schema.decodeUnknownSync(UserId);
+
 describe("CloudflareLogpushService", () => {
   it("creates a connector with encrypted secret and generated setup", async () => {
     const { url, dbPath } = createTempDbUrl();
 
     const result = await Effect.runPromise(
-      CloudflareLogpushService.create("org_a", "user_a", {
+      CloudflareLogpushService.create(asOrgId("org_a"), asUserId("user_a"), {
         name: "Edge requests",
         zoneName: "example.com",
       }).pipe(Effect.provide(makeLayer(url))),
@@ -119,12 +124,12 @@ describe("CloudflareLogpushService", () => {
 
     const result = await Effect.runPromise(
       Effect.gen(function* () {
-        yield* CloudflareLogpushService.create("org_a", "user_a", {
+        yield* CloudflareLogpushService.create(asOrgId("org_a"), asUserId("user_a"), {
           name: "Edge requests",
           zoneName: "example.com",
         });
 
-        return yield* CloudflareLogpushService.list("org_a");
+        return yield* CloudflareLogpushService.list(asOrgId("org_a"));
       }).pipe(Effect.provide(makeLayer(url))),
     );
 
@@ -138,15 +143,15 @@ describe("CloudflareLogpushService", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const created = yield* CloudflareLogpushService.create(
-          "org_a",
-          "user_a",
+          asOrgId("org_a"),
+          asUserId("user_a"),
           {
             name: "Edge requests",
             zoneName: "example.com",
           },
         );
         const setup = yield* CloudflareLogpushService.getSetup(
-          "org_a",
+          asOrgId("org_a"),
           created.connector.id,
         );
 
@@ -165,19 +170,19 @@ describe("CloudflareLogpushService", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const created = yield* CloudflareLogpushService.create(
-          "org_a",
-          "user_a",
+          asOrgId("org_a"),
+          asUserId("user_a"),
           {
             name: "Edge requests",
             zoneName: "example.com",
           },
         );
         const rotated = yield* CloudflareLogpushService.rotateSecret(
-          "org_a",
+          asOrgId("org_a"),
           created.connector.id,
-          "user_b",
+          asUserId("user_b"),
         );
-        const connector = yield* CloudflareLogpushService.list("org_a").pipe(
+        const connector = yield* CloudflareLogpushService.list(asOrgId("org_a")).pipe(
           Effect.map((rows) => rows[0]!),
         );
 
@@ -196,17 +201,17 @@ describe("CloudflareLogpushService", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const created = yield* CloudflareLogpushService.create(
-          "org_a",
-          "user_a",
+          asOrgId("org_a"),
+          asUserId("user_a"),
           {
             name: "Edge requests",
             zoneName: "example.com",
           },
         );
         const updated = yield* CloudflareLogpushService.update(
-          "org_a",
+          asOrgId("org_a"),
           created.connector.id,
-          "user_b",
+          asUserId("user_b"),
           {
             name: "Zone A",
             zoneName: "zone-a.example.com",
@@ -215,7 +220,7 @@ describe("CloudflareLogpushService", () => {
           },
         );
         const setup = yield* CloudflareLogpushService.getSetup(
-          "org_a",
+          asOrgId("org_a"),
           created.connector.id,
         );
 
@@ -236,15 +241,15 @@ describe("CloudflareLogpushService", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const created = yield* CloudflareLogpushService.create(
-          "org_a",
-          "user_a",
+          asOrgId("org_a"),
+          asUserId("user_a"),
           {
             name: "Edge requests",
             zoneName: "example.com",
           },
         );
-        yield* CloudflareLogpushService.delete("org_a", created.connector.id);
-        return yield* CloudflareLogpushService.list("org_a");
+        yield* CloudflareLogpushService.delete(asOrgId("org_a"), created.connector.id);
+        return yield* CloudflareLogpushService.list(asOrgId("org_a"));
       }).pipe(Effect.provide(makeLayer(url))),
     );
 
@@ -257,8 +262,8 @@ describe("CloudflareLogpushService", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const created = yield* CloudflareLogpushService.create(
-          "org_a",
-          "user_a",
+          asOrgId("org_a"),
+          asUserId("user_a"),
           {
             name: "Edge requests",
             zoneName: "example.com",
@@ -266,7 +271,7 @@ describe("CloudflareLogpushService", () => {
         );
 
         const missing = yield* CloudflareLogpushService.getSetup(
-          "org_b",
+          asOrgId("org_b"),
           created.connector.id,
         ).pipe(Effect.flip);
 
@@ -281,7 +286,7 @@ describe("CloudflareLogpushService", () => {
     const { url } = createTempDbUrl();
 
     const result = await Effect.runPromise(
-      CloudflareLogpushService.create("org_a", "user_a", {
+      CloudflareLogpushService.create(asOrgId("org_a"), asUserId("user_a"), {
         name: " ",
         zoneName: " ",
       }).pipe(Effect.flip, Effect.provide(makeLayer(url))),

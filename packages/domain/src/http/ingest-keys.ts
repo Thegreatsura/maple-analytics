@@ -1,12 +1,13 @@
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "@effect/platform"
 import { Schema } from "effect"
+import { IsoDateTimeString } from "../primitives"
 import { Authorization } from "./current-tenant"
 
 export class IngestKeysResponse extends Schema.Class<IngestKeysResponse>("IngestKeysResponse")({
   publicKey: Schema.String,
   privateKey: Schema.String,
-  publicRotatedAt: Schema.String,
-  privateRotatedAt: Schema.String,
+  publicRotatedAt: IsoDateTimeString,
+  privateRotatedAt: IsoDateTimeString,
 }) {}
 
 export class IngestKeyPersistenceError extends Schema.TaggedError<IngestKeyPersistenceError>()(

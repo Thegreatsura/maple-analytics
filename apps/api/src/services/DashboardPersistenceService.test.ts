@@ -11,11 +11,16 @@ import {
   Exit,
   Layer,
   Option,
+  Schema,
 } from "effect"
 import {
+  DashboardId,
   DashboardDocument,
   DashboardNotFoundError,
   DashboardPersistenceError,
+  IsoDateTimeString,
+  OrgId,
+  UserId,
 } from "@maple/domain/http"
 import { DashboardPersistenceService } from "./DashboardPersistenceService"
 import { Env } from "./Env"
@@ -76,19 +81,24 @@ const makeLayer = (url: string): Layer.Layer<DashboardPersistenceService, Config
     Layer.provide(testConfigProvider(url)),
   )
 
+const asDashboardId = Schema.decodeUnknownSync(DashboardId)
+const asIsoDateTimeString = Schema.decodeUnknownSync(IsoDateTimeString)
+const asOrgId = Schema.decodeUnknownSync(OrgId)
+const asUserId = Schema.decodeUnknownSync(UserId)
+
 const makeDashboard = (
   overrides: Partial<DashboardDocument> = {},
 ): DashboardDocument =>
   new DashboardDocument({
-    id: "dash-1",
+    id: asDashboardId("dash-1"),
     name: "Dashboard",
     timeRange: {
       type: "relative",
       value: "12h",
     },
     widgets: [],
-    createdAt: new Date("2026-01-01T00:00:00.000Z").toISOString(),
-    updatedAt: new Date("2026-01-01T00:00:00.000Z").toISOString(),
+    createdAt: asIsoDateTimeString(new Date("2026-01-01T00:00:00.000Z").toISOString()),
+    updatedAt: asIsoDateTimeString(new Date("2026-01-01T00:00:00.000Z").toISOString()),
     ...overrides,
   })
 
@@ -98,22 +108,22 @@ describe("DashboardPersistenceService", () => {
 
     const program = Effect.gen(function* () {
       yield* DashboardPersistenceService.upsert(
-        "org_a",
-        "user_a",
-        makeDashboard({ id: "a-1", name: "Org A" }),
+        asOrgId("org_a"),
+        asUserId("user_a"),
+        makeDashboard({ id: asDashboardId("a-1"), name: "Org A" }),
       )
       yield* DashboardPersistenceService.upsert(
-        "org_b",
-        "user_b",
-        makeDashboard({ id: "b-1", name: "Org B" }),
+        asOrgId("org_b"),
+        asUserId("user_b"),
+        makeDashboard({ id: asDashboardId("b-1"), name: "Org B" }),
       )
-      return yield* DashboardPersistenceService.list("org_a")
+      return yield* DashboardPersistenceService.list(asOrgId("org_a"))
     }).pipe(Effect.provide(makeLayer(dbUrl)))
 
     const dashboards = await Effect.runPromise(program)
 
     expect(dashboards).toHaveLength(1)
-    expect(dashboards[0].id).toBe("a-1")
+    expect(dashboards[0].id).toBe(asDashboardId("a-1"))
     expect(dashboards[0].name).toBe("Org A")
   })
 
@@ -121,21 +131,21 @@ describe("DashboardPersistenceService", () => {
     const dbUrl = createTempDbUrl()
 
     const original = makeDashboard({
-      id: "dash-1",
+      id: asDashboardId("dash-1"),
       name: "First Name",
-      updatedAt: new Date("2026-01-01T00:00:00.000Z").toISOString(),
+      updatedAt: asIsoDateTimeString(new Date("2026-01-01T00:00:00.000Z").toISOString()),
     })
 
     const updated = makeDashboard({
-      id: "dash-1",
+      id: asDashboardId("dash-1"),
       name: "Second Name",
-      updatedAt: new Date("2026-01-01T01:00:00.000Z").toISOString(),
+      updatedAt: asIsoDateTimeString(new Date("2026-01-01T01:00:00.000Z").toISOString()),
     })
 
     const program = Effect.gen(function* () {
-      yield* DashboardPersistenceService.upsert("org_a", "user_a", original)
-      yield* DashboardPersistenceService.upsert("org_a", "user_a", updated)
-      return yield* DashboardPersistenceService.list("org_a")
+      yield* DashboardPersistenceService.upsert(asOrgId("org_a"), asUserId("user_a"), original)
+      yield* DashboardPersistenceService.upsert(asOrgId("org_a"), asUserId("user_a"), updated)
+      return yield* DashboardPersistenceService.list(asOrgId("org_a"))
     }).pipe(Effect.provide(makeLayer(dbUrl)))
 
     const dashboards = await Effect.runPromise(program)
@@ -149,8 +159,8 @@ describe("DashboardPersistenceService", () => {
     const dbUrl = createTempDbUrl()
 
     const program = DashboardPersistenceService.delete(
-      "org_a",
-      "missing",
+      asOrgId("org_a"),
+      asDashboardId("missing"),
     ).pipe(Effect.provide(makeLayer(dbUrl)))
 
     const exit = await Effect.runPromiseExit(program)
@@ -164,7 +174,7 @@ describe("DashboardPersistenceService", () => {
     const failingLayer = makeLayer("http://127.0.0.1:9")
 
     const exit = await Effect.runPromiseExit(
-      DashboardPersistenceService.list("org_a").pipe(
+      DashboardPersistenceService.list(asOrgId("org_a")).pipe(
         Effect.provide(failingLayer),
       ),
     )

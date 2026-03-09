@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto"
 import { SqliteDrizzle } from "@effect/sql-drizzle/Sqlite"
 import {
+  ApiKeyId,
   ApiKeyCreatedResponse,
   ApiKeyNotFoundError,
   ApiKeyPersistenceError,
   ApiKeyResponse,
   ApiKeysListResponse,
+  OrgId,
+  UserId,
 } from "@maple/domain/http"
 import {
   API_KEY_PREFIX,
@@ -15,15 +18,19 @@ import {
   parseIngestKeyLookupHmacKey,
 } from "@maple/db"
 import { and, desc, eq } from "drizzle-orm"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Option, Redacted, Schema } from "effect"
 import { DatabaseLive } from "./DatabaseLive"
 import { Env } from "./Env"
 
 export interface ResolvedApiKey {
-  readonly orgId: string
-  readonly userId: string
-  readonly keyId: string
+  readonly orgId: OrgId
+  readonly userId: UserId
+  readonly keyId: ApiKeyId
 }
+
+const decodeApiKeyIdSync = Schema.decodeUnknownSync(ApiKeyId)
+const decodeOrgIdSync = Schema.decodeUnknownSync(OrgId)
+const decodeUserIdSync = Schema.decodeUnknownSync(UserId)
 
 const toPersistenceError = (error: unknown) =>
   new ApiKeyPersistenceError({
@@ -33,7 +40,7 @@ const toPersistenceError = (error: unknown) =>
 
 const rowToResponse = (row: typeof apiKeys.$inferSelect): ApiKeyResponse =>
   new ApiKeyResponse({
-    id: row.id,
+    id: decodeApiKeyIdSync(row.id),
     name: row.name,
     description: row.description ?? null,
     keyPrefix: row.keyPrefix,
@@ -42,7 +49,7 @@ const rowToResponse = (row: typeof apiKeys.$inferSelect): ApiKeyResponse =>
     lastUsedAt: row.lastUsedAt ?? null,
     expiresAt: row.expiresAt ?? null,
     createdAt: row.createdAt,
-    createdBy: row.createdBy,
+    createdBy: decodeUserIdSync(row.createdBy),
   })
 
 export class ApiKeysService extends Effect.Service<ApiKeysService>()(
@@ -53,9 +60,37 @@ export class ApiKeysService extends Effect.Service<ApiKeysService>()(
     effect: Effect.gen(function* () {
       const db = yield* SqliteDrizzle
       const env = yield* Env
-      const hmacKey = parseIngestKeyLookupHmacKey(env.MAPLE_INGEST_KEY_LOOKUP_HMAC_KEY)
+      const hmacKey = parseIngestKeyLookupHmacKey(
+        Redacted.value(env.MAPLE_INGEST_KEY_LOOKUP_HMAC_KEY),
+      )
 
-      const list = Effect.fn("ApiKeysService.list")(function* (orgId: string) {
+      const selectById = Effect.fn("ApiKeysService.selectById")(function* (
+        orgId: OrgId,
+        keyId: ApiKeyId,
+      ) {
+        const rows = yield* db
+          .select()
+          .from(apiKeys)
+          .where(and(eq(apiKeys.id, keyId), eq(apiKeys.orgId, orgId)))
+          .limit(1)
+          .pipe(Effect.mapError(toPersistenceError))
+
+        return Option.fromNullable(rows[0])
+      })
+
+      const requireById = Effect.fn("ApiKeysService.requireById")(function* (
+        orgId: OrgId,
+        keyId: ApiKeyId,
+      ) {
+        const row = yield* selectById(orgId, keyId)
+        if (Option.isSome(row)) return row.value
+
+        return yield* Effect.fail(
+          new ApiKeyNotFoundError({ keyId, message: "API key not found" }),
+        )
+      })
+
+      const list = Effect.fn("ApiKeysService.list")(function* (orgId: OrgId) {
         const rows = yield* db
           .select()
           .from(apiKeys)
@@ -69,11 +104,11 @@ export class ApiKeysService extends Effect.Service<ApiKeysService>()(
       })
 
       const create = Effect.fn("ApiKeysService.create")(function* (
-        orgId: string,
-        userId: string,
+        orgId: OrgId,
+        userId: UserId,
         params: { name: string; description?: string; expiresInSeconds?: number },
       ) {
-        const id = randomUUID()
+        const id = decodeApiKeyIdSync(randomUUID())
         const rawKey = generateApiKey()
         const keyHash = hashApiKey(rawKey, hmacKey)
         const keyPrefix = rawKey.slice(0, 12) + "..."
@@ -113,24 +148,11 @@ export class ApiKeysService extends Effect.Service<ApiKeysService>()(
       })
 
       const revoke = Effect.fn("ApiKeysService.revoke")(function* (
-        orgId: string,
-        keyId: string,
+        orgId: OrgId,
+        keyId: ApiKeyId,
       ) {
         const now = Date.now()
-
-        const rows = yield* db
-          .select()
-          .from(apiKeys)
-          .where(and(eq(apiKeys.id, keyId), eq(apiKeys.orgId, orgId)))
-          .limit(1)
-          .pipe(Effect.mapError(toPersistenceError))
-
-        const row = rows[0]
-        if (!row) {
-          return yield* Effect.fail(
-            new ApiKeyNotFoundError({ keyId, message: "API key not found" }),
-          )
-        }
+        const row = yield* requireById(orgId, keyId)
 
         yield* db
           .update(apiKeys)
@@ -144,7 +166,7 @@ export class ApiKeysService extends Effect.Service<ApiKeysService>()(
       const resolveByKey = Effect.fn("ApiKeysService.resolveByKey")(function* (
         rawKey: string,
       ) {
-        if (!rawKey.startsWith(API_KEY_PREFIX)) return null
+        if (!rawKey.startsWith(API_KEY_PREFIX)) return Option.none()
 
         const keyHash = hashApiKey(rawKey, hmacKey)
         const rows = yield* db
@@ -154,20 +176,20 @@ export class ApiKeysService extends Effect.Service<ApiKeysService>()(
           .limit(1)
           .pipe(Effect.mapError(toPersistenceError))
 
-        const row = rows[0]
-        if (!row) return null
-        if (row.revoked) return null
-        if (row.expiresAt && row.expiresAt < Date.now()) return null
+        const row = Option.fromNullable(rows[0])
+        if (Option.isNone(row)) return Option.none()
+        if (row.value.revoked) return Option.none()
+        if (row.value.expiresAt && row.value.expiresAt < Date.now()) return Option.none()
 
-        return {
-          orgId: row.orgId,
-          userId: row.createdBy,
-          keyId: row.id,
-        } satisfies ResolvedApiKey
+        return Option.some({
+          orgId: decodeOrgIdSync(row.value.orgId),
+          userId: decodeUserIdSync(row.value.createdBy),
+          keyId: decodeApiKeyIdSync(row.value.id),
+        } satisfies ResolvedApiKey)
       })
 
       const touchLastUsed = Effect.fn("ApiKeysService.touchLastUsed")(function* (
-        keyId: string,
+        keyId: ApiKeyId,
       ) {
         yield* db
           .update(apiKeys)

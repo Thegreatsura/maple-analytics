@@ -1,25 +1,29 @@
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "@effect/platform";
 import { Schema } from "effect";
+import {
+  CloudflareLogpushConnectorId,
+  IsoDateTimeString,
+} from "../primitives";
 import { Authorization } from "./current-tenant";
 
 const CloudflareLogpushConnectorPath = Schema.Struct({
-  connectorId: Schema.String,
+  connectorId: CloudflareLogpushConnectorId,
 });
 
 export class CloudflareLogpushConnectorResponse extends Schema.Class<CloudflareLogpushConnectorResponse>(
   "CloudflareLogpushConnectorResponse",
 )({
-  id: Schema.String,
+  id: CloudflareLogpushConnectorId,
   name: Schema.String,
   zoneName: Schema.String,
   serviceName: Schema.String,
   dataset: Schema.String,
   enabled: Schema.Boolean,
-  lastReceivedAt: Schema.NullOr(Schema.String),
+  lastReceivedAt: Schema.NullOr(IsoDateTimeString),
   lastError: Schema.NullOr(Schema.String),
-  secretRotatedAt: Schema.String,
-  createdAt: Schema.String,
-  updatedAt: Schema.String,
+  secretRotatedAt: IsoDateTimeString,
+  createdAt: IsoDateTimeString,
+  updatedAt: IsoDateTimeString,
 }) {}
 
 export class CloudflareLogpushListResponse extends Schema.Class<CloudflareLogpushListResponse>(
@@ -31,7 +35,7 @@ export class CloudflareLogpushListResponse extends Schema.Class<CloudflareLogpus
 export class CloudflareLogpushSetupResponse extends Schema.Class<CloudflareLogpushSetupResponse>(
   "CloudflareLogpushSetupResponse",
 )({
-  connectorId: Schema.String,
+  connectorId: CloudflareLogpushConnectorId,
   dataset: Schema.String,
   destinationConf: Schema.String,
   recommendedOutputType: Schema.String,
@@ -51,7 +55,7 @@ export class CloudflareLogpushCreateResponse extends Schema.Class<CloudflareLogp
 export class CloudflareLogpushDeleteResponse extends Schema.Class<CloudflareLogpushDeleteResponse>(
   "CloudflareLogpushDeleteResponse",
 )({
-  id: Schema.String,
+  id: CloudflareLogpushConnectorId,
 }) {}
 
 export class CreateCloudflareLogpushConnectorRequest extends Schema.Class<CreateCloudflareLogpushConnectorRequest>(
@@ -83,7 +87,7 @@ export class CloudflareLogpushPersistenceError extends Schema.TaggedError<Cloudf
 export class CloudflareLogpushNotFoundError extends Schema.TaggedError<CloudflareLogpushNotFoundError>()(
   "CloudflareLogpushNotFoundError",
   {
-    connectorId: Schema.String,
+    connectorId: CloudflareLogpushConnectorId,
     message: Schema.String,
   },
   HttpApiSchema.annotations({ status: 404 }),

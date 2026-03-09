@@ -205,15 +205,6 @@
   fill: var(--foreground) !important;
 }
 
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-    }
-  body {
-    @apply bg-background text-foreground;
-    }
-}
-
 /* Sugar High syntax highlighting */
 :root {
   --sh-class: oklch(0.55 0.15 250);

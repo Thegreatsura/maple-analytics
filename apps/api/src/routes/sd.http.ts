@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto"
 import { HttpApiBuilder, HttpServerRequest } from "@effect/platform"
 import { MapleApi, SDPersistenceError, SDUnauthorizedError } from "@maple/domain/http"
-import { Effect } from "effect"
+import { Effect, Option, Redacted } from "effect"
 import { Env } from "../services/Env"
 import { ScrapeTargetsService } from "../services/ScrapeTargetsService"
 
@@ -15,9 +15,12 @@ export const HttpServiceDiscoveryLive = HttpApiBuilder.group(
 
       return handlers.handle("prometheus", () =>
         Effect.gen(function* () {
-          const internalToken = env.SD_INTERNAL_TOKEN
+          const internalToken = Option.match(env.SD_INTERNAL_TOKEN, {
+            onNone: () => undefined,
+            onSome: Redacted.value,
+          })
 
-          if (internalToken.length === 0) {
+          if (!internalToken) {
             return yield* Effect.fail(
               new SDUnauthorizedError({ message: "Service discovery endpoint not configured" }),
             )
@@ -50,7 +53,12 @@ export const HttpServiceDiscoveryLive = HttpApiBuilder.group(
             try {
               url = new URL(row.url)
             } catch {
-              console.warn(`[sd] Skipping scrape target ${row.id} — invalid URL: ${row.url}`)
+              yield* Effect.logWarning("Skipping scrape target with invalid URL").pipe(
+                Effect.annotateLogs({
+                  scrapeTargetId: row.id,
+                  url: row.url,
+                }),
+              )
               continue
             }
 

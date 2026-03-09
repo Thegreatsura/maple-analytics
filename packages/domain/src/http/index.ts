@@ -5,6 +5,7 @@ export * from "./cloudflare-logpush";
 export * as CurrentTenant from "./current-tenant";
 export * from "./dashboards";
 export * from "./ingest-keys";
+export * from "../primitives";
 export * from "./query-engine";
 export * from "./scrape-targets";
 export * from "./service-discovery";

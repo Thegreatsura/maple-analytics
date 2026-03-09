@@ -5,6 +5,11 @@ import {
   useAtomValue,
 } from "@effect-atom/atom-react";
 import { Exit } from "effect";
+import type {
+  CloudflareLogpushConnectorId,
+  CloudflareLogpushConnectorResponse,
+  CloudflareLogpushSetupResponse,
+} from "@maple/domain/http";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -72,30 +77,8 @@ import {
   TrashIcon,
 } from "@/components/icons";
 
-interface CloudflareConnector {
-  id: string;
-  name: string;
-  zoneName: string;
-  serviceName: string;
-  dataset: string;
-  enabled: boolean;
-  lastReceivedAt: string | null;
-  lastError: string | null;
-  secretRotatedAt: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface CloudflareSetup {
-  connectorId: string;
-  dataset: string;
-  destinationConf: string;
-  recommendedOutputType: string;
-  recommendedTimestampFormat: string;
-  recommendedFieldNames: string[];
-  validationNote: string;
-  cloudflareSetupSteps: string[];
-}
+type CloudflareConnector = CloudflareLogpushConnectorResponse;
+type CloudflareSetup = CloudflareLogpushSetupResponse;
 
 function CopyableField({
   label,
@@ -143,9 +126,12 @@ export function CloudflareLogpushSection() {
     useState<CloudflareConnector | null>(null);
   const [editingConnector, setEditingConnector] =
     useState<CloudflareConnector | null>(null);
-  const [togglingId, setTogglingId] = useState<string | null>(null);
-  const [rotatingId, setRotatingId] = useState<string | null>(null);
-  const [setupConnectorId, setSetupConnectorId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] =
+    useState<CloudflareLogpushConnectorId | null>(null);
+  const [rotatingId, setRotatingId] =
+    useState<CloudflareLogpushConnectorId | null>(null);
+  const [setupConnectorId, setSetupConnectorId] =
+    useState<CloudflareLogpushConnectorId | null>(null);
   const [setupConnectorName, setSetupConnectorName] = useState<string>("");
   const [setupOverride, setSetupOverride] = useState<CloudflareSetup | null>(
     null,
@@ -168,7 +154,7 @@ export function CloudflareLogpushSection() {
     ? MapleApiAtomClient.query("cloudflareLogpush", "getSetup", {
         path: { connectorId: setupConnectorId },
       })
-    : disabledResultAtom<CloudflareSetup>();
+    : disabledResultAtom<CloudflareLogpushSetupResponse>();
   const setupResult = useAtomValue(setupQueryAtom);
 
   const createMutation = useAtomSet(
@@ -198,7 +184,7 @@ export function CloudflareLogpushSection() {
     }
 
     return Result.builder(setupResult)
-      .onSuccess((response) => response as unknown as CloudflareSetup)
+      .onSuccess((response) => response)
       .orElse(() => null);
   }, [setupConnectorId, setupOverride, setupResult]);
 
@@ -293,8 +279,8 @@ export function CloudflareLogpushSection() {
         setDialogOpen(false);
         refreshConnectors();
         openSetupDialog(
-          result.value.connector as CloudflareConnector,
-          result.value.setup as CloudflareSetup,
+          result.value.connector,
+          result.value.setup,
         );
       } else {
         toast.error("Failed to create Cloudflare connector");
@@ -349,7 +335,7 @@ export function CloudflareLogpushSection() {
     if (Exit.isSuccess(result)) {
       toast.success("Cloudflare secret rotated");
       refreshConnectors();
-      openSetupDialog(connector, result.value as CloudflareSetup);
+      openSetupDialog(connector, result.value);
     } else {
       toast.error("Failed to rotate Cloudflare secret");
     }

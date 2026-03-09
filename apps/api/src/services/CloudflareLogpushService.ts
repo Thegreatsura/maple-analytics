@@ -1,18 +1,20 @@
 import {
-  createCipheriv,
-  createDecipheriv,
   randomBytes,
   randomUUID,
 } from "node:crypto";
 import { SqliteDrizzle } from "@effect/sql-drizzle/Sqlite";
 import {
+  CloudflareLogpushConnectorId,
   CloudflareLogpushConnectorResponse,
   CloudflareLogpushCreateResponse,
   CloudflareLogpushEncryptionError,
+  IsoDateTimeString,
   CloudflareLogpushNotFoundError,
   CloudflareLogpushPersistenceError,
   CloudflareLogpushSetupResponse,
   CloudflareLogpushValidationError,
+  OrgId,
+  UserId,
   type CreateCloudflareLogpushConnectorRequest,
   type UpdateCloudflareLogpushConnectorRequest,
 } from "@maple/domain/http";
@@ -22,15 +24,15 @@ import {
   parseCloudflareLogpushSecretHmacKey,
 } from "@maple/db";
 import { and, eq } from "drizzle-orm";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option, Redacted, Schema } from "effect";
+import {
+  decryptAes256Gcm,
+  encryptAes256Gcm,
+  parseBase64Aes256GcmKey,
+  type EncryptedValue,
+} from "./Crypto";
 import { DatabaseLive } from "./DatabaseLive";
 import { Env } from "./Env";
-
-interface EncryptedSecret {
-  readonly ciphertext: string;
-  readonly iv: string;
-  readonly tag: string;
-}
 
 const DATASET = "http_requests";
 const OUTPUT_TYPE = "ndjson";
@@ -72,32 +74,23 @@ const toPersistenceError = (error: unknown) =>
 const toEncryptionError = (message: string) =>
   new CloudflareLogpushEncryptionError({ message });
 
+const decodeConnectorIdSync = Schema.decodeUnknownSync(
+  CloudflareLogpushConnectorId,
+)
+const decodeIsoDateTimeStringSync = Schema.decodeUnknownSync(IsoDateTimeString)
+
 const parseEncryptionKey = (
   raw: string,
 ): Effect.Effect<Buffer, CloudflareLogpushEncryptionError> =>
-  Effect.try({
-    try: () => {
-      const trimmed = raw.trim();
-      if (trimmed.length === 0) {
-        throw new Error("MAPLE_INGEST_KEY_ENCRYPTION_KEY is required");
-      }
-
-      const decoded = Buffer.from(trimmed, "base64");
-      if (decoded.length !== 32) {
-        throw new Error(
-          "MAPLE_INGEST_KEY_ENCRYPTION_KEY must be base64 for exactly 32 bytes",
-        );
-      }
-
-      return decoded;
-    },
-    catch: (error) =>
-      toEncryptionError(
-        error instanceof Error
-          ? error.message
-          : "Invalid Cloudflare connector encryption key",
-      ),
-  });
+  parseBase64Aes256GcmKey(raw, (message) =>
+    toEncryptionError(
+      message === "Expected a non-empty base64 encryption key"
+        ? "MAPLE_INGEST_KEY_ENCRYPTION_KEY is required"
+        : message === "Expected base64 for exactly 32 bytes"
+          ? "MAPLE_INGEST_KEY_ENCRYPTION_KEY must be base64 for exactly 32 bytes"
+          : message,
+    ),
+  );
 
 const parseLookupHmacKey = (
   raw: string,
@@ -115,53 +108,18 @@ const parseLookupHmacKey = (
 const encryptSecret = (
   plaintext: string,
   encryptionKey: Buffer,
-): Effect.Effect<EncryptedSecret, CloudflareLogpushEncryptionError> =>
-  Effect.try({
-    try: () => {
-      const iv = randomBytes(12);
-      const cipher = createCipheriv("aes-256-gcm", encryptionKey, iv);
-      const ciphertext = Buffer.concat([
-        cipher.update(plaintext, "utf8"),
-        cipher.final(),
-      ]);
-
-      return {
-        ciphertext: ciphertext.toString("base64"),
-        iv: iv.toString("base64"),
-        tag: cipher.getAuthTag().toString("base64"),
-      };
-    },
-    catch: (error) =>
-      toEncryptionError(
-        error instanceof Error
-          ? error.message
-          : "Failed to encrypt Cloudflare connector secret",
-      ),
-  });
+): Effect.Effect<EncryptedValue, CloudflareLogpushEncryptionError> =>
+  encryptAes256Gcm(plaintext, encryptionKey, () =>
+    toEncryptionError("Failed to encrypt Cloudflare connector secret"),
+  );
 
 const decryptSecret = (
-  encrypted: EncryptedSecret,
+  encrypted: EncryptedValue,
   encryptionKey: Buffer,
 ): Effect.Effect<string, CloudflareLogpushEncryptionError> =>
-  Effect.try({
-    try: () => {
-      const decipher = createDecipheriv(
-        "aes-256-gcm",
-        encryptionKey,
-        Buffer.from(encrypted.iv, "base64"),
-      );
-      decipher.setAuthTag(Buffer.from(encrypted.tag, "base64"));
-
-      const plaintext = Buffer.concat([
-        decipher.update(Buffer.from(encrypted.ciphertext, "base64")),
-        decipher.final(),
-      ]);
-
-      return plaintext.toString("utf8");
-    },
-    catch: () =>
-      toEncryptionError("Failed to decrypt Cloudflare connector secret"),
-  });
+  decryptAes256Gcm(encrypted, encryptionKey, () =>
+    toEncryptionError("Failed to decrypt Cloudflare connector secret"),
+  );
 
 const generateSecret = () =>
   `maple_cf_${randomBytes(24).toString("base64url")}`;
@@ -218,10 +176,10 @@ export class CloudflareLogpushService extends Effect.Service<CloudflareLogpushSe
       const db = yield* SqliteDrizzle;
       const env = yield* Env;
       const encryptionKey = yield* parseEncryptionKey(
-        env.MAPLE_INGEST_KEY_ENCRYPTION_KEY,
+        Redacted.value(env.MAPLE_INGEST_KEY_ENCRYPTION_KEY),
       );
       const lookupHmacKey = yield* parseLookupHmacKey(
-        env.MAPLE_INGEST_KEY_LOOKUP_HMAC_KEY,
+        Redacted.value(env.MAPLE_INGEST_KEY_LOOKUP_HMAC_KEY),
       );
       const ingestPublicUrl = normalizeIngestPublicUrl(
         env.MAPLE_INGEST_PUBLIC_URL,
@@ -231,17 +189,25 @@ export class CloudflareLogpushService extends Effect.Service<CloudflareLogpushSe
         row: typeof cloudflareLogpushConnectors.$inferSelect,
       ) =>
         new CloudflareLogpushConnectorResponse({
-          id: row.id,
+          id: decodeConnectorIdSync(row.id),
           name: row.name,
           zoneName: row.zoneName,
           serviceName: row.serviceName,
           dataset: row.dataset,
           enabled: row.enabled === 1,
-          lastReceivedAt: toIsoString(row.lastReceivedAt),
+          lastReceivedAt: row.lastReceivedAt == null
+            ? null
+            : decodeIsoDateTimeStringSync(toIsoString(row.lastReceivedAt)),
           lastError: row.lastError,
-          secretRotatedAt: new Date(row.secretRotatedAt).toISOString(),
-          createdAt: new Date(row.createdAt).toISOString(),
-          updatedAt: new Date(row.updatedAt).toISOString(),
+          secretRotatedAt: decodeIsoDateTimeStringSync(
+            new Date(row.secretRotatedAt).toISOString(),
+          ),
+          createdAt: decodeIsoDateTimeStringSync(
+            new Date(row.createdAt).toISOString(),
+          ),
+          updatedAt: decodeIsoDateTimeStringSync(
+            new Date(row.updatedAt).toISOString(),
+          ),
         });
 
       const buildSetup = Effect.fn("CloudflareLogpushService.buildSetup")(
@@ -259,7 +225,7 @@ export class CloudflareLogpushService extends Effect.Service<CloudflareLogpushSe
           const destinationConf = `${endpointUrl}?secret=${encodeURIComponent(secret)}`;
 
           return new CloudflareLogpushSetupResponse({
-            connectorId: row.id,
+            connectorId: decodeConnectorIdSync(row.id),
             dataset: DATASET,
             destinationConf,
             recommendedOutputType: OUTPUT_TYPE,
@@ -273,7 +239,7 @@ export class CloudflareLogpushService extends Effect.Service<CloudflareLogpushSe
       );
 
       const selectById = Effect.fn("CloudflareLogpushService.selectById")(
-        function* (orgId: string, connectorId: string) {
+        function* (orgId: OrgId, connectorId: CloudflareLogpushConnectorId) {
           const rows = yield* db
             .select()
             .from(cloudflareLogpushConnectors)
@@ -286,15 +252,15 @@ export class CloudflareLogpushService extends Effect.Service<CloudflareLogpushSe
             .limit(1)
             .pipe(Effect.mapError(toPersistenceError));
 
-          return rows[0];
+          return Option.fromNullable(rows[0]);
         },
       );
 
       const selectByIdOrPersistenceError = Effect.fn(
         "CloudflareLogpushService.selectByIdOrPersistenceError",
-      )(function* (orgId: string, connectorId: string) {
+      )(function* (orgId: OrgId, connectorId: CloudflareLogpushConnectorId) {
         const row = yield* selectById(orgId, connectorId);
-        if (row) return row;
+        if (Option.isSome(row)) return row.value;
 
         return yield* Effect.fail(
           new CloudflareLogpushPersistenceError({
@@ -305,9 +271,9 @@ export class CloudflareLogpushService extends Effect.Service<CloudflareLogpushSe
 
       const requireConnector = Effect.fn(
         "CloudflareLogpushService.requireConnector",
-      )(function* (orgId: string, connectorId: string) {
+      )(function* (orgId: OrgId, connectorId: CloudflareLogpushConnectorId) {
         const row = yield* selectById(orgId, connectorId);
-        if (row) return row;
+        if (Option.isSome(row)) return row.value;
 
         return yield* Effect.fail(
           new CloudflareLogpushNotFoundError({
@@ -318,7 +284,7 @@ export class CloudflareLogpushService extends Effect.Service<CloudflareLogpushSe
       });
 
       const list = Effect.fn("CloudflareLogpushService.list")(function* (
-        orgId: string,
+        orgId: OrgId,
       ) {
         const rows = yield* db
           .select()
@@ -330,8 +296,8 @@ export class CloudflareLogpushService extends Effect.Service<CloudflareLogpushSe
       });
 
       const create = Effect.fn("CloudflareLogpushService.create")(function* (
-        orgId: string,
-        userId: string,
+        orgId: OrgId,
+        userId: UserId,
         request: CreateCloudflareLogpushConnectorRequest,
       ) {
         const name = yield* cleanRequiredString("Name", request.name);
@@ -345,7 +311,7 @@ export class CloudflareLogpushService extends Effect.Service<CloudflareLogpushSe
         );
 
         const now = Date.now();
-        const id = randomUUID();
+        const id = decodeConnectorIdSync(randomUUID());
         const secret = generateSecret();
         const secretHash = hashCloudflareLogpushSecret(secret, lookupHmacKey);
         const encryptedSecret = yield* encryptSecret(secret, encryptionKey);
@@ -383,9 +349,9 @@ export class CloudflareLogpushService extends Effect.Service<CloudflareLogpushSe
       });
 
       const update = Effect.fn("CloudflareLogpushService.update")(function* (
-        orgId: string,
-        connectorId: string,
-        userId: string,
+        orgId: OrgId,
+        connectorId: CloudflareLogpushConnectorId,
+        userId: UserId,
         request: UpdateCloudflareLogpushConnectorRequest,
       ) {
         const existing = yield* requireConnector(orgId, connectorId);
@@ -430,8 +396,8 @@ export class CloudflareLogpushService extends Effect.Service<CloudflareLogpushSe
       });
 
       const remove = Effect.fn("CloudflareLogpushService.delete")(function* (
-        orgId: string,
-        connectorId: string,
+        orgId: OrgId,
+        connectorId: CloudflareLogpushConnectorId,
       ) {
         const rows = yield* db
           .delete(cloudflareLogpushConnectors)
@@ -444,9 +410,9 @@ export class CloudflareLogpushService extends Effect.Service<CloudflareLogpushSe
           .returning({ id: cloudflareLogpushConnectors.id })
           .pipe(Effect.mapError(toPersistenceError));
 
-        const deleted = rows[0];
-        if (deleted) {
-          return { id: deleted.id };
+        const deleted = Option.fromNullable(rows[0]);
+        if (Option.isSome(deleted)) {
+          return { id: decodeConnectorIdSync(deleted.value.id) };
         }
 
         return yield* Effect.fail(
@@ -458,13 +424,17 @@ export class CloudflareLogpushService extends Effect.Service<CloudflareLogpushSe
       });
 
       const getSetup = Effect.fn("CloudflareLogpushService.getSetup")(
-        function* (orgId: string, connectorId: string) {
+        function* (orgId: OrgId, connectorId: CloudflareLogpushConnectorId) {
           return yield* buildSetup(yield* requireConnector(orgId, connectorId));
         },
       );
 
       const rotateSecret = Effect.fn("CloudflareLogpushService.rotateSecret")(
-        function* (orgId: string, connectorId: string, userId: string) {
+        function* (
+          orgId: OrgId,
+          connectorId: CloudflareLogpushConnectorId,
+          userId: UserId,
+        ) {
           yield* requireConnector(orgId, connectorId);
 
           const now = Date.now();

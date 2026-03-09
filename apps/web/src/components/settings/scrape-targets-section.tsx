@@ -1,6 +1,14 @@
 import { Result, useAtomRefresh, useAtomSet, useAtomValue } from "@effect-atom/atom-react"
+import {
+  ScrapeIntervalSeconds,
+} from "@maple/domain/http"
+import type {
+  ScrapeAuthType,
+  ScrapeTargetId,
+  ScrapeTargetResponse,
+} from "@maple/domain/http"
 import { useState } from "react"
-import { Exit } from "effect"
+import { Exit, Schema } from "effect"
 import { toast } from "sonner"
 
 import {
@@ -62,41 +70,29 @@ import {
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import { formatRelativeTime } from "@/lib/format"
 
-interface ScrapeTarget {
-  id: string
-  name: string
-  serviceName: string | null
-  url: string
-  scrapeIntervalSeconds: number
-  labelsJson: string | null
-  authType: string
-  hasCredentials: boolean
-  enabled: boolean
-  lastScrapeAt: string | null
-  lastScrapeError: string | null
-  createdAt: string
-  updatedAt: string
-}
+type ScrapeTarget = ScrapeTargetResponse
 
-const AUTH_TYPE_LABELS: Record<string, string> = {
+const AUTH_TYPE_LABELS: Record<ScrapeAuthType, string> = {
   none: "None",
   bearer: "Bearer Token",
   basic: "Basic Auth",
 }
 
+const asScrapeIntervalSeconds = Schema.decodeUnknownSync(ScrapeIntervalSeconds)
+
 export function ScrapeTargetsSection() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [togglingId, setTogglingId] = useState<ScrapeTargetId | null>(null)
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<ScrapeTarget | null>(null)
-  const [probingId, setProbingId] = useState<string | null>(null)
+  const [probingId, setProbingId] = useState<ScrapeTargetId | null>(null)
 
   const [editingTarget, setEditingTarget] = useState<ScrapeTarget | null>(null)
   const [formName, setFormName] = useState("")
   const [formServiceName, setFormServiceName] = useState("")
   const [formUrl, setFormUrl] = useState("")
   const [formInterval, setFormInterval] = useState("15")
-  const [formAuthType, setFormAuthType] = useState("none")
+  const [formAuthType, setFormAuthType] = useState<ScrapeAuthType>("none")
   const [formAuthToken, setFormAuthToken] = useState("")
   const [formAuthUsername, setFormAuthUsername] = useState("")
   const [formAuthPassword, setFormAuthPassword] = useState("")
@@ -189,6 +185,9 @@ export function ScrapeTargetsSection() {
 
     setIsSaving(true)
     const authCredentials = buildAuthCredentials()
+    const parsedInterval = asScrapeIntervalSeconds(
+      Number.parseInt(formInterval, 10) || 15,
+    )
 
     if (editingTarget) {
       const result = await updateMutation({
@@ -196,7 +195,7 @@ export function ScrapeTargetsSection() {
         payload: {
           name: formName.trim(),
           url: formUrl.trim(),
-          scrapeIntervalSeconds: Number.parseInt(formInterval, 10) || 15,
+          scrapeIntervalSeconds: parsedInterval,
           serviceName: formServiceName.trim() || null,
           authType: formAuthType,
           ...(authCredentials !== null ? { authCredentials } : {}),
@@ -214,7 +213,7 @@ export function ScrapeTargetsSection() {
         payload: {
           name: formName.trim(),
           url: formUrl.trim(),
-          scrapeIntervalSeconds: Number.parseInt(formInterval, 10) || 15,
+          scrapeIntervalSeconds: parsedInterval,
           serviceName: formServiceName.trim() || null,
           authType: formAuthType,
           ...(authCredentials !== null ? { authCredentials } : {}),
@@ -231,7 +230,7 @@ export function ScrapeTargetsSection() {
     setIsSaving(false)
   }
 
-  async function handleDelete(targetId: string) {
+  async function handleDelete(targetId: ScrapeTargetId) {
     setDeleteConfirmTarget(null)
     const result = await deleteMutation({ path: { targetId } })
     if (Exit.isSuccess(result)) {
@@ -463,7 +462,7 @@ export function ScrapeTargetsSection() {
               <Select
                 value={formAuthType}
                 onValueChange={(val: string | null) => {
-                  setFormAuthType(val ?? "none")
+                  setFormAuthType((val as ScrapeAuthType | null) ?? "none")
                   setFormAuthToken("")
                   setFormAuthUsername("")
                   setFormAuthPassword("")

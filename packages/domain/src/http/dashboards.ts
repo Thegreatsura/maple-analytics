@@ -1,5 +1,6 @@
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "@effect/platform"
 import { Schema } from "effect"
+import { DashboardId, IsoDateTimeString } from "../primitives"
 import { Authorization } from "./current-tenant"
 
 
@@ -12,25 +13,25 @@ const TimeRangeSchema = Schema.Union(
   }),
   Schema.Struct({
     type: Schema.Literal("absolute"),
-    startTime: Schema.String,
-    endTime: Schema.String,
+    startTime: IsoDateTimeString,
+    endTime: IsoDateTimeString,
   }),
 )
 
 const DashboardPath = Schema.Struct({
-  dashboardId: Schema.String,
+  dashboardId: DashboardId,
 })
 
 export class DashboardDocument extends Schema.Class<DashboardDocument>("DashboardDocument")({
-  id: Schema.String,
+  id: DashboardId,
   name: Schema.String,
   description: Schema.optional(Schema.String),
   tags: Schema.optional(Schema.Array(Schema.String)),
   timeRange: TimeRangeSchema,
   variables: Schema.optional(Schema.Array(Schema.Any)),
   widgets: Schema.Array(Schema.Any),
-  createdAt: Schema.String,
-  updatedAt: Schema.String,
+  createdAt: IsoDateTimeString,
+  updatedAt: IsoDateTimeString,
 }) {}
 
 export class DashboardsListResponse extends Schema.Class<DashboardsListResponse>("DashboardsListResponse")({
@@ -42,7 +43,7 @@ export class DashboardUpsertRequest extends Schema.Class<DashboardUpsertRequest>
 }) {}
 
 export class DashboardDeleteResponse extends Schema.Class<DashboardDeleteResponse>("DashboardDeleteResponse")({
-  id: Schema.String,
+  id: DashboardId,
 }) {}
 
 export class DashboardPersistenceError extends Schema.TaggedError<DashboardPersistenceError>()(
@@ -56,7 +57,7 @@ export class DashboardPersistenceError extends Schema.TaggedError<DashboardPersi
 export class DashboardNotFoundError extends Schema.TaggedError<DashboardNotFoundError>()(
   "DashboardNotFoundError",
   {
-    dashboardId: Schema.String,
+    dashboardId: DashboardId,
     message: Schema.String,
   },
   HttpApiSchema.annotations({ status: 404 }),

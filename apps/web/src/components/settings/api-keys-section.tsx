@@ -1,6 +1,7 @@
 import { Result, useAtomRefresh, useAtomSet, useAtomValue } from "@effect-atom/atom-react"
 import { useState } from "react"
 import { Exit } from "effect"
+import type { ApiKeyId, ApiKeyResponse } from "@maple/domain/http"
 import { toast } from "sonner"
 
 import { Button } from "@maple/ui/components/ui/button"
@@ -56,15 +57,7 @@ import {
 } from "@/components/icons"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 
-interface ApiKey {
-  id: string
-  name: string
-  description: string | null
-  keyPrefix: string
-  revoked: boolean
-  createdAt: number
-  lastUsedAt: number | null
-}
+type ApiKey = ApiKeyResponse
 
 function formatDate(timestamp: number | null): string {
   if (!timestamp) return "Never"
@@ -87,7 +80,7 @@ export function ApiKeysSection() {
   const [newSecret, setNewSecret] = useState<string | null>(null)
   const [secretCopied, setSecretCopied] = useState(false)
   const [revokeOpen, setRevokeOpen] = useState(false)
-  const [revokingKeyId, setRevokingKeyId] = useState<string | null>(null)
+  const [revokingKeyId, setRevokingKeyId] = useState<ApiKeyId | null>(null)
   const [isRevoking, setIsRevoking] = useState(false)
 
   const listQueryAtom = MapleApiAtomClient.query("apiKeys", "list", {})
@@ -98,17 +91,7 @@ export function ApiKeysSection() {
   const revokeMutation = useAtomSet(MapleApiAtomClient.mutation("apiKeys", "revoke"), { mode: "promiseExit" })
 
   const keys = Result.builder(listResult)
-    .onSuccess((response) =>
-      response.keys.map((k) => ({
-        id: k.id,
-        name: k.name,
-        description: k.description,
-        keyPrefix: k.keyPrefix,
-        revoked: k.revoked,
-        createdAt: k.createdAt,
-        lastUsedAt: k.lastUsedAt,
-      })),
-    )
+    .onSuccess((response) => response.keys)
     .orElse(() => [])
 
   async function handleCreate() {
@@ -153,7 +136,7 @@ export function ApiKeysSection() {
     }
   }
 
-  function openRevokeDialog(keyId: string) {
+  function openRevokeDialog(keyId: ApiKeyId) {
     setRevokingKeyId(keyId)
     setRevokeOpen(true)
   }

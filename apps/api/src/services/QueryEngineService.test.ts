@@ -1,12 +1,15 @@
 import { describe, expect, it } from "bun:test"
-import { Cause, Effect, Exit, Option } from "effect"
-import type { QueryEngineExecuteRequest } from "@maple/domain"
+import { Cause, Effect, Exit, Option, Schema } from "effect"
+import { OrgId, UserId, type QueryEngineExecuteRequest } from "@maple/domain"
 import { makeQueryEngineExecute } from "./QueryEngineService"
 import type { TenantContext } from "./AuthService"
 
+const asOrgId = Schema.decodeUnknownSync(OrgId)
+const asUserId = Schema.decodeUnknownSync(UserId)
+
 const tenant: TenantContext = {
-  orgId: "org_test",
-  userId: "user_test",
+  orgId: asOrgId("org_test"),
+  userId: asUserId("user_test"),
   roles: [],
   authMode: "self_hosted",
 }

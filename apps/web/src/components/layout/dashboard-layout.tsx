@@ -59,6 +59,12 @@ export function DashboardLayout({
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-4 focus:bg-background focus:text-foreground"
+        >
+          Skip to main content
+        </a>
         <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
@@ -95,15 +101,15 @@ export function DashboardLayout({
         </header>
         <div className="flex min-h-0 flex-1 overflow-hidden">
           {filterSidebar && (
-            <aside className="sticky top-0 h-full shrink-0 overflow-y-auto border-r p-4">
+            <aside className="sticky top-0 h-full w-64 max-w-[40vw] shrink-0 overflow-y-auto border-r p-4">
               {filterSidebar}
             </aside>
           )}
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <main id="main-content" className="flex min-h-0 min-w-0 flex-1 flex-col">
             {(hasHeader || stickyContent) && (
               <div className={`shrink-0 space-y-4 p-4 transition-shadow ${isScrolled ? "shadow-[0_2px_8px_rgba(0,0,0,0.08)]" : ""}`}>
                 {hasHeader && (
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                     <div className="min-w-0 flex-1">
                       {titleContent ?? (
                         title && <h1 className="text-2xl font-bold tracking-tight truncate" title={title}>{title}</h1>
@@ -125,7 +131,7 @@ export function DashboardLayout({
               {children}
             </div>
           </main>
-          {rightSidebar && <aside>{rightSidebar}</aside>}
+          {rightSidebar && <aside className="hidden lg:block">{rightSidebar}</aside>}
         </div>
       </SidebarInset>
     </SidebarProvider>

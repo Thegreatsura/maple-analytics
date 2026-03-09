@@ -1,25 +1,31 @@
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "@effect/platform"
 import { Schema } from "effect"
+import {
+  IsoDateTimeString,
+  ScrapeAuthType,
+  ScrapeIntervalSeconds,
+  ScrapeTargetId,
+} from "../primitives"
 import { Authorization } from "./current-tenant"
 
 const ScrapeTargetPath = Schema.Struct({
-  targetId: Schema.String,
+  targetId: ScrapeTargetId,
 })
 
 export class ScrapeTargetResponse extends Schema.Class<ScrapeTargetResponse>("ScrapeTargetResponse")({
-  id: Schema.String,
+  id: ScrapeTargetId,
   name: Schema.String,
   serviceName: Schema.NullOr(Schema.String),
   url: Schema.String,
-  scrapeIntervalSeconds: Schema.Number,
+  scrapeIntervalSeconds: ScrapeIntervalSeconds,
   labelsJson: Schema.NullOr(Schema.String),
-  authType: Schema.String,
+  authType: ScrapeAuthType,
   hasCredentials: Schema.Boolean,
   enabled: Schema.Boolean,
-  lastScrapeAt: Schema.NullOr(Schema.String),
+  lastScrapeAt: Schema.NullOr(IsoDateTimeString),
   lastScrapeError: Schema.NullOr(Schema.String),
-  createdAt: Schema.String,
-  updatedAt: Schema.String,
+  createdAt: IsoDateTimeString,
+  updatedAt: IsoDateTimeString,
 }) {}
 
 export class ScrapeTargetsListResponse extends Schema.Class<ScrapeTargetsListResponse>(
@@ -33,9 +39,9 @@ export class CreateScrapeTargetRequest extends Schema.Class<CreateScrapeTargetRe
 )({
   name: Schema.String,
   url: Schema.String,
-  scrapeIntervalSeconds: Schema.optional(Schema.Number),
+  scrapeIntervalSeconds: Schema.optional(ScrapeIntervalSeconds),
   labelsJson: Schema.optional(Schema.NullOr(Schema.String)),
-  authType: Schema.optional(Schema.String),
+  authType: Schema.optional(ScrapeAuthType),
   serviceName: Schema.optional(Schema.NullOr(Schema.String)),
   authCredentials: Schema.optional(Schema.NullOr(Schema.String)),
   enabled: Schema.optional(Schema.Boolean),
@@ -46,9 +52,9 @@ export class UpdateScrapeTargetRequest extends Schema.Class<UpdateScrapeTargetRe
 )({
   name: Schema.optional(Schema.String),
   url: Schema.optional(Schema.String),
-  scrapeIntervalSeconds: Schema.optional(Schema.Number),
+  scrapeIntervalSeconds: Schema.optional(ScrapeIntervalSeconds),
   labelsJson: Schema.optional(Schema.NullOr(Schema.String)),
-  authType: Schema.optional(Schema.String),
+  authType: Schema.optional(ScrapeAuthType),
   serviceName: Schema.optional(Schema.NullOr(Schema.String)),
   authCredentials: Schema.optional(Schema.NullOr(Schema.String)),
   enabled: Schema.optional(Schema.Boolean),
@@ -57,14 +63,14 @@ export class UpdateScrapeTargetRequest extends Schema.Class<UpdateScrapeTargetRe
 export class ScrapeTargetDeleteResponse extends Schema.Class<ScrapeTargetDeleteResponse>(
   "ScrapeTargetDeleteResponse",
 )({
-  id: Schema.String,
+  id: ScrapeTargetId,
 }) {}
 
 export class ScrapeTargetProbeResponse extends Schema.Class<ScrapeTargetProbeResponse>(
   "ScrapeTargetProbeResponse",
 )({
   success: Schema.Boolean,
-  lastScrapeAt: Schema.NullOr(Schema.String),
+  lastScrapeAt: Schema.NullOr(IsoDateTimeString),
   lastScrapeError: Schema.NullOr(Schema.String),
 }) {}
 
@@ -79,7 +85,7 @@ export class ScrapeTargetPersistenceError extends Schema.TaggedError<ScrapeTarge
 export class ScrapeTargetNotFoundError extends Schema.TaggedError<ScrapeTargetNotFoundError>()(
   "ScrapeTargetNotFoundError",
   {
-    targetId: Schema.String,
+    targetId: ScrapeTargetId,
     message: Schema.String,
   },
   HttpApiSchema.annotations({ status: 404 }),

@@ -4,8 +4,13 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import type { ConfigError } from "effect/ConfigError"
-import { Cause, ConfigProvider, Effect, Exit, Layer, Option } from "effect"
-import { IngestKeyEncryptionError, IngestKeyPersistenceError } from "@maple/domain/http"
+import { Cause, ConfigProvider, Effect, Exit, Layer, Option, Schema } from "effect"
+import {
+  IngestKeyEncryptionError,
+  IngestKeyPersistenceError,
+  OrgId,
+  UserId,
+} from "@maple/domain/http"
 import { hashIngestKey } from "@maple/db"
 import { Env } from "./Env"
 import { OrgIngestKeysService } from "./OrgIngestKeysService"
@@ -77,12 +82,15 @@ const makeLayer = (
     Layer.provide(makeConfigProvider(url, encryptionKey)),
   )
 
+const asOrgId = Schema.decodeUnknownSync(OrgId)
+const asUserId = Schema.decodeUnknownSync(UserId)
+
 describe("OrgIngestKeysService", () => {
   it("lazily creates keys for a new org", async () => {
     const { url } = createTempDbUrl()
 
     const result = await Effect.runPromise(
-      OrgIngestKeysService.getOrCreate("org_a", "user_a").pipe(
+      OrgIngestKeysService.getOrCreate(asOrgId("org_a"), asUserId("user_a")).pipe(
         Effect.provide(makeLayer(url)),
       ),
     )
@@ -97,8 +105,8 @@ describe("OrgIngestKeysService", () => {
     const { url } = createTempDbUrl()
 
     const program = Effect.gen(function* () {
-      const first = yield* OrgIngestKeysService.getOrCreate("org_a", "user_a")
-      const second = yield* OrgIngestKeysService.getOrCreate("org_a", "user_a")
+      const first = yield* OrgIngestKeysService.getOrCreate(asOrgId("org_a"), asUserId("user_a"))
+      const second = yield* OrgIngestKeysService.getOrCreate(asOrgId("org_a"), asUserId("user_a"))
       return { first, second }
     }).pipe(Effect.provide(makeLayer(url)))
 
@@ -111,8 +119,8 @@ describe("OrgIngestKeysService", () => {
     const { url } = createTempDbUrl()
 
     const program = Effect.gen(function* () {
-      const first = yield* OrgIngestKeysService.getOrCreate("org_a", "user_a")
-      const rerolled = yield* OrgIngestKeysService.rerollPublic("org_a", "user_a")
+      const first = yield* OrgIngestKeysService.getOrCreate(asOrgId("org_a"), asUserId("user_a"))
+      const rerolled = yield* OrgIngestKeysService.rerollPublic(asOrgId("org_a"), asUserId("user_a"))
       return { first, rerolled }
     }).pipe(Effect.provide(makeLayer(url)))
 
@@ -131,8 +139,8 @@ describe("OrgIngestKeysService", () => {
     const { url } = createTempDbUrl()
 
     const program = Effect.gen(function* () {
-      const first = yield* OrgIngestKeysService.getOrCreate("org_a", "user_a")
-      const rerolled = yield* OrgIngestKeysService.rerollPrivate("org_a", "user_a")
+      const first = yield* OrgIngestKeysService.getOrCreate(asOrgId("org_a"), asUserId("user_a"))
+      const rerolled = yield* OrgIngestKeysService.rerollPrivate(asOrgId("org_a"), asUserId("user_a"))
       return { first, rerolled }
     }).pipe(Effect.provide(makeLayer(url)))
 
@@ -151,8 +159,8 @@ describe("OrgIngestKeysService", () => {
     const { url } = createTempDbUrl()
 
     const program = Effect.gen(function* () {
-      const orgA = yield* OrgIngestKeysService.getOrCreate("org_a", "user_a")
-      const orgB = yield* OrgIngestKeysService.getOrCreate("org_b", "user_b")
+      const orgA = yield* OrgIngestKeysService.getOrCreate(asOrgId("org_a"), asUserId("user_a"))
+      const orgB = yield* OrgIngestKeysService.getOrCreate(asOrgId("org_b"), asUserId("user_b"))
       return { orgA, orgB }
     }).pipe(Effect.provide(makeLayer(url)))
 
@@ -166,7 +174,7 @@ describe("OrgIngestKeysService", () => {
     const { url, dbPath } = createTempDbUrl()
 
     const created = await Effect.runPromise(
-      OrgIngestKeysService.getOrCreate("org_a", "user_a").pipe(
+      OrgIngestKeysService.getOrCreate(asOrgId("org_a"), asUserId("user_a")).pipe(
         Effect.provide(makeLayer(url)),
       ),
     )
@@ -197,7 +205,7 @@ describe("OrgIngestKeysService", () => {
     const lookupHmacKey = "maple-test-lookup-secret"
 
     const created = await Effect.runPromise(
-      OrgIngestKeysService.getOrCreate("org_a", "user_a").pipe(
+      OrgIngestKeysService.getOrCreate(asOrgId("org_a"), asUserId("user_a")).pipe(
         Effect.provide(makeLayer(url)),
       ),
     )
@@ -225,7 +233,7 @@ describe("OrgIngestKeysService", () => {
 
     const result = await Effect.runPromise(
       Effect.gen(function* () {
-        const created = yield* OrgIngestKeysService.getOrCreate("org_a", "user_a")
+        const created = yield* OrgIngestKeysService.getOrCreate(asOrgId("org_a"), asUserId("user_a"))
         const publicResolved = yield* OrgIngestKeysService.resolveIngestKey(
           created.publicKey,
         )
@@ -244,19 +252,25 @@ describe("OrgIngestKeysService", () => {
       }).pipe(Effect.provide(makeLayer(url))),
     )
 
-    expect(result.publicResolved).toEqual(
-      expect.objectContaining({
-        orgId: "org_a",
-        keyType: "public",
-      }),
-    )
-    expect(result.privateResolved).toEqual(
-      expect.objectContaining({
-        orgId: "org_a",
-        keyType: "private",
-      }),
-    )
-    expect(result.invalidResolved).toBeNull()
+    expect(Option.isSome(result.publicResolved)).toBe(true)
+    expect(Option.isSome(result.privateResolved)).toBe(true)
+    if (Option.isSome(result.publicResolved)) {
+      expect(result.publicResolved.value).toEqual(
+        expect.objectContaining({
+          orgId: asOrgId("org_a"),
+          keyType: "public",
+        }),
+      )
+    }
+    if (Option.isSome(result.privateResolved)) {
+      expect(result.privateResolved.value).toEqual(
+        expect.objectContaining({
+          orgId: asOrgId("org_a"),
+          keyType: "private",
+        }),
+      )
+    }
+    expect(result.invalidResolved).toEqual(Option.none())
   })
 
   it("reroll invalidates previous key hashes immediately", async () => {
@@ -264,13 +278,13 @@ describe("OrgIngestKeysService", () => {
 
     const result = await Effect.runPromise(
       Effect.gen(function* () {
-        const first = yield* OrgIngestKeysService.getOrCreate("org_a", "user_a")
-        const rerolledPublic = yield* OrgIngestKeysService.rerollPublic("org_a", "user_a")
+        const first = yield* OrgIngestKeysService.getOrCreate(asOrgId("org_a"), asUserId("user_a"))
+        const rerolledPublic = yield* OrgIngestKeysService.rerollPublic(asOrgId("org_a"), asUserId("user_a"))
         const oldPublic = yield* OrgIngestKeysService.resolveIngestKey(first.publicKey)
         const newPublic = yield* OrgIngestKeysService.resolveIngestKey(
           rerolledPublic.publicKey,
         )
-        const rerolledPrivate = yield* OrgIngestKeysService.rerollPrivate("org_a", "user_a")
+        const rerolledPrivate = yield* OrgIngestKeysService.rerollPrivate(asOrgId("org_a"), asUserId("user_a"))
         const oldPrivate = yield* OrgIngestKeysService.resolveIngestKey(first.privateKey)
         const newPrivate = yield* OrgIngestKeysService.resolveIngestKey(
           rerolledPrivate.privateKey,
@@ -285,20 +299,26 @@ describe("OrgIngestKeysService", () => {
       }).pipe(Effect.provide(makeLayer(url))),
     )
 
-    expect(result.oldPublic).toBeNull()
-    expect(result.newPublic).toEqual(
-      expect.objectContaining({
-        orgId: "org_a",
-        keyType: "public",
-      }),
-    )
-    expect(result.oldPrivate).toBeNull()
-    expect(result.newPrivate).toEqual(
-      expect.objectContaining({
-        orgId: "org_a",
-        keyType: "private",
-      }),
-    )
+    expect(result.oldPublic).toEqual(Option.none())
+    expect(Option.isSome(result.newPublic)).toBe(true)
+    if (Option.isSome(result.newPublic)) {
+      expect(result.newPublic.value).toEqual(
+        expect.objectContaining({
+          orgId: asOrgId("org_a"),
+          keyType: "public",
+        }),
+      )
+    }
+    expect(result.oldPrivate).toEqual(Option.none())
+    expect(Option.isSome(result.newPrivate)).toBe(true)
+    if (Option.isSome(result.newPrivate)) {
+      expect(result.newPrivate.value).toEqual(
+        expect.objectContaining({
+          orgId: asOrgId("org_a"),
+          keyType: "private",
+        }),
+      )
+    }
   })
 
   it("fails fast on invalid encryption key configuration", async () => {
@@ -306,7 +326,7 @@ describe("OrgIngestKeysService", () => {
     const layer = makeLayer(url, "invalid-base64-key")
 
     const exit = await Effect.runPromiseExit(
-      OrgIngestKeysService.getOrCreate("org_a", "user_a").pipe(
+      OrgIngestKeysService.getOrCreate(asOrgId("org_a"), asUserId("user_a")).pipe(
         Effect.provide(layer),
       ),
     )
@@ -324,7 +344,7 @@ describe("OrgIngestKeysService", () => {
     )
 
     const exit = await Effect.runPromiseExit(
-      OrgIngestKeysService.getOrCreate("org_a", "user_a").pipe(
+      OrgIngestKeysService.getOrCreate(asOrgId("org_a"), asUserId("user_a")).pipe(
         Effect.provide(layer),
       ),
     )
@@ -339,7 +359,7 @@ describe("OrgIngestKeysService", () => {
     )
 
     const exit = await Effect.runPromiseExit(
-      OrgIngestKeysService.getOrCreate("org_a", "user_a").pipe(
+      OrgIngestKeysService.getOrCreate(asOrgId("org_a"), asUserId("user_a")).pipe(
         Effect.provide(layer),
       ),
     )

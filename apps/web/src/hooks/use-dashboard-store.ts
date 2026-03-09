@@ -1,6 +1,11 @@
 import { Result, useAtomSet, useAtomValue } from "@effect-atom/atom-react"
 import { useCallback, useEffect, useState } from "react"
-import { Exit } from "effect"
+import { Exit, Schema } from "effect"
+import {
+  DashboardDocument,
+  DashboardId,
+  IsoDateTimeString,
+} from "@maple/domain/http"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import type {
   Dashboard,
@@ -12,6 +17,8 @@ import type {
 } from "@/components/dashboard-builder/types"
 
 const GRID_COLS = 12
+const asDashboardId = Schema.decodeUnknownSync(DashboardId)
+const asIsoDateTimeString = Schema.decodeUnknownSync(IsoDateTimeString)
 
 function generateId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -71,6 +78,23 @@ function ensureDashboard(value: unknown): Dashboard | null {
   return dashboard as Dashboard
 }
 
+function toDashboardDocument(dashboard: Dashboard): DashboardDocument {
+  return new DashboardDocument({
+    ...dashboard,
+    id: asDashboardId(dashboard.id),
+    createdAt: asIsoDateTimeString(dashboard.createdAt),
+    updatedAt: asIsoDateTimeString(dashboard.updatedAt),
+    timeRange:
+      dashboard.timeRange.type === "absolute"
+        ? {
+            type: "absolute",
+            startTime: asIsoDateTimeString(dashboard.timeRange.startTime),
+            endTime: asIsoDateTimeString(dashboard.timeRange.endTime),
+          }
+        : dashboard.timeRange,
+  })
+}
+
 export function useDashboardStore() {
   const [dashboards, setDashboards] = useState<Dashboard[]>([])
   const [isHydrated, setIsHydrated] = useState(false)
@@ -89,8 +113,8 @@ export function useDashboardStore() {
   const persistUpsert = useCallback(
     (rollback: Dashboard[], dashboard: Dashboard) => {
       void upsertMutation({
-        path: { dashboardId: dashboard.id },
-        payload: { dashboard },
+        path: { dashboardId: asDashboardId(dashboard.id) },
+        payload: { dashboard: toDashboardDocument(dashboard) },
       }).then((result) => {
         if (Exit.isFailure(result)) {
           setDashboards(rollback)
@@ -103,7 +127,7 @@ export function useDashboardStore() {
 
   const persistDelete = useCallback(
     (rollback: Dashboard[], dashboardId: string) => {
-      void deleteMutation({ path: { dashboardId } }).then((result) => {
+      void deleteMutation({ path: { dashboardId: asDashboardId(dashboardId) } }).then((result) => {
         if (Exit.isFailure(result)) {
           setDashboards(rollback)
           setPersistenceFailure(result)

@@ -1,12 +1,15 @@
 import { timingSafeEqual } from "node:crypto"
-import { ManagedRuntime, Effect, Layer } from "effect"
+import { ManagedRuntime, Effect, Layer, Option, Redacted, Schema } from "effect"
 import type { TenantContext as McpTenantContext } from "@/lib/tenant-context"
 import { AuthService } from "@/services/AuthService"
 import { ApiKeysService } from "@/services/ApiKeysService"
 import { Env } from "@/services/Env"
+import { OrgId, UserId } from "@maple/domain/http"
 import { API_KEY_PREFIX } from "@maple/db"
 
 const INTERNAL_SERVICE_PREFIX = "maple_svc_"
+const decodeOrgIdSync = Schema.decodeUnknownSync(OrgId)
+const decodeUserIdSync = Schema.decodeUnknownSync(UserId)
 
 const EnvRuntime = ManagedRuntime.make(Env.Default)
 const ApiKeyResolutionRuntime = ManagedRuntime.make(
@@ -39,9 +42,12 @@ export async function resolveMcpTenantContext(request: Request): Promise<McpTena
   if (token && token.startsWith(INTERNAL_SERVICE_PREFIX)) {
     const provided = token.slice(INTERNAL_SERVICE_PREFIX.length)
     const env = await EnvRuntime.runPromise(Env)
-    const expected = env.INTERNAL_SERVICE_TOKEN
+    const expected = Option.match(env.INTERNAL_SERVICE_TOKEN, {
+      onNone: () => undefined,
+      onSome: Redacted.value,
+    })
 
-    if (expected.length === 0) {
+    if (!expected) {
       throw new Error("INTERNAL_SERVICE_TOKEN is not configured on the server")
     }
 
@@ -49,16 +55,17 @@ export async function resolveMcpTenantContext(request: Request): Promise<McpTena
       provided.length === expected.length &&
       timingSafeEqual(Buffer.from(provided), Buffer.from(expected))
     ) {
-      const orgId = env.MAPLE_ORG_ID_OVERRIDE.length > 0
-        ? env.MAPLE_ORG_ID_OVERRIDE
-        : request.headers.get("x-org-id")
+      const orgId = Option.match(env.MAPLE_ORG_ID_OVERRIDE, {
+        onNone: () => request.headers.get("x-org-id"),
+        onSome: (value) => value,
+      })
       if (!orgId) {
         throw new Error("X-Org-Id header is required for internal service auth")
       }
 
       return {
-        orgId,
-        userId: "internal-service",
+        orgId: decodeOrgIdSync(orgId),
+        userId: decodeUserIdSync("internal-service"),
         roles: [],
         authMode: "self_hosted",
       }
@@ -74,15 +81,15 @@ export async function resolveMcpTenantContext(request: Request): Promise<McpTena
       ApiKeysService.resolveByKey(token),
     )
 
-    if (resolved) {
+    if (Option.isSome(resolved)) {
       // Touch lastUsedAt in the background — fire and forget
       void ApiKeyResolutionRuntime.runPromise(
-        ApiKeysService.touchLastUsed(resolved.keyId).pipe(Effect.ignore),
+        ApiKeysService.touchLastUsed(resolved.value.keyId).pipe(Effect.ignore),
       )
 
       return {
-        orgId: resolved.orgId,
-        userId: resolved.userId,
+        orgId: resolved.value.orgId,
+        userId: resolved.value.userId,
         roles: [],
         authMode: "self_hosted",
       }

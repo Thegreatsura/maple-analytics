@@ -1,5 +1,5 @@
 import { Result, useAtomValue } from "@effect-atom/atom-react"
-import { Link } from "@tanstack/react-router"
+import { Link, useNavigate } from "@tanstack/react-router"
 
 import { useEffectiveTimeRange } from "@/hooks/use-effective-time-range"
 import {
@@ -193,6 +193,7 @@ function LoadingState() {
 }
 
 export function ServicesTable({ filters }: ServicesTableProps) {
+  const navigate = useNavigate()
   const { startTime: effectiveStartTime, endTime: effectiveEndTime } =
     useEffectiveTimeRange(filters?.startTime, filters?.endTime)
 
@@ -233,17 +234,17 @@ export function ServicesTable({ filters }: ServicesTableProps) {
       return (
         <div className={`space-y-4 transition-opacity ${combinedResult.waiting ? "opacity-60" : ""}`}>
           <div className="rounded-md border">
-            <Table>
+            <Table aria-label="Services">
               <TableHeader>
                 <TableRow>
                   <TableHead>Service</TableHead>
-                  <TableHead className="w-[120px]">Environment</TableHead>
-                  <TableHead className="w-[90px]">P50</TableHead>
-                  <TableHead className="w-[90px]">P95</TableHead>
+                  <TableHead className="hidden md:table-cell w-[120px]">Environment</TableHead>
+                  <TableHead className="hidden lg:table-cell w-[90px]">P50</TableHead>
+                  <TableHead className="hidden lg:table-cell w-[90px]">P95</TableHead>
                   <TableHead className="w-[90px]">P99</TableHead>
                   <TableHead className="w-[180px]">Error Rate</TableHead>
-                  <TableHead className="w-[180px]">Throughput</TableHead>
-                  <TableHead className="w-[140px]">Commit</TableHead>
+                  <TableHead className="hidden md:table-cell w-[180px]">Throughput</TableHead>
+                  <TableHead className="hidden lg:table-cell w-[140px]">Commit</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -262,7 +263,29 @@ export function ServicesTable({ filters }: ServicesTableProps) {
                     return (
                       <TableRow
                         key={`${service.serviceName}-${service.environment}`}
-                        className="cursor-pointer hover:bg-muted/50"
+                        className="cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset"
+                        tabIndex={0}
+                        onClick={() => navigate({
+                          to: "/services/$serviceName",
+                          params: { serviceName: service.serviceName },
+                          search: {
+                            startTime: filters?.startTime,
+                            endTime: filters?.endTime,
+                          },
+                        })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault()
+                            navigate({
+                              to: "/services/$serviceName",
+                              params: { serviceName: service.serviceName },
+                              search: {
+                                startTime: filters?.startTime,
+                                endTime: filters?.endTime,
+                              },
+                            })
+                          }
+                        }}
                       >
                         <TableCell>
                           <Link
@@ -273,24 +296,25 @@ export function ServicesTable({ filters }: ServicesTableProps) {
                               endTime: filters?.endTime,
                             }}
                             className="font-medium text-primary hover:underline"
+                            onClick={(e) => e.stopPropagation()}
                           >
                             {service.serviceName}
                           </Link>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell">
                           <EnvironmentBadge environment={service.environment} />
                         </TableCell>
-                        <TableCell className="font-mono text-xs">
+                        <TableCell className="hidden lg:table-cell font-mono text-xs">
                           {formatLatency(service.p50LatencyMs)}
                         </TableCell>
-                        <TableCell className="font-mono text-xs">
+                        <TableCell className="hidden lg:table-cell font-mono text-xs">
                           {formatLatency(service.p95LatencyMs)}
                         </TableCell>
                         <TableCell className="font-mono text-xs">
                           {formatLatency(service.p99LatencyMs)}
                         </TableCell>
                         <TableCell>
-                          <div className="relative w-[120px] h-8">
+                          <div className="relative w-[120px] h-8" role="img" aria-label={`Error rate: ${formatErrorRate(service.errorRate)}`}>
                             <Sparkline
                               data={errorRateData}
                               color="var(--color-destructive, #ef4444)"
@@ -303,9 +327,9 @@ export function ServicesTable({ filters }: ServicesTableProps) {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell">
                           <Tooltip>
-                            <TooltipTrigger className="relative w-[120px] h-8 block">
+                            <TooltipTrigger className="relative w-[120px] h-8 block" aria-label={`Throughput: ${formatThroughput(service.throughput)}`}>
                               <Sparkline
                                 data={throughputData}
                                 color="var(--color-primary, #3b82f6)"
@@ -329,7 +353,7 @@ export function ServicesTable({ filters }: ServicesTableProps) {
                             )}
                           </Tooltip>
                         </TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">
+                        <TableCell className="hidden lg:table-cell font-mono text-xs text-muted-foreground">
                           <CommitsList commits={service.commits} />
                         </TableCell>
                       </TableRow>

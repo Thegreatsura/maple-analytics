@@ -157,14 +157,14 @@ export function TracesTable({ filters }: TracesTableProps) {
     .onSuccess((response, result) => (
       <div className={`space-y-4 transition-opacity ${result.waiting ? "opacity-50" : ""}`}>
         <div className="rounded-md border">
-          <Table>
+          <Table aria-label="Traces">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[100px]">Trace ID</TableHead>
                 <TableHead>Root Span</TableHead>
-                <TableHead className="w-[160px]">Services</TableHead>
+                <TableHead className="hidden md:table-cell w-[160px]">Services</TableHead>
                 <TableHead className="w-[100px]">Duration</TableHead>
-                <TableHead className="w-[80px]">Spans</TableHead>
+                <TableHead className="hidden md:table-cell w-[80px]">Spans</TableHead>
                 <TableHead className="w-[80px]">Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -222,7 +222,7 @@ export function TracesTable({ filters }: TracesTableProps) {
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden md:table-cell">
                       <div className="flex flex-wrap gap-1">
                         {trace.services.slice(0, 3).map((service: string) => (
                           <Badge
@@ -243,7 +243,7 @@ export function TracesTable({ filters }: TracesTableProps) {
                     <TableCell className="font-mono text-xs">
                       {formatDuration(trace.durationMs)}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
+                    <TableCell className="hidden md:table-cell text-xs text-muted-foreground">
                       {trace.spanCount}
                     </TableCell>
                     <TableCell>

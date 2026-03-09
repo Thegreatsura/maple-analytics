@@ -94,11 +94,11 @@ export function LogsTable({ filters }: LogsTableProps) {
       <>
         <div className={`space-y-4 transition-opacity ${result.waiting ? "opacity-60" : ""}`}>
           <div className="rounded-md border">
-            <Table>
+            <Table aria-label="Logs">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[160px]">Timestamp</TableHead>
-                  <TableHead className="w-[120px]">Service</TableHead>
+                  <TableHead className="hidden md:table-cell w-[120px]">Service</TableHead>
                   <TableHead className="w-[80px]">Severity</TableHead>
                   <TableHead>Message</TableHead>
                 </TableRow>
@@ -129,7 +129,7 @@ export function LogsTable({ filters }: LogsTableProps) {
                           timeZone: effectiveTimezone,
                         })}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell">
                         <span className="font-mono text-xs">{log.serviceName}</span>
                       </TableCell>
                       <TableCell>

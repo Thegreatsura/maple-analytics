@@ -1,13 +1,14 @@
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "@effect/platform"
 import { Schema } from "effect"
+import { ApiKeyId, UserId } from "../primitives"
 import { Authorization } from "./current-tenant"
 
 const ApiKeyPath = Schema.Struct({
-  keyId: Schema.String,
+  keyId: ApiKeyId,
 })
 
 export class ApiKeyResponse extends Schema.Class<ApiKeyResponse>("ApiKeyResponse")({
-  id: Schema.String,
+  id: ApiKeyId,
   name: Schema.String,
   description: Schema.NullOr(Schema.String),
   keyPrefix: Schema.String,
@@ -16,11 +17,11 @@ export class ApiKeyResponse extends Schema.Class<ApiKeyResponse>("ApiKeyResponse
   lastUsedAt: Schema.NullOr(Schema.Number),
   expiresAt: Schema.NullOr(Schema.Number),
   createdAt: Schema.Number,
-  createdBy: Schema.String,
+  createdBy: UserId,
 }) {}
 
 export class ApiKeyCreatedResponse extends Schema.Class<ApiKeyCreatedResponse>("ApiKeyCreatedResponse")({
-  id: Schema.String,
+  id: ApiKeyId,
   name: Schema.String,
   description: Schema.NullOr(Schema.String),
   keyPrefix: Schema.String,
@@ -29,7 +30,7 @@ export class ApiKeyCreatedResponse extends Schema.Class<ApiKeyCreatedResponse>("
   lastUsedAt: Schema.NullOr(Schema.Number),
   expiresAt: Schema.NullOr(Schema.Number),
   createdAt: Schema.Number,
-  createdBy: Schema.String,
+  createdBy: UserId,
   secret: Schema.String,
 }) {}
 
@@ -54,7 +55,7 @@ export class ApiKeyPersistenceError extends Schema.TaggedError<ApiKeyPersistence
 export class ApiKeyNotFoundError extends Schema.TaggedError<ApiKeyNotFoundError>()(
   "ApiKeyNotFoundError",
   {
-    keyId: Schema.String,
+    keyId: ApiKeyId,
     message: Schema.String,
   },
   HttpApiSchema.annotations({ status: 404 }),

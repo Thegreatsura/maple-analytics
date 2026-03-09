@@ -3,7 +3,7 @@ import type { IconProps } from "./icon"
 function NetworkNodesIcon({ size = 24, className, ...props }: IconProps) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-      width={size} height={size} className={className} fill="none" {...props}>
+      width={size} height={size} className={className} fill="none" aria-hidden="true" {...props}>
       <path d="M4.5 13.5L10.5 19.5" stroke="currentColor" strokeWidth="2" />
       <path d="M4.5 10.5L10.5 4.5" stroke="currentColor" strokeWidth="2" />
       <path d="M19.5 13.5L13.5 19.5" stroke="currentColor" strokeWidth="2" />

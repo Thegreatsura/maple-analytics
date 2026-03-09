@@ -1,5 +1,6 @@
 import { HttpApiMiddleware, HttpApiSchema, HttpApiSecurity } from "@effect/platform"
 import { Context, Schema } from "effect"
+import { AuthMode, OrgId, RoleName, UserId } from "../primitives"
 
 export class UnauthorizedError extends Schema.TaggedError<UnauthorizedError>()(
   "UnauthorizedError",
@@ -10,10 +11,10 @@ export class UnauthorizedError extends Schema.TaggedError<UnauthorizedError>()(
 ) {}
 
 export class TenantSchema extends Schema.Class<TenantSchema>("TenantSchema")({
-  orgId: Schema.String,
-  userId: Schema.String,
-  roles: Schema.Array(Schema.String),
-  authMode: Schema.Literal("clerk", "self_hosted"),
+  orgId: OrgId,
+  userId: UserId,
+  roles: Schema.Array(RoleName),
+  authMode: AuthMode,
 }) {}
 
 export class Context_ extends Context.Tag("CurrentTenant")<Context_, TenantSchema>() {}

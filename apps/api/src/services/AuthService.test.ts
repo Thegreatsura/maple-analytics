@@ -1,15 +1,20 @@
 import { describe, expect, it } from "bun:test"
-import { Cause, Effect, Exit, Option } from "effect"
+import { Cause, Effect, Exit, Option, Redacted, Schema } from "effect"
+import { OrgId, RoleName, UserId } from "@maple/domain/http"
 import { makeLoginSelfHosted, makeResolveMcpTenant, makeResolveTenant } from "./AuthService"
+
+const asOrgId = Schema.decodeUnknownSync(OrgId)
+const asUserId = Schema.decodeUnknownSync(UserId)
+const asRoleName = Schema.decodeUnknownSync(RoleName)
 
 const baseEnv = {
   MAPLE_AUTH_MODE: "self_hosted",
-  MAPLE_ROOT_PASSWORD: "root-password",
+  MAPLE_ROOT_PASSWORD: Option.some(Redacted.make("root-password")),
   MAPLE_DEFAULT_ORG_ID: "default",
-  MAPLE_ORG_ID_OVERRIDE: "",
-  CLERK_SECRET_KEY: "",
-  CLERK_PUBLISHABLE_KEY: "",
-  CLERK_JWT_KEY: "",
+  MAPLE_ORG_ID_OVERRIDE: Option.none(),
+  CLERK_SECRET_KEY: Option.none(),
+  CLERK_PUBLISHABLE_KEY: Option.none(),
+  CLERK_JWT_KEY: Option.none(),
 } as const
 
 const getFailure = <A, E>(exit: Exit.Exit<A, E>): E | undefined =>
@@ -21,7 +26,8 @@ describe("makeResolveTenant", () => {
       {
         ...baseEnv,
         MAPLE_AUTH_MODE: "clerk",
-        CLERK_SECRET_KEY: "sk_test_123",
+        CLERK_SECRET_KEY: Option.some(Redacted.make("sk_test_123")),
+        CLERK_JWT_KEY: Option.some(Redacted.make("jwt_test_123")),
       },
       async () => ({
         isAuthenticated: true,
@@ -43,9 +49,9 @@ describe("makeResolveTenant", () => {
     )
 
     expect(tenant).toEqual({
-      orgId: "org_123",
-      userId: "user_123",
-      roles: ["org:admin"],
+      orgId: asOrgId("org_123"),
+      userId: asUserId("user_123"),
+      roles: [asRoleName("org:admin")],
       authMode: "clerk",
     })
   })
@@ -55,7 +61,8 @@ describe("makeResolveTenant", () => {
       {
         ...baseEnv,
         MAPLE_AUTH_MODE: "clerk",
-        CLERK_SECRET_KEY: "sk_test_123",
+        CLERK_SECRET_KEY: Option.some(Redacted.make("sk_test_123")),
+        CLERK_JWT_KEY: Option.some(Redacted.make("jwt_test_123")),
       },
       async () => ({
         isAuthenticated: false,
@@ -85,7 +92,8 @@ describe("makeResolveTenant", () => {
       {
         ...baseEnv,
         MAPLE_AUTH_MODE: "clerk",
-        CLERK_SECRET_KEY: "sk_test_123",
+        CLERK_SECRET_KEY: Option.some(Redacted.make("sk_test_123")),
+        CLERK_JWT_KEY: Option.some(Redacted.make("jwt_test_123")),
       },
       async () => {
         throw new Error("token verification failed")
@@ -111,7 +119,8 @@ describe("makeResolveTenant", () => {
       {
         ...baseEnv,
         MAPLE_AUTH_MODE: "clerk",
-        CLERK_SECRET_KEY: "sk_test_123",
+        CLERK_SECRET_KEY: Option.some(Redacted.make("sk_test_123")),
+        CLERK_JWT_KEY: Option.some(Redacted.make("jwt_test_123")),
       },
       async () => ({
         isAuthenticated: true,
@@ -181,9 +190,9 @@ describe("makeResolveTenant", () => {
     )
 
     expect(tenant).toEqual({
-      orgId: "default",
-      userId: "root",
-      roles: ["root"],
+      orgId: asOrgId("default"),
+      userId: asUserId("root"),
+      roles: [asRoleName("root")],
       authMode: "self_hosted",
     })
   })
@@ -195,7 +204,8 @@ describe("makeResolveMcpTenant", () => {
       {
         ...baseEnv,
         MAPLE_AUTH_MODE: "clerk",
-        CLERK_SECRET_KEY: "sk_test_123",
+        CLERK_SECRET_KEY: Option.some(Redacted.make("sk_test_123")),
+        CLERK_JWT_KEY: Option.some(Redacted.make("jwt_test_123")),
       },
       async () => ({
         isAuthenticated: true,
@@ -217,9 +227,9 @@ describe("makeResolveMcpTenant", () => {
     )
 
     expect(tenant).toEqual({
-      orgId: "org_abc",
-      userId: "user_abc",
-      roles: ["org:member"],
+      orgId: asOrgId("org_abc"),
+      userId: asUserId("user_abc"),
+      roles: [asRoleName("org:member")],
       authMode: "clerk",
     })
   })
@@ -229,8 +239,9 @@ describe("makeResolveMcpTenant", () => {
       {
         ...baseEnv,
         MAPLE_AUTH_MODE: "clerk",
-        CLERK_SECRET_KEY: "sk_test_123",
-        MAPLE_ORG_ID_OVERRIDE: "org_override",
+        CLERK_SECRET_KEY: Option.some(Redacted.make("sk_test_123")),
+        CLERK_JWT_KEY: Option.some(Redacted.make("jwt_test_123")),
+        MAPLE_ORG_ID_OVERRIDE: Option.some("org_override"),
       },
       async () => ({
         isAuthenticated: true,
@@ -252,8 +263,8 @@ describe("makeResolveMcpTenant", () => {
     )
 
     expect(tenant).toEqual({
-      orgId: "org_override",
-      userId: "user_abc",
+      orgId: asOrgId("org_override"),
+      userId: asUserId("user_abc"),
       roles: [],
       authMode: "clerk",
     })
@@ -264,7 +275,8 @@ describe("makeResolveMcpTenant", () => {
       {
         ...baseEnv,
         MAPLE_AUTH_MODE: "clerk",
-        CLERK_SECRET_KEY: "sk_test_123",
+        CLERK_SECRET_KEY: Option.some(Redacted.make("sk_test_123")),
+        CLERK_JWT_KEY: Option.some(Redacted.make("jwt_test_123")),
       },
       async () => ({
         isAuthenticated: true,
@@ -305,9 +317,9 @@ describe("makeResolveMcpTenant", () => {
     )
 
     expect(tenant).toEqual({
-      orgId: "default",
-      userId: "root",
-      roles: ["root"],
+      orgId: asOrgId("default"),
+      userId: asUserId("root"),
+      roles: [asRoleName("root")],
       authMode: "self_hosted",
     })
   })

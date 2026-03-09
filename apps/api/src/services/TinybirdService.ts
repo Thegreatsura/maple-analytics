@@ -1,4 +1,5 @@
 import { TinybirdQueryError, type TinybirdQueryRequest } from "@maple/domain/http"
+import type { OrgId } from "@maple/domain"
 import { Tinybird } from "@tinybirdco/sdk"
 import { Effect, Redacted } from "effect"
 import { Env } from "./Env"
@@ -116,7 +117,7 @@ export class TinybirdService extends Effect.Service<TinybirdService>()("Tinybird
       pipe: TPipe,
       tenant: TenantContext,
       params: TParams,
-      execute: (params: TParams & { org_id: string }) => Promise<{ data: TRow[] }>,
+      execute: (params: TParams & { org_id: OrgId }) => Promise<{ data: TRow[] }>,
     ) {
       const result = yield* Effect.tryPromise({
         try: () =>

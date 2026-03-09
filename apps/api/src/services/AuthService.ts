@@ -1,19 +1,23 @@
 import { createHmac, timingSafeEqual } from "node:crypto"
 import { createClerkClient } from "@clerk/backend"
 import {
+  AuthMode,
+  OrgId,
+  RoleName,
   SelfHostedAuthDisabledError,
   SelfHostedInvalidPasswordError,
   SelfHostedLoginResponse,
   UnauthorizedError,
+  UserId,
 } from "@maple/domain/http"
-import { Effect } from "effect"
+import { Effect, Option, Redacted, Schema } from "effect"
 import { Env } from "./Env"
 
 export interface TenantContext {
-  readonly orgId: string
-  readonly userId: string
-  readonly roles: readonly string[]
-  readonly authMode: "clerk" | "self_hosted"
+  readonly orgId: OrgId
+  readonly userId: UserId
+  readonly roles: readonly RoleName[]
+  readonly authMode: AuthMode
 }
 
 type HeaderRecord = Record<string, string | undefined>
@@ -24,13 +28,44 @@ type JwtPayload = {
   nbf?: number
   iat?: number
   org_id?: string
-  authMode?: string
+  authMode?: AuthMode
   roles?: string[] | string
 }
+
+const decodeOrgIdSync = Schema.decodeUnknownSync(OrgId)
+const decodeUserIdSync = Schema.decodeUnknownSync(UserId)
+const decodeRoleNameSync = Schema.decodeUnknownSync(RoleName)
 
 const unauthorized = (message: string) =>
   new UnauthorizedError({
     message,
+  })
+
+const decodeOrgId = (
+  value: string,
+  message: string,
+): Effect.Effect<OrgId, UnauthorizedError> =>
+  Effect.try({
+    try: () => decodeOrgIdSync(value),
+    catch: () => unauthorized(message),
+  })
+
+const decodeUserId = (
+  value: string,
+  message: string,
+): Effect.Effect<UserId, UnauthorizedError> =>
+  Effect.try({
+    try: () => decodeUserIdSync(value),
+    catch: () => unauthorized(message),
+  })
+
+const decodeRoleName = (
+  value: string,
+  message: string,
+): Effect.Effect<RoleName, UnauthorizedError> =>
+  Effect.try({
+    try: () => decodeRoleNameSync(value),
+    catch: () => unauthorized(message),
   })
 
 const getHeader = (headers: HeaderRecord, key: string): string | undefined => {
@@ -147,7 +182,7 @@ const constantTimeEquals = (left: string, right: string): boolean => {
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(normalizedLeft, normalizedRight)
 }
 
-const parseRoles = (value: JwtPayload["roles"]): string[] => {
+const parseRawRoles = (value: JwtPayload["roles"]): string[] => {
   if (Array.isArray(value)) return value
   if (typeof value === "string") {
     return value
@@ -158,13 +193,20 @@ const parseRoles = (value: JwtPayload["roles"]): string[] => {
   return []
 }
 
-const getAuthMode = (mode: string): "clerk" | "self_hosted" =>
+const parseRoles = (
+  value: JwtPayload["roles"],
+): Effect.Effect<Array<RoleName>, UnauthorizedError> =>
+  Effect.forEach(parseRawRoles(value), (role) =>
+    decodeRoleName(role, "Invalid role in session token"),
+  )
+
+const getAuthMode = (mode: string): AuthMode =>
   mode.toLowerCase() === "clerk" ? "clerk" : "self_hosted"
 
 const makeSelfHostedTenant = (defaultOrgId: string): TenantContext => ({
-  orgId: defaultOrgId,
-  userId: "root",
-  roles: ["root"],
+  orgId: decodeOrgIdSync(defaultOrgId),
+  userId: decodeUserIdSync("root"),
+  roles: [decodeRoleNameSync("root")],
   authMode: "self_hosted",
 })
 
@@ -193,24 +235,40 @@ type ClerkAuthenticateRequest = (
 interface AuthEnv {
   readonly MAPLE_AUTH_MODE: string
   readonly MAPLE_DEFAULT_ORG_ID: string
-  readonly MAPLE_ORG_ID_OVERRIDE: string
-  readonly MAPLE_ROOT_PASSWORD: string
-  readonly CLERK_SECRET_KEY: string
-  readonly CLERK_PUBLISHABLE_KEY: string
-  readonly CLERK_JWT_KEY: string
+  readonly MAPLE_ORG_ID_OVERRIDE: Option.Option<string>
+  readonly MAPLE_ROOT_PASSWORD: Option.Option<Redacted.Redacted<string>>
+  readonly CLERK_SECRET_KEY: Option.Option<Redacted.Redacted<string>>
+  readonly CLERK_PUBLISHABLE_KEY: Option.Option<string>
+  readonly CLERK_JWT_KEY: Option.Option<Redacted.Redacted<string>>
 }
+
+const getOptionalString = <A>(option: Option.Option<A>): A | undefined =>
+  Option.getOrUndefined(option)
+
+const getOptionalSecret = (
+  option: Option.Option<Redacted.Redacted<string>>,
+): string | undefined => Option.match(option, { onNone: () => undefined, onSome: Redacted.value })
+
+const requireSecret = (
+  option: Option.Option<Redacted.Redacted<string>>,
+  label: string,
+): Effect.Effect<string, never> =>
+  Option.match(option, {
+    onNone: () => Effect.dieMessage(`${label} is required`),
+    onSome: (value) => Effect.succeed(Redacted.value(value)),
+  })
 
 const makeClerkAuthenticateRequest = (
   env: Pick<AuthEnv, "CLERK_SECRET_KEY" | "CLERK_PUBLISHABLE_KEY" | "CLERK_JWT_KEY">,
 ): ClerkAuthenticateRequest | undefined => {
-  if (env.CLERK_SECRET_KEY.length === 0) {
+  if (Option.isNone(env.CLERK_SECRET_KEY)) {
     return undefined
   }
 
   const clerkClient = createClerkClient({
-    secretKey: env.CLERK_SECRET_KEY,
-    publishableKey: env.CLERK_PUBLISHABLE_KEY.length > 0 ? env.CLERK_PUBLISHABLE_KEY : undefined,
-    jwtKey: env.CLERK_JWT_KEY.length > 0 ? env.CLERK_JWT_KEY : undefined,
+    secretKey: Redacted.value(env.CLERK_SECRET_KEY.value),
+    publishableKey: getOptionalString(env.CLERK_PUBLISHABLE_KEY),
+    jwtKey: getOptionalSecret(env.CLERK_JWT_KEY),
   })
 
   return (request, options) =>
@@ -234,7 +292,12 @@ export const makeLoginSelfHosted = (
       )
     }
 
-    if (!constantTimeEquals(password, env.MAPLE_ROOT_PASSWORD)) {
+    const rootPassword = yield* requireSecret(
+      env.MAPLE_ROOT_PASSWORD,
+      "MAPLE_ROOT_PASSWORD",
+    )
+
+    if (!constantTimeEquals(password, rootPassword)) {
       return yield* Effect.fail(
         new SelfHostedInvalidPasswordError({
           message: "Invalid root password",
@@ -252,7 +315,7 @@ export const makeLoginSelfHosted = (
         authMode: "self_hosted",
         iat: now,
       },
-      env.MAPLE_ROOT_PASSWORD,
+      rootPassword,
     )
 
     return new SelfHostedLoginResponse({
@@ -281,7 +344,7 @@ export const makeResolveTenant = (
         try: () =>
           authenticateClerkRequest(toRequest(headers), {
             acceptsToken,
-            jwtKey: env.CLERK_JWT_KEY.length > 0 ? env.CLERK_JWT_KEY : undefined,
+            jwtKey: getOptionalSecret(env.CLERK_JWT_KEY),
           }),
         catch: (error) =>
           unauthorized(
@@ -306,15 +369,29 @@ export const makeResolveTenant = (
         return yield* unauthorized("Missing user in Clerk session token")
       }
 
-      if (!auth.orgId && env.MAPLE_ORG_ID_OVERRIDE.length === 0) {
+      const orgIdOverride = getOptionalString(env.MAPLE_ORG_ID_OVERRIDE)
+
+      if (!auth.orgId && !orgIdOverride) {
         return yield* unauthorized("Active organization is required")
       }
 
       const clerkTenant: TenantContext = {
-        orgId: env.MAPLE_ORG_ID_OVERRIDE.length > 0 ? env.MAPLE_ORG_ID_OVERRIDE : auth.orgId!,
-        userId: auth.userId,
-        roles: typeof auth.orgRole === "string" ? [auth.orgRole] : [],
-        authMode: "clerk" as const,
+        orgId: yield* decodeOrgId(
+          orgIdOverride ?? auth.orgId!,
+          "Invalid organization in Clerk session token",
+        ),
+        userId: yield* decodeUserId(
+          auth.userId,
+          "Invalid user in Clerk session token",
+        ),
+        roles:
+          typeof auth.orgRole === "string"
+            ? yield* Effect.map(
+                decodeRoleName(auth.orgRole, "Invalid role in Clerk session token"),
+                (role) => [role],
+              )
+            : [],
+        authMode: "clerk",
       }
 
       return clerkTenant
@@ -325,7 +402,11 @@ export const makeResolveTenant = (
       return yield* unauthorized("Self-hosted mode requires a valid bearer token")
     }
 
-    const payload = yield* verifyHs256Jwt(token, env.MAPLE_ROOT_PASSWORD)
+    const rootPassword = yield* requireSecret(
+      env.MAPLE_ROOT_PASSWORD,
+      "MAPLE_ROOT_PASSWORD",
+    )
+    const payload = yield* verifyHs256Jwt(token, rootPassword)
 
     if (
       payload.authMode !== "self_hosted" ||
@@ -335,17 +416,30 @@ export const makeResolveTenant = (
       return yield* unauthorized("Invalid self-hosted session token")
     }
 
-    const roles = parseRoles(payload.roles)
+    const roles = yield* parseRoles(payload.roles)
 
     const tenant: TenantContext = {
-      orgId: payload.org_id,
-      userId: payload.sub,
-      roles: roles.length > 0 ? roles : ["root"],
-      authMode: "self_hosted" as const,
+      orgId: yield* decodeOrgId(
+        payload.org_id,
+        "Invalid organization in self-hosted session token",
+      ),
+      userId: yield* decodeUserId(
+        payload.sub,
+        "Invalid user in self-hosted session token",
+      ),
+      roles: roles.length > 0 ? roles : [decodeRoleNameSync("root")],
+      authMode: "self_hosted",
     }
 
-    if (env.MAPLE_ORG_ID_OVERRIDE.length > 0) {
-      return { ...tenant, orgId: env.MAPLE_ORG_ID_OVERRIDE }
+    const orgIdOverride = getOptionalString(env.MAPLE_ORG_ID_OVERRIDE)
+    if (orgIdOverride) {
+      return {
+        ...tenant,
+        orgId: yield* decodeOrgId(
+          orgIdOverride,
+          "Invalid MAPLE_ORG_ID_OVERRIDE value",
+        ),
+      }
     }
 
     return tenant

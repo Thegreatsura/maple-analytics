@@ -1,16 +1,21 @@
 import { SqliteDrizzle } from "@effect/sql-drizzle/Sqlite"
 import {
+  DashboardDeleteResponse,
+  DashboardId,
   DashboardNotFoundError,
   DashboardPersistenceError,
   DashboardValidationError,
   DashboardDocument,
+  OrgId,
+  UserId,
 } from "@maple/domain/http"
 import { dashboards } from "@maple/db"
 import { and, desc, eq } from "drizzle-orm"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Option, Schema } from "effect"
 import { DatabaseLive } from "./DatabaseLive"
 
 const decodeDashboardDocument = Schema.decodeUnknown(Schema.Array(DashboardDocument))
+const decodeDashboardIdSync = Schema.decodeUnknownSync(DashboardId)
 
 const toPersistenceError = (error: unknown) =>
   new DashboardPersistenceError({
@@ -60,7 +65,7 @@ export class DashboardPersistenceService extends Effect.Service<DashboardPersist
       const db = yield* SqliteDrizzle
 
       const list = Effect.fn("DashboardPersistenceService.list")(function* (
-        orgId: string,
+        orgId: OrgId,
       ) {
         const rows = yield* db
           .select({
@@ -85,8 +90,8 @@ export class DashboardPersistenceService extends Effect.Service<DashboardPersist
       })
 
       const upsert = Effect.fn("DashboardPersistenceService.upsert")(function* (
-        orgId: string,
-        userId: string,
+        orgId: OrgId,
+        userId: UserId,
         dashboard: DashboardDocument,
       ) {
         const payloadJson = yield* stringifyPayload(dashboard)
@@ -120,8 +125,8 @@ export class DashboardPersistenceService extends Effect.Service<DashboardPersist
       })
 
       const remove = Effect.fn("DashboardPersistenceService.delete")(function* (
-        orgId: string,
-        dashboardId: string,
+        orgId: OrgId,
+        dashboardId: DashboardId,
       ) {
         const rows = yield* db
           .delete(dashboards)
@@ -134,9 +139,9 @@ export class DashboardPersistenceService extends Effect.Service<DashboardPersist
           .returning({ id: dashboards.id })
           .pipe(Effect.mapError(toPersistenceError))
 
-        const deleted = rows[0]
+        const deleted = Option.fromNullable(rows[0])
 
-        if (!deleted) {
+        if (Option.isNone(deleted)) {
           return yield* Effect.fail(
             new DashboardNotFoundError({
               dashboardId,
@@ -145,9 +150,9 @@ export class DashboardPersistenceService extends Effect.Service<DashboardPersist
           )
         }
 
-        return {
-          id: deleted.id,
-        }
+        return new DashboardDeleteResponse({
+          id: decodeDashboardIdSync(deleted.value.id),
+        })
       })
 
       return {

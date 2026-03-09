@@ -1,5 +1,6 @@
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "@effect/platform"
 import { Schema } from "effect"
+import { OrgId, UserId } from "../primitives"
 import { Authorization, TenantSchema } from "./current-tenant"
 
 export class SelfHostedLoginRequest extends Schema.Class<SelfHostedLoginRequest>("SelfHostedLoginRequest")({
@@ -8,8 +9,8 @@ export class SelfHostedLoginRequest extends Schema.Class<SelfHostedLoginRequest>
 
 export class SelfHostedLoginResponse extends Schema.Class<SelfHostedLoginResponse>("SelfHostedLoginResponse")({
   token: Schema.String,
-  orgId: Schema.String,
-  userId: Schema.String,
+  orgId: OrgId,
+  userId: UserId,
 }) {}
 
 export class SelfHostedAuthDisabledError extends Schema.TaggedError<SelfHostedAuthDisabledError>()(
