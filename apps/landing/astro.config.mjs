@@ -7,7 +7,7 @@ import tailwindcss from '@tailwindcss/vite';
 // https://astro.build/config
 export default defineConfig({
   site: 'https://maple.dev',
-  trailingSlash: 'never',
+  trailingSlash: 'ignore',
   integrations: [react(), sitemap()],
   vite: {
     plugins: [tailwindcss()],
