@@ -1,4 +1,6 @@
 ---
+import { getRelativeLocaleUrl } from "astro:i18n";
+
 interface BreadcrumbItem {
     label: string;
     href?: string;
@@ -9,6 +11,8 @@ interface Props {
 }
 
 const { items } = Astro.props;
+const locale = Astro.currentLocale ?? "en";
+const l = (path: string) => getRelativeLocaleUrl(locale, path);
 
 const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://maple.dev';
 
@@ -19,7 +23,7 @@ const jsonLd = {
         "@type": "ListItem",
         "position": index + 1,
         "name": item.label,
-        ...(item.href ? { "item": `${siteUrl}${item.href}` } : {}),
+        ...(item.href ? { "item": `${siteUrl}${l(item.href)}` } : {}),
     })),
 };
 ---
@@ -30,7 +34,7 @@ const jsonLd = {
             <li class="flex items-center gap-1.5">
                 {index > 0 && <span class="text-fg-muted">/</span>}
                 {item.href ? (
-                    <a href={item.href} class="text-fg-muted hover:text-fg transition-colors">{item.label}</a>
+                    <a href={l(item.href)} class="text-fg-muted hover:text-fg transition-colors">{item.label}</a>
                 ) : (
                     <span class="text-fg">{item.label}</span>
                 )}

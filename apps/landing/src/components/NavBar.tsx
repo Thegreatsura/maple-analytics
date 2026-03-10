@@ -10,41 +10,42 @@ import {
 import * as m from "../paraglide/messages"
 import { ClerkProvider } from "./ClerkProvider"
 
-const featureLinks = [
-  { href: "/features/distributed-tracing", label: () => m.nav_distributed_tracing() },
-  { href: "/features/metrics-dashboards", label: () => m.nav_metrics_dashboards() },
-  { href: "/features/log-management", label: () => m.nav_log_management() },
-  { href: "/features/service-catalog", label: () => m.nav_service_catalog() },
-  { href: "/features/error-tracking", label: () => m.nav_error_tracking() },
-  { href: "/features/ai-mcp-integration", label: () => m.nav_ai_mcp() },
-]
-
-const useCaseLinks = [
-  { href: "/use-cases/ecommerce-observability", label: () => m.nav_ecommerce() },
-  { href: "/use-cases/microservices-debugging", label: () => m.nav_microservices() },
-  { href: "/use-cases/api-performance", label: () => m.nav_api_performance() },
-]
-
-const compareLinks = [
-  { href: "/compare/datadog", label: () => m.nav_vs_datadog() },
-  { href: "/compare/grafana", label: () => m.nav_vs_grafana() },
-  { href: "/compare/new-relic", label: () => m.nav_vs_new_relic() },
-]
-
-const integrationLinks = [
-  { href: "/integrations/nextjs", label: () => m.nav_nextjs() },
-  { href: "/integrations/python", label: () => m.nav_python() },
-  { href: "/integrations/nodejs", label: () => m.nav_nodejs() },
-]
-
-function NavBarInner() {
+function NavBarInner({ locale = "en" }: { locale?: string }) {
   const { isSignedIn, isLoaded } = useAuth()
+  const l = (path: string) => locale === "en" ? path : `/${locale}${path}`
+
+  const featureLinks = [
+    { href: l("/features/distributed-tracing"), label: () => m.nav_distributed_tracing() },
+    { href: l("/features/metrics-dashboards"), label: () => m.nav_metrics_dashboards() },
+    { href: l("/features/log-management"), label: () => m.nav_log_management() },
+    { href: l("/features/service-catalog"), label: () => m.nav_service_catalog() },
+    { href: l("/features/error-tracking"), label: () => m.nav_error_tracking() },
+    { href: l("/features/ai-mcp-integration"), label: () => m.nav_ai_mcp() },
+  ]
+
+  const useCaseLinks = [
+    { href: l("/use-cases/ecommerce-observability"), label: () => m.nav_ecommerce() },
+    { href: l("/use-cases/microservices-debugging"), label: () => m.nav_microservices() },
+    { href: l("/use-cases/api-performance"), label: () => m.nav_api_performance() },
+  ]
+
+  const compareLinks = [
+    { href: l("/compare/datadog"), label: () => m.nav_vs_datadog() },
+    { href: l("/compare/grafana"), label: () => m.nav_vs_grafana() },
+    { href: l("/compare/new-relic"), label: () => m.nav_vs_new_relic() },
+  ]
+
+  const integrationLinks = [
+    { href: l("/integrations/nextjs"), label: () => m.nav_nextjs() },
+    { href: l("/integrations/python"), label: () => m.nav_python() },
+    { href: l("/integrations/nodejs"), label: () => m.nav_nodejs() },
+  ]
 
   return (
     <div className="flex items-center justify-between h-full">
       {/* Left group: Logo + Navigation */}
       <div className="flex items-center gap-1">
-        <a href="/" className="flex items-center gap-3 mr-2">
+        <a href={l("/")} className="flex items-center gap-3 mr-2">
           <div className="w-7 h-7 bg-accent flex items-center justify-center">
             <span className="text-accent-foreground text-sm font-bold">M</span>
           </div>
@@ -109,13 +110,13 @@ function NavBarInner() {
             </NavigationMenuItem>
 
             <NavigationMenuItem>
-              <a href="/pricing" className="inline-flex h-9 w-max items-center justify-center bg-transparent px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:bg-muted/20 hover:text-fg transition-all">
+              <a href={l("/pricing")} className="inline-flex h-9 w-max items-center justify-center bg-transparent px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:bg-muted/20 hover:text-fg transition-all">
                 {m.nav_pricing()}
               </a>
             </NavigationMenuItem>
 
             <NavigationMenuItem>
-              <a href="/roadmap" className="inline-flex h-9 w-max items-center justify-center bg-transparent px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:bg-muted/20 hover:text-fg transition-all">
+              <a href={l("/roadmap")} className="inline-flex h-9 w-max items-center justify-center bg-transparent px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:bg-muted/20 hover:text-fg transition-all">
                 {m.nav_roadmap()}
               </a>
             </NavigationMenuItem>
@@ -147,10 +148,10 @@ function NavBarInner() {
   )
 }
 
-export function NavBar() {
+export function NavBar({ locale = "en" }: { locale?: string }) {
   return (
     <ClerkProvider>
-      <NavBarInner />
+      <NavBarInner locale={locale} />
     </ClerkProvider>
   )
 }

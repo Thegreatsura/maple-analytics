@@ -1,6 +1,8 @@
 ---
 import * as m from "../paraglide/messages";
 import { NavBar } from "./NavBar"
+
+const locale = Astro.currentLocale ?? "en";
 ---
 
 <!-- Announcement bar -->
@@ -10,7 +12,7 @@ import { NavBar } from "./NavBar"
 
 <nav id="main-nav" class="fixed top-[28px] left-0 right-0 z-50 border-b border-border bg-bg/95 backdrop-blur-md transition-colors duration-200">
     <div class="mx-auto max-w-6xl px-6 h-14 flex items-center">
-        <NavBar client:load />
+        <NavBar locale={locale} client:load />
     </div>
 </nav>
 

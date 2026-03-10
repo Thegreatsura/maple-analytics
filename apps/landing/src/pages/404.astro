@@ -1,7 +1,11 @@
 ---
+import { getRelativeLocaleUrl } from "astro:i18n";
 import Layout from "../layouts/Layout.astro";
 import Nav from "../components/Nav.astro";
 import Footer from "../components/Footer.astro";
+
+const locale = Astro.currentLocale ?? "en";
+const l = (path: string) => getRelativeLocaleUrl(locale, path);
 ---
 
 <Layout title="Page Not Found — Maple" description="The page you're looking for doesn't exist or has been moved.">
@@ -14,10 +18,10 @@ import Footer from "../components/Footer.astro";
                 The page you're looking for doesn't exist or has been moved.
             </p>
             <div class="flex flex-wrap items-center justify-center gap-4">
-                <a href="/" class="bg-accent text-accent-foreground px-6 py-2.5 text-sm font-medium hover:opacity-90 transition-opacity">
+                <a href={l("/")} class="bg-accent text-accent-foreground px-6 py-2.5 text-sm font-medium hover:opacity-90 transition-opacity">
                     Back to home
                 </a>
-                <a href="/features/distributed-tracing" class="border border-border px-6 py-2.5 text-sm font-medium text-fg hover:opacity-90 transition-opacity">
+                <a href={l("/features/distributed-tracing")} class="border border-border px-6 py-2.5 text-sm font-medium text-fg hover:opacity-90 transition-opacity">
                     View features
                 </a>
             </div>

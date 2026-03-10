@@ -1,6 +1,10 @@
 ---
+import { getRelativeLocaleUrl } from "astro:i18n";
 import * as m from "../paraglide/messages";
 import { ServiceMapMock } from "./ServiceMapMock.tsx";
+
+const locale = Astro.currentLocale ?? "en";
+const l = (path: string) => getRelativeLocaleUrl(locale, path);
 ---
 
 <section class="py-24 md:py-32">
@@ -19,7 +23,7 @@ import { ServiceMapMock } from "./ServiceMapMock.tsx";
                 <p class="mt-4 text-xs text-accent leading-relaxed">
                     {m.usecases_ecommerce_result()}
                 </p>
-                <a href="/use-cases/ecommerce-observability" class="mt-4 inline-block text-xs text-accent hover:underline underline-offset-2">See the full story &rarr;</a>
+                <a href={l("/use-cases/ecommerce-observability")} class="mt-4 inline-block text-xs text-accent hover:underline underline-offset-2">See the full story &rarr;</a>
             </div>
             <div class="border border-border bg-bg-elevated overflow-hidden">
                 <!-- Window chrome -->
@@ -95,7 +99,7 @@ import { ServiceMapMock } from "./ServiceMapMock.tsx";
                 <p class="mt-4 text-xs text-accent leading-relaxed">
                     {m.usecases_microservices_result()}
                 </p>
-                <a href="/use-cases/microservices-debugging" class="mt-4 inline-block text-xs text-accent hover:underline underline-offset-2">See the full story &rarr;</a>
+                <a href={l("/use-cases/microservices-debugging")} class="mt-4 inline-block text-xs text-accent hover:underline underline-offset-2">See the full story &rarr;</a>
             </div>
         </div>
 
@@ -110,7 +114,7 @@ import { ServiceMapMock } from "./ServiceMapMock.tsx";
                 <p class="mt-4 text-xs text-accent leading-relaxed">
                     {m.usecases_ai_result()}
                 </p>
-                <a href="/use-cases/api-performance" class="mt-4 inline-block text-xs text-accent hover:underline underline-offset-2">See the full story &rarr;</a>
+                <a href={l("/use-cases/api-performance")} class="mt-4 inline-block text-xs text-accent hover:underline underline-offset-2">See the full story &rarr;</a>
             </div>
             <div class="border border-border bg-bg-elevated overflow-hidden">
                 <!-- Window chrome -->

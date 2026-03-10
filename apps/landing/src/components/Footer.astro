@@ -1,6 +1,10 @@
 ---
+import { getRelativeLocaleUrl } from "astro:i18n";
 import * as m from "../paraglide/messages";
 import LanguageSwitcher from "./LanguageSwitcher.astro";
+
+const locale = Astro.currentLocale ?? "en";
+const l = (path: string) => getRelativeLocaleUrl(locale, path);
 ---
 
 <footer class="border-t border-border">
@@ -23,11 +27,11 @@ import LanguageSwitcher from "./LanguageSwitcher.astro";
             <div>
                 <h4 class="text-[11px] text-fg font-medium uppercase tracking-wider mb-4">{m.footer_product()}</h4>
                 <ul class="space-y-2">
-                    <li><a href="/#features" class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_features()}</a></li>
-                    <li><a href="/#how-it-works" class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_how_it_works()}</a></li>
-                    <li><a href="/pricing" class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_pricing()}</a></li>
-<li><a href="/opentelemetry" class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_opentelemetry()}</a></li>
-                    <li><a href="/roadmap" class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_roadmap()}</a></li>
+                    <li><a href={`${l("/")}#features`} class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_features()}</a></li>
+                    <li><a href={`${l("/")}#how-it-works`} class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_how_it_works()}</a></li>
+                    <li><a href={l("/pricing")} class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_pricing()}</a></li>
+                    <li><a href={l("/opentelemetry")} class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_opentelemetry()}</a></li>
+                    <li><a href={l("/roadmap")} class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_roadmap()}</a></li>
                 </ul>
             </div>
 
@@ -35,12 +39,12 @@ import LanguageSwitcher from "./LanguageSwitcher.astro";
             <div>
                 <h4 class="text-[11px] text-fg font-medium uppercase tracking-wider mb-4">{m.footer_features()}</h4>
                 <ul class="space-y-2">
-                    <li><a href="/features/distributed-tracing" class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_distributed_tracing()}</a></li>
-                    <li><a href="/features/log-management" class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_log_management()}</a></li>
-                    <li><a href="/features/metrics-dashboards" class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_metrics_dashboards()}</a></li>
-                    <li><a href="/features/service-catalog" class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_service_catalog()}</a></li>
-                    <li><a href="/features/error-tracking" class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_error_tracking()}</a></li>
-                    <li><a href="/features/ai-mcp-integration" class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_ai_mcp()}</a></li>
+                    <li><a href={l("/features/distributed-tracing")} class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_distributed_tracing()}</a></li>
+                    <li><a href={l("/features/log-management")} class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_log_management()}</a></li>
+                    <li><a href={l("/features/metrics-dashboards")} class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_metrics_dashboards()}</a></li>
+                    <li><a href={l("/features/service-catalog")} class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_service_catalog()}</a></li>
+                    <li><a href={l("/features/error-tracking")} class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_error_tracking()}</a></li>
+                    <li><a href={l("/features/ai-mcp-integration")} class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_ai_mcp()}</a></li>
                 </ul>
             </div>
 
@@ -48,16 +52,16 @@ import LanguageSwitcher from "./LanguageSwitcher.astro";
             <div>
                 <h4 class="text-[11px] text-fg font-medium uppercase tracking-wider mb-4">{m.footer_compare()}</h4>
                 <ul class="space-y-2">
-                    <li><a href="/compare/datadog" class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_vs_datadog()}</a></li>
-                    <li><a href="/compare/grafana" class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_vs_grafana()}</a></li>
-                    <li><a href="/compare/new-relic" class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_vs_new_relic()}</a></li>
+                    <li><a href={l("/compare/datadog")} class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_vs_datadog()}</a></li>
+                    <li><a href={l("/compare/grafana")} class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_vs_grafana()}</a></li>
+                    <li><a href={l("/compare/new-relic")} class="text-fg-muted text-xs hover:text-fg transition-colors">{m.footer_vs_new_relic()}</a></li>
                 </ul>
 
                 <h4 class="text-[11px] text-fg font-medium uppercase tracking-wider mb-4 mt-6">{m.footer_integrations()}</h4>
                 <ul class="space-y-2">
-                    <li><a href="/integrations/nextjs" class="text-fg-muted text-xs hover:text-fg transition-colors">{m.nav_nextjs()}</a></li>
-                    <li><a href="/integrations/python" class="text-fg-muted text-xs hover:text-fg transition-colors">{m.nav_python()}</a></li>
-                    <li><a href="/integrations/nodejs" class="text-fg-muted text-xs hover:text-fg transition-colors">{m.nav_nodejs()}</a></li>
+                    <li><a href={l("/integrations/nextjs")} class="text-fg-muted text-xs hover:text-fg transition-colors">{m.nav_nextjs()}</a></li>
+                    <li><a href={l("/integrations/python")} class="text-fg-muted text-xs hover:text-fg transition-colors">{m.nav_python()}</a></li>
+                    <li><a href={l("/integrations/nodejs")} class="text-fg-muted text-xs hover:text-fg transition-colors">{m.nav_nodejs()}</a></li>
                 </ul>
             </div>
 
@@ -76,8 +80,8 @@ import LanguageSwitcher from "./LanguageSwitcher.astro";
         <div class="mt-12 pt-6 border-t border-border flex items-center justify-between">
             <p class="text-fg-muted text-[10px]">&copy; {m.footer_copyright()}</p>
             <div class="flex items-center gap-4">
-                <a href="/privacy" class="text-fg-muted text-[10px] hover:text-fg transition-colors">{m.footer_privacy()}</a>
-                <a href="/terms" class="text-fg-muted text-[10px] hover:text-fg transition-colors">{m.footer_terms()}</a>
+                <a href={l("/privacy")} class="text-fg-muted text-[10px] hover:text-fg transition-colors">{m.footer_privacy()}</a>
+                <a href={l("/terms")} class="text-fg-muted text-[10px] hover:text-fg transition-colors">{m.footer_terms()}</a>
                 <LanguageSwitcher />
             </div>
         </div>
