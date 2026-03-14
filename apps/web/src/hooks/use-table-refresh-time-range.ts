@@ -33,7 +33,7 @@ export function useTableRefreshTimeRange({
   timePreset,
   defaultRange = "12h",
 }: UseTableRefreshTimeRangeOptions): TimeRange {
-  const baseRange = useEffectiveTimeRange(startTime, endTime, defaultRange)
+  const baseRange = useEffectiveTimeRange(startTime, endTime, timePreset ?? defaultRange)
   const pageRefresh = useOptionalPageRefreshContext()
   const refreshVersion = pageRefresh?.refreshVersion ?? 0
   const lastRefreshVersion = React.useRef(refreshVersion)

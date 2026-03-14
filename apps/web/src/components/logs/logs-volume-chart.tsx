@@ -42,7 +42,7 @@ interface LogsVolumeChartProps {
 
 export function LogsVolumeChart({ filters }: LogsVolumeChartProps) {
   const { startTime: effectiveStartTime, endTime: effectiveEndTime } =
-    useEffectiveTimeRange(filters?.startTime, filters?.endTime)
+    useEffectiveTimeRange(filters?.startTime, filters?.endTime, filters?.timePreset ?? "12h")
 
   const bucketSeconds = useMemo(
     () => computeBucketSeconds(effectiveStartTime, effectiveEndTime, HISTOGRAM_TARGET_POINTS),

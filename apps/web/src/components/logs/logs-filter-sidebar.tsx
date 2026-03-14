@@ -28,7 +28,7 @@ export function LogsFilterSidebar() {
   const navigate = useNavigate({ from: Route.fullPath })
   const search = Route.useSearch()
   const { startTime: effectiveStartTime, endTime: effectiveEndTime } =
-    useEffectiveTimeRange(search.startTime, search.endTime)
+    useEffectiveTimeRange(search.startTime, search.endTime, search.timePreset ?? "12h")
 
   const [searchText, setSearchText] = useState(search.search ?? "")
 

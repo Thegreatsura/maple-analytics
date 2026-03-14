@@ -5,10 +5,7 @@ import { QueryBuilderLab } from "@/components/query-builder/query-builder-lab"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { useEffectiveTimeRange } from "@/hooks/use-effective-time-range"
 import { applyTimeRangeSearch } from "@/components/time-range-picker/search"
-import {
-  PageRefreshProvider,
-  type RelativeRefreshRange,
-} from "@/components/time-range-picker/page-refresh-context"
+import { PageRefreshProvider } from "@/components/time-range-picker/page-refresh-context"
 import { TimeRangeHeaderControls } from "@/components/time-range-picker/time-range-header-controls"
 
 const queryBuilderLabSearchSchema = Schema.Struct({
@@ -27,7 +24,7 @@ function QueryBuilderLabPage() {
   const navigate = useNavigate({ from: Route.fullPath })
 
   const { startTime: effectiveStartTime, endTime: effectiveEndTime } =
-    useEffectiveTimeRange(search.startTime, search.endTime, "1h")
+    useEffectiveTimeRange(search.startTime, search.endTime, search.timePreset ?? "1h")
 
   const handleTimeChange = (
     range: {
@@ -46,11 +43,7 @@ function QueryBuilderLabPage() {
   }
 
   return (
-    <PageRefreshProvider
-      timePreset={search.timePreset ?? "1h"}
-      onRelativeRangeRefresh={(range: RelativeRefreshRange) =>
-        handleTimeChange(range, { replace: true })}
-    >
+    <PageRefreshProvider timePreset={search.timePreset ?? "1h"}>
       <DashboardLayout
         breadcrumbs={[
           { label: "Overview", href: "/" },

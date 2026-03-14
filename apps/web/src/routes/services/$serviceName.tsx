@@ -15,10 +15,7 @@ import {
   getServiceApdexTimeSeriesResultAtom,
 } from "@/lib/services/atoms/tinybird-query-atoms"
 import { applyTimeRangeSearch } from "@/components/time-range-picker/search"
-import {
-  PageRefreshProvider,
-  type RelativeRefreshRange,
-} from "@/components/time-range-picker/page-refresh-context"
+import { PageRefreshProvider } from "@/components/time-range-picker/page-refresh-context"
 import { TimeRangeHeaderControls } from "@/components/time-range-picker/time-range-header-controls"
 
 const serviceDetailSearchSchema = Schema.Struct({
@@ -54,7 +51,7 @@ function ServiceDetailPage() {
   const navigate = useNavigate({ from: Route.fullPath })
 
   const { startTime: effectiveStartTime, endTime: effectiveEndTime } =
-    useEffectiveTimeRange(search.startTime, search.endTime)
+    useEffectiveTimeRange(search.startTime, search.endTime, search.timePreset ?? "12h")
 
   const handleTimeChange = (
     range: {
@@ -115,11 +112,7 @@ function ServiceDetailPage() {
   }))
 
   return (
-    <PageRefreshProvider
-      timePreset={search.timePreset ?? "12h"}
-      onRelativeRangeRefresh={(range: RelativeRefreshRange) =>
-        handleTimeChange(range, { replace: true })}
-    >
+    <PageRefreshProvider timePreset={search.timePreset ?? "12h"}>
       <DashboardLayout
         breadcrumbs={[
           { label: "Services", href: "/services" },

@@ -65,7 +65,7 @@ function DashboardPage() {
   const navigate = useNavigate({ from: Route.fullPath })
 
   const { startTime: effectiveStartTime, endTime: effectiveEndTime } =
-    useEffectiveTimeRange(search.startTime, search.endTime, "24h")
+    useEffectiveTimeRange(search.startTime, search.endTime, search.timePreset ?? "24h")
 
   const handleTimeChange = (
     range: {

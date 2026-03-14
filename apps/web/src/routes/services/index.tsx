@@ -6,10 +6,7 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { ServicesTable } from "@/components/services/services-table"
 import { ServicesFilterSidebar } from "@/components/services/services-filter-sidebar"
 import { applyTimeRangeSearch } from "@/components/time-range-picker/search"
-import {
-  PageRefreshProvider,
-  type RelativeRefreshRange,
-} from "@/components/time-range-picker/page-refresh-context"
+import { PageRefreshProvider } from "@/components/time-range-picker/page-refresh-context"
 import { TimeRangeHeaderControls } from "@/components/time-range-picker/time-range-header-controls"
 import { useEffectiveTimeRange } from "@/hooks/use-effective-time-range"
 
@@ -32,7 +29,7 @@ export function ServicesPage() {
   const search = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
   const { startTime: effectiveStartTime, endTime: effectiveEndTime } =
-    useEffectiveTimeRange(search.startTime, search.endTime, "12h")
+    useEffectiveTimeRange(search.startTime, search.endTime, search.timePreset ?? "12h")
 
   const handleTimeChange = (
     range: {
@@ -49,11 +46,7 @@ export function ServicesPage() {
   }
 
   return (
-    <PageRefreshProvider
-      timePreset={search.timePreset ?? "12h"}
-      onRelativeRangeRefresh={(range: RelativeRefreshRange) =>
-        handleTimeChange(range, { replace: true })}
-    >
+    <PageRefreshProvider timePreset={search.timePreset ?? "12h"}>
       <DashboardLayout
         breadcrumbs={[{ label: "Services" }]}
         title="Services"

@@ -196,7 +196,7 @@ function LoadingState() {
 export function ServicesTable({ filters }: ServicesTableProps) {
   const navigate = useNavigate()
   const { startTime: effectiveStartTime, endTime: effectiveEndTime } =
-    useEffectiveTimeRange(filters?.startTime, filters?.endTime)
+    useEffectiveTimeRange(filters?.startTime, filters?.endTime, filters?.timePreset ?? "12h")
 
   const overviewResult = useRefreshableAtomValue(
     getServiceOverviewResultAtom({

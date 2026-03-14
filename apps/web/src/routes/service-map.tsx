@@ -5,10 +5,7 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { ServiceMapView } from "@/components/service-map/service-map-view"
 import { useEffectiveTimeRange } from "@/hooks/use-effective-time-range"
 import { applyTimeRangeSearch } from "@/components/time-range-picker/search"
-import {
-  PageRefreshProvider,
-  type RelativeRefreshRange,
-} from "@/components/time-range-picker/page-refresh-context"
+import { PageRefreshProvider } from "@/components/time-range-picker/page-refresh-context"
 import { TimeRangeHeaderControls } from "@/components/time-range-picker/time-range-header-controls"
 
 const serviceMapSearchSchema = Schema.Struct({
@@ -26,7 +23,7 @@ function ServiceMapPage() {
   const search = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
   const { startTime: effectiveStartTime, endTime: effectiveEndTime } =
-    useEffectiveTimeRange(search.startTime, search.endTime)
+    useEffectiveTimeRange(search.startTime, search.endTime, search.timePreset ?? "12h")
 
   const handleTimeChange = (
     range: {
@@ -43,11 +40,7 @@ function ServiceMapPage() {
   }
 
   return (
-    <PageRefreshProvider
-      timePreset={search.timePreset ?? "12h"}
-      onRelativeRangeRefresh={(range: RelativeRefreshRange) =>
-        handleTimeChange(range, { replace: true })}
-    >
+    <PageRefreshProvider timePreset={search.timePreset ?? "12h"}>
       <DashboardLayout
         breadcrumbs={[{ label: "Service Map" }]}
         title="Service Map"

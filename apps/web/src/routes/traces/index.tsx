@@ -74,7 +74,7 @@ export function TracesPage() {
   )
 
   const { startTime: effectiveStartTime, endTime: effectiveEndTime } =
-    useEffectiveTimeRange(search.startTime, search.endTime, "12h")
+    useEffectiveTimeRange(search.startTime, search.endTime, search.timePreset ?? "12h")
 
   const facetsResult = useAtomValue(
     getTracesFacetsResultAtom({
