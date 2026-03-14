@@ -4,7 +4,7 @@ type TimezoneFormatInput = string | number | Date
 
 const TINYBIRD_UTC_PATTERN = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(?:\.(\d+))?$/
 
-function normalizeTimestampInput(value: string): string {
+export function normalizeTimestampInput(value: string): string {
   const trimmed = value.trim()
   const match = TINYBIRD_UTC_PATTERN.exec(trimmed)
   if (!match) {

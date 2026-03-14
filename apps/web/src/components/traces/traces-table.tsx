@@ -16,6 +16,7 @@ import { listTracesResultAtom } from "@/lib/services/atoms/tinybird-query-atoms"
 import type { TracesSearchParams } from "@/routes/traces"
 import { useTimezonePreference } from "@/hooks/use-timezone-preference"
 import { formatTimestampInTimezone } from "@/lib/timezone-format"
+import { formatRelativeTime } from "@/lib/format"
 import { HttpSpanLabel } from "./http-span-label"
 import { useRetainedRefreshableResultValue } from "@/hooks/use-retained-refreshable-result-value"
 import { useTableRefreshTimeRange } from "@/hooks/use-table-refresh-time-range"
@@ -221,7 +222,10 @@ export function TracesTable({ filters }: TracesTableProps) {
                         <span className="text-[10px] text-muted-foreground">
                           {formatTimestampInTimezone(trace.startTime, {
                             timeZone: effectiveTimezone,
-                          })}
+                          })}{" "}
+                          <span className="text-muted-foreground/60">
+                            ({formatRelativeTime(trace.startTime)})
+                          </span>
                         </span>
                       </div>
                     </TableCell>

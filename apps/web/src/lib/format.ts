@@ -1,3 +1,5 @@
+import { normalizeTimestampInput } from "@/lib/timezone-format"
+
 /**
  * Format a duration in milliseconds to a human-readable string.
  * - < 1ms: displays in microseconds (μs)
@@ -168,7 +170,7 @@ export function formatThroughput(value: number, suffix: string): string {
  * Format an ISO timestamp as a relative time string (e.g. "5m ago", "2h ago").
  */
 export function formatRelativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
+  const diff = Date.now() - new Date(normalizeTimestampInput(iso)).getTime()
   if (diff < 0) return "just now"
   const seconds = Math.floor(diff / 1000)
   if (seconds < 60) return `${seconds}s ago`

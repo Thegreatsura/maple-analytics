@@ -17,6 +17,7 @@ import type { LogsSearchParams } from "@/routes/logs"
 import { listLogsResultAtom } from "@/lib/services/atoms/tinybird-query-atoms"
 import { useTimezonePreference } from "@/hooks/use-timezone-preference"
 import { formatTimestampInTimezone } from "@/lib/timezone-format"
+import { formatRelativeTime } from "@/lib/format"
 import { useRetainedRefreshableResultValue } from "@/hooks/use-retained-refreshable-result-value"
 import { useTableRefreshTimeRange } from "@/hooks/use-table-refresh-time-range"
 
@@ -133,7 +134,10 @@ export function LogsTable({ filters }: LogsTableProps) {
                       <TableCell className="font-mono text-muted-foreground">
                         {formatTimestampInTimezone(log.timestamp, {
                           timeZone: effectiveTimezone,
-                        })}
+                        })}{" "}
+                        <span className="text-muted-foreground/60">
+                          ({formatRelativeTime(log.timestamp)})
+                        </span>
                       </TableCell>
                       <TableCell className="hidden md:table-cell">
                         <span className="font-mono text-xs">{log.serviceName}</span>
