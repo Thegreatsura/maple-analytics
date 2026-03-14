@@ -2690,7 +2690,7 @@ export const serviceDependencies = defineEndpoint("service_dependencies", {
       sql: `
         SELECT
           ServiceName AS sourceService,
-          SpanAttributes['peer.service'] AS targetService,
+          PeerService AS targetService,
           count() AS callCount,
           countIf(StatusCode = 'Error') AS errorCount,
           avg(Duration / 1000000) AS avgDurationMs,
@@ -2698,10 +2698,10 @@ export const serviceDependencies = defineEndpoint("service_dependencies", {
           countIf(TraceState LIKE '%th:%') AS sampledSpanCount,
           countIf(TraceState = '' OR TraceState NOT LIKE '%th:%') AS unsampledSpanCount,
           anyIf(extract(TraceState, 'th:([0-9a-f]+)'), TraceState LIKE '%th:%') AS dominantThreshold
-        FROM traces
+        FROM service_map_spans
         WHERE OrgId = {{String(org_id, "")}}
           AND SpanKind = 'Client'
-          AND SpanAttributes['peer.service'] != ''
+          AND PeerService != ''
         {% if defined(start_time) %}
           AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
         {% end %}
@@ -2709,7 +2709,7 @@ export const serviceDependencies = defineEndpoint("service_dependencies", {
           AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
         {% end %}
         {% if defined(deployment_env) %}
-          AND ResourceAttributes['deployment.environment'] = {{String(deployment_env)}}
+          AND DeploymentEnv = {{String(deployment_env)}}
         {% end %}
         GROUP BY sourceService, targetService
       `,
@@ -2729,10 +2729,10 @@ export const serviceDependencies = defineEndpoint("service_dependencies", {
           anyIf(extract(c.TraceState, 'th:([0-9a-f]+)'), c.TraceState LIKE '%th:%') AS dominantThreshold
         FROM (
           SELECT TraceId, SpanId, ServiceName
-          FROM traces
+          FROM service_map_spans
           WHERE OrgId = {{String(org_id, "")}}
             AND SpanKind IN ('Client', 'Producer')
-            AND SpanAttributes['peer.service'] = ''
+            AND PeerService = ''
           {% if defined(start_time) %}
             AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
           {% end %}
@@ -2740,12 +2740,12 @@ export const serviceDependencies = defineEndpoint("service_dependencies", {
             AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
           {% end %}
           {% if defined(deployment_env) %}
-            AND ResourceAttributes['deployment.environment'] = {{String(deployment_env)}}
+            AND DeploymentEnv = {{String(deployment_env)}}
           {% end %}
         ) AS p
         INNER JOIN (
           SELECT TraceId, ParentSpanId, ServiceName, Duration, StatusCode, TraceState
-          FROM traces
+          FROM service_map_spans
           WHERE OrgId = {{String(org_id, "")}}
             AND ParentSpanId != ''
           {% if defined(start_time) %}
@@ -2755,7 +2755,7 @@ export const serviceDependencies = defineEndpoint("service_dependencies", {
             AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
           {% end %}
           {% if defined(deployment_env) %}
-            AND ResourceAttributes['deployment.environment'] = {{String(deployment_env)}}
+            AND DeploymentEnv = {{String(deployment_env)}}
           {% end %}
         ) AS c
         ON p.SpanId = c.ParentSpanId AND p.TraceId = c.TraceId

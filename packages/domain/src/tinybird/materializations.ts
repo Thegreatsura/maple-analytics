@@ -1,6 +1,7 @@
 import { defineMaterializedView, node } from "@tinybirdco/sdk";
 import {
   serviceUsage,
+  serviceMapSpans,
 } from "./datasources";
 
 /**
@@ -219,6 +220,41 @@ export const serviceUsageMetricsExpHistogramMv = defineMaterializedView(
           count() * 300 AS ExpHistogramMetricSizeBytes
         FROM metrics_exponential_histogram
         GROUP BY OrgId, ServiceName, Hour
+      `,
+      }),
+    ],
+  }
+);
+
+/**
+ * Materialized view projecting trace spans needed for service dependency map.
+ * Extracts peer.service and deployment.environment from Map columns at write time
+ * so the service map JOIN query avoids scanning heavy Map columns.
+ */
+export const serviceMapSpansMv = defineMaterializedView(
+  "service_map_spans_mv",
+  {
+    description:
+      "Materialized view projecting trace spans needed for service dependency map. Extracts peer.service and deployment.environment from Map columns at write time.",
+    datasource: serviceMapSpans,
+    nodes: [
+      node({
+        name: "service_map_spans_mv_node",
+        sql: `
+        SELECT
+          OrgId,
+          toDateTime(Timestamp) AS Timestamp,
+          TraceId,
+          SpanId,
+          ParentSpanId,
+          ServiceName,
+          SpanKind,
+          Duration,
+          StatusCode,
+          TraceState,
+          SpanAttributes['peer.service'] AS PeerService,
+          ResourceAttributes['deployment.environment'] AS DeploymentEnv
+        FROM traces
       `,
       }),
     ],

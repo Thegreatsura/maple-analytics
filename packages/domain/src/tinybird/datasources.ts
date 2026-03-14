@@ -160,6 +160,39 @@ export const serviceUsage = defineDatasource("service_usage", {
 export type ServiceUsageRow = InferRow<typeof serviceUsage>;
 
 /**
+ * Lightweight projection of traces for service map JOIN queries.
+ * Pre-extracts peer.service and deployment.environment from Map columns.
+ * Sorted by (OrgId, TraceId, SpanId) to align with the JOIN key.
+ * Populated by materialized view, not direct ingestion.
+ */
+export const serviceMapSpans = defineDatasource("service_map_spans", {
+  description:
+    "Lightweight projection of traces for service map JOIN queries. Pre-extracts peer.service and deployment.environment from Map columns. Populated by materialized view.",
+  jsonPaths: false,
+  schema: {
+    OrgId: t.string().lowCardinality(),
+    Timestamp: t.dateTime(),
+    TraceId: t.string(),
+    SpanId: t.string(),
+    ParentSpanId: t.string(),
+    ServiceName: t.string().lowCardinality(),
+    SpanKind: t.string().lowCardinality(),
+    Duration: t.uint64(),
+    StatusCode: t.string().lowCardinality(),
+    TraceState: t.string(),
+    PeerService: t.string(),
+    DeploymentEnv: t.string().lowCardinality(),
+  },
+  engine: engine.mergeTree({
+    partitionKey: "toDate(Timestamp)",
+    sortingKey: ["OrgId", "TraceId", "SpanId", "Timestamp"],
+    ttl: "Timestamp + INTERVAL 90 DAY",
+  }),
+});
+
+export type ServiceMapSpansRow = InferRow<typeof serviceMapSpans>;
+
+/**
  * OpenTelemetry sum/counter metrics datasource
  */
 export const metricsSum = defineDatasource("metrics_sum", {
