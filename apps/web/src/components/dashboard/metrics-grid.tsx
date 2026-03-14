@@ -17,6 +17,7 @@ interface MetricsGridItem {
   data: Record<string, unknown>[]
   legend?: ChartLegendMode
   tooltip?: ChartTooltipMode
+  rateMode?: "per_second"
   isLoading?: boolean
 }
 
@@ -52,6 +53,7 @@ export function MetricsGrid({ items, className }: MetricsGridProps) {
                     className="h-full w-full aspect-auto"
                     legend={item.legend}
                     tooltip={item.tooltip}
+                    rateMode={item.rateMode}
                   />
                 </Suspense>
               )}

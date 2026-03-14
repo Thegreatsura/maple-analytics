@@ -50,12 +50,13 @@ interface OverviewChartConfig {
   layout: { x: number; y: number; w: number; h: number }
   legend?: ChartLegendMode
   tooltip?: ChartTooltipMode
+  rateMode?: "per_second"
 }
 
 const EMPTY_ARRAY: Record<string, unknown>[] = []
 
 const OVERVIEW_CHARTS: OverviewChartConfig[] = [
-  { id: "throughput", chartId: "throughput-area", title: "Request Volume", layout: { x: 0, y: 0, w: 6, h: 4 }, tooltip: "visible" },
+  { id: "throughput", chartId: "throughput-area", title: "Request Volume", layout: { x: 0, y: 0, w: 6, h: 4 }, tooltip: "visible", rateMode: "per_second" },
   { id: "error-rate", chartId: "error-rate-area", title: "Error Rate", layout: { x: 6, y: 0, w: 6, h: 4 }, tooltip: "visible" },
   { id: "latency", chartId: "latency-line", title: "Latency", layout: { x: 0, y: 4, w: 6, h: 4 }, legend: "visible", tooltip: "visible" },
   { id: "log-volume", chartId: "throughput-area", title: "Log Volume", layout: { x: 6, y: 4, w: 6, h: 4 }, tooltip: "visible" },
@@ -193,6 +194,7 @@ function DashboardPage() {
       data: dataMap[chart.id] ?? EMPTY_ARRAY,
       legend: chart.legend,
       tooltip: chart.tooltip,
+      rateMode: chart.rateMode,
       isLoading: loadingMap[chart.id] ?? false,
     }))
   }, [overviewPoints, logPoints, isOverviewLoading, isLogVolumeLoading])

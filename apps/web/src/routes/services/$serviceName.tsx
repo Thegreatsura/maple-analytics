@@ -36,11 +36,12 @@ interface ServiceChartConfig {
   layout: { x: number; y: number; w: number; h: number }
   legend?: ChartLegendMode
   tooltip?: ChartTooltipMode
+  rateMode?: "per_second"
 }
 
 const SERVICE_CHARTS: ServiceChartConfig[] = [
   { id: "latency", chartId: "latency-line", title: "Latency", layout: { x: 0, y: 0, w: 6, h: 4 }, legend: "visible", tooltip: "visible" },
-  { id: "throughput", chartId: "throughput-area", title: "Throughput", layout: { x: 6, y: 0, w: 6, h: 4 }, tooltip: "visible" },
+  { id: "throughput", chartId: "throughput-area", title: "Throughput", layout: { x: 6, y: 0, w: 6, h: 4 }, tooltip: "visible", rateMode: "per_second" },
   { id: "apdex", chartId: "apdex-area", title: "Apdex", layout: { x: 0, y: 4, w: 6, h: 4 }, tooltip: "visible" },
   { id: "error-rate", chartId: "error-rate-area", title: "Error Rate", layout: { x: 6, y: 4, w: 6, h: 4 }, tooltip: "visible" },
 ]
@@ -109,6 +110,7 @@ function ServiceDetailPage() {
     data: widgetData[chart.id] ?? [],
     legend: chart.legend,
     tooltip: chart.tooltip,
+    rateMode: chart.rateMode,
   }))
 
   return (

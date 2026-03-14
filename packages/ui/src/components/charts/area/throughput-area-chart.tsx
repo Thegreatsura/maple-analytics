@@ -17,18 +17,22 @@ import { inferBucketSeconds, inferRangeMs, formatBucketLabel, bucketIntervalLabe
 
 const VALUE_KEYS = ["throughput"]
 
-export function ThroughputAreaChart({ data, className, legend, tooltip }: BaseChartProps) {
+export function ThroughputAreaChart({ data, className, legend, tooltip, rateMode }: BaseChartProps) {
   const id = useId()
   const gradientId = `throughputGradient-${id.replace(/:/g, "")}`
   const fadedGradientId = `throughputGradientFaded-${id.replace(/:/g, "")}`
   const chartData = data ?? throughputTimeSeriesData
+  const perSecond = rateMode === "per_second"
 
   const bucketSeconds = useMemo(
     () => inferBucketSeconds(chartData as Array<{ bucket: string }>),
     [chartData],
   )
 
-  const rateLabel = useMemo(() => bucketIntervalLabel(bucketSeconds), [bucketSeconds])
+  const rateLabel = useMemo(
+    () => (perSecond ? "/s" : bucketIntervalLabel(bucketSeconds)),
+    [perSecond, bucketSeconds],
+  )
 
   const axisContext = useMemo(
     () => ({
@@ -39,6 +43,16 @@ export function ThroughputAreaChart({ data, className, legend, tooltip }: BaseCh
   )
 
   const { data: processedData, hasIncomplete, incompleteKeys } = useIncompleteSegments(chartData, VALUE_KEYS)
+
+  // Normalize throughput values to per-second rate when rateMode is "per_second"
+  const displayData = useMemo(() => {
+    if (!perSecond || !bucketSeconds) return processedData
+    return processedData.map((point) => ({
+      ...point,
+      throughput: point.throughput != null ? Number(point.throughput) / bucketSeconds : point.throughput,
+      throughput_incomplete: point.throughput_incomplete != null ? Number(point.throughput_incomplete) / bucketSeconds : point.throughput_incomplete,
+    }))
+  }, [processedData, perSecond, bucketSeconds])
 
   const chartConfig = useMemo(
     () =>
@@ -56,7 +70,7 @@ export function ThroughputAreaChart({ data, className, legend, tooltip }: BaseCh
 
   return (
     <ChartContainer config={chartConfig} className={className}>
-      <AreaChart data={processedData} accessibilityLayer>
+      <AreaChart data={displayData} accessibilityLayer>
         <defs>
           <VerticalGradient id={gradientId} color="var(--color-throughput)" />
           {hasIncomplete && (

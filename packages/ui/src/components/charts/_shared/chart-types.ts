@@ -8,6 +8,7 @@ export interface BaseChartProps {
   className?: string
   legend?: ChartLegendMode
   tooltip?: ChartTooltipMode
+  rateMode?: "per_second"
 }
 
 export type ChartCategory = "bar" | "area" | "line" | "radar"
