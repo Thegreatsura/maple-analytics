@@ -152,7 +152,7 @@ export function MetricsVolumeChart({ metricName, metricType }: MetricsVolumeChar
                   />
                   <Area
                     dataKey="avgValue"
-                    type="monotone"
+                    type="linear"
                     fill="url(#fillAvgValue)"
                     stroke="var(--color-avgValue)"
                     strokeWidth={2}

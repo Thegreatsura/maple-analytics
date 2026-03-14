@@ -31,7 +31,7 @@ export function GradientRoundedAreaChart({ data, className }: BaseChartProps) {
           tickMargin={8}
         />
         <Area
-          type="natural"
+          type="linear"
           dataKey="desktop"
           stackId="a"
           stroke="var(--color-desktop)"
@@ -39,7 +39,7 @@ export function GradientRoundedAreaChart({ data, className }: BaseChartProps) {
           isAnimationActive={false}
         />
         <Area
-          type="natural"
+          type="linear"
           dataKey="mobile"
           stackId="a"
           stroke="var(--color-mobile)"

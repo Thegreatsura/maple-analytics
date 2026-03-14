@@ -88,12 +88,12 @@ export function LatencyLineChart({ data, className, legend, tooltip }: BaseChart
           />
         )}
         {legend === "visible" && <ChartLegend content={<ChartLegendContent />} />}
-        <Line type="monotone" dataKey="p99LatencyMs" stroke="var(--color-p99LatencyMs)" strokeWidth={2} dot={false} isAnimationActive={false} />
-        <Line type="monotone" dataKey="p95LatencyMs" stroke="var(--color-p95LatencyMs)" strokeWidth={2} dot={false} isAnimationActive={false} />
-        <Line type="monotone" dataKey="p50LatencyMs" stroke="var(--color-p50LatencyMs)" strokeWidth={2} dot={false} isAnimationActive={false} />
-        {hasIncomplete && <Line type="monotone" dataKey="p99LatencyMs_incomplete" stroke="var(--color-p99LatencyMs)" strokeWidth={2} strokeDasharray="4 4" dot={false} connectNulls legendType="none" isAnimationActive={false} />}
-        {hasIncomplete && <Line type="monotone" dataKey="p95LatencyMs_incomplete" stroke="var(--color-p95LatencyMs)" strokeWidth={2} strokeDasharray="4 4" dot={false} connectNulls legendType="none" isAnimationActive={false} />}
-        {hasIncomplete && <Line type="monotone" dataKey="p50LatencyMs_incomplete" stroke="var(--color-p50LatencyMs)" strokeWidth={2} strokeDasharray="4 4" dot={false} connectNulls legendType="none" isAnimationActive={false} />}
+        <Line type="linear" dataKey="p99LatencyMs" stroke="var(--color-p99LatencyMs)" strokeWidth={2} dot={false} isAnimationActive={false} />
+        <Line type="linear" dataKey="p95LatencyMs" stroke="var(--color-p95LatencyMs)" strokeWidth={2} dot={false} isAnimationActive={false} />
+        <Line type="linear" dataKey="p50LatencyMs" stroke="var(--color-p50LatencyMs)" strokeWidth={2} dot={false} isAnimationActive={false} />
+        {hasIncomplete && <Line type="linear" dataKey="p99LatencyMs_incomplete" stroke="var(--color-p99LatencyMs)" strokeWidth={2} strokeDasharray="4 4" dot={false} connectNulls legendType="none" isAnimationActive={false} />}
+        {hasIncomplete && <Line type="linear" dataKey="p95LatencyMs_incomplete" stroke="var(--color-p95LatencyMs)" strokeWidth={2} strokeDasharray="4 4" dot={false} connectNulls legendType="none" isAnimationActive={false} />}
+        {hasIncomplete && <Line type="linear" dataKey="p50LatencyMs_incomplete" stroke="var(--color-p50LatencyMs)" strokeWidth={2} strokeDasharray="4 4" dot={false} connectNulls legendType="none" isAnimationActive={false} />}
       </LineChart>
     </ChartContainer>
   )

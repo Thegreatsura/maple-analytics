@@ -91,7 +91,7 @@ export function ApdexAreaChart({ data, className, legend, tooltip }: BaseChartPr
         )}
         {legend === "visible" && <ChartLegend content={<ChartLegendContent />} />}
         <Area
-          type="monotone"
+          type="linear"
           dataKey="apdexScore"
           stroke="var(--color-apdexScore)"
           fill={`url(#${gradientId})`}
@@ -99,7 +99,7 @@ export function ApdexAreaChart({ data, className, legend, tooltip }: BaseChartPr
         />
         {hasIncomplete && (
           <Area
-            type="monotone"
+            type="linear"
             dataKey="apdexScore_incomplete"
             stroke="var(--color-apdexScore)"
             fill={`url(#${fadedGradientId})`}

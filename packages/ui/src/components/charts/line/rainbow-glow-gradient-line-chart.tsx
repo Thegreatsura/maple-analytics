@@ -25,7 +25,7 @@ export function RainbowGlowGradientLineChart({ data, className }: BaseChartProps
         <CartesianGrid vertical={false} />
         <XAxis dataKey="date" tickLine={false} axisLine={false} />
         <Line
-          type="monotone"
+          type="linear"
           dataKey="value"
           stroke={`url(#${rainbowId})`}
           style={{ filter: `url(#${glowId})` }}

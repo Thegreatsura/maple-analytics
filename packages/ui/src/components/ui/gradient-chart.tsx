@@ -40,7 +40,7 @@ export function Sparkline({ data, color = "var(--chart-1)", className }: Sparkli
         </defs>
         <Area
           dataKey="value"
-          type="monotone"
+          type="linear"
           fill={`url(#${gradientId})`}
           fillOpacity={0.4}
           stroke="var(--color-value)"

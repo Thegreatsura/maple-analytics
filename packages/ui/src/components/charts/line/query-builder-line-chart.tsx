@@ -163,7 +163,7 @@ export function QueryBuilderLineChart({ data, className, legend, tooltip }: Base
         {seriesDefinitions.map((definition) => (
           <Line
             key={definition.chartKey}
-            type="monotone"
+            type="linear"
             dataKey={definition.chartKey}
             stroke={`var(--color-${definition.chartKey})`}
             strokeWidth={2}
@@ -174,7 +174,7 @@ export function QueryBuilderLineChart({ data, className, legend, tooltip }: Base
         {hasIncomplete && seriesDefinitions.map((definition) => (
           <Line
             key={`${definition.chartKey}_incomplete`}
-            type="monotone"
+            type="linear"
             dataKey={`${definition.chartKey}_incomplete`}
             stroke={`var(--color-${definition.chartKey})`}
             strokeWidth={2}

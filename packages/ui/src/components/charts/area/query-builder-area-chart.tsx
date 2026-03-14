@@ -162,7 +162,7 @@ export function QueryBuilderAreaChart({ data, className, legend, tooltip }: Base
         {seriesDefinitions.map((definition) => (
           <Area
             key={definition.chartKey}
-            type="monotone"
+            type="linear"
             dataKey={definition.chartKey}
             stroke={`var(--color-${definition.chartKey})`}
             fill={`url(#fill-${definition.chartKey})`}
@@ -173,7 +173,7 @@ export function QueryBuilderAreaChart({ data, className, legend, tooltip }: Base
         {hasIncomplete && seriesDefinitions.map((definition) => (
           <Area
             key={`${definition.chartKey}_incomplete`}
-            type="monotone"
+            type="linear"
             dataKey={`${definition.chartKey}_incomplete`}
             stroke={`var(--color-${definition.chartKey})`}
             fill={`url(#fill-${definition.chartKey}_incomplete)`}

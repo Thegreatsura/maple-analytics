@@ -96,7 +96,7 @@ export function ErrorRateAreaChart({ data, className, legend, tooltip }: BaseCha
         )}
         {legend === "visible" && <ChartLegend content={<ChartLegendContent />} />}
         <Area
-          type="monotone"
+          type="linear"
           dataKey="errorRate"
           stroke="var(--color-errorRate)"
           fill={`url(#${gradientId})`}
@@ -104,7 +104,7 @@ export function ErrorRateAreaChart({ data, className, legend, tooltip }: BaseCha
         />
         {hasIncomplete && (
           <Area
-            type="monotone"
+            type="linear"
             dataKey="errorRate_incomplete"
             stroke="var(--color-errorRate)"
             fill={`url(#${fadedGradientId})`}

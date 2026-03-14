@@ -19,7 +19,7 @@ export function PartialLineChart({ data, className }: BaseChartProps) {
         <CartesianGrid vertical={false} />
         <XAxis dataKey="date" tickLine={false} axisLine={false} />
         <Line
-          type="monotone"
+          type="linear"
           dataKey="value"
           stroke="var(--color-value)"
           strokeDasharray={strokeDasharray}

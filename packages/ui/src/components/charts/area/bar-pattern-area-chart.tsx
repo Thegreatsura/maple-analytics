@@ -31,7 +31,7 @@ export function BarPatternAreaChart({ data, className }: BaseChartProps) {
           tickMargin={8}
         />
         <Area
-          type="monotone"
+          type="linear"
           dataKey="desktop"
           stackId="a"
           stroke="var(--color-desktop)"
@@ -39,7 +39,7 @@ export function BarPatternAreaChart({ data, className }: BaseChartProps) {
           isAnimationActive={false}
         />
         <Area
-          type="monotone"
+          type="linear"
           dataKey="mobile"
           stackId="a"
           stroke="var(--color-mobile)"

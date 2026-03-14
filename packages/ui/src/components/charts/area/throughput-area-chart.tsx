@@ -111,7 +111,7 @@ export function ThroughputAreaChart({ data, className, legend, tooltip }: BaseCh
         )}
         {legend === "visible" && <ChartLegend content={<ChartLegendContent />} />}
         <Area
-          type="monotone"
+          type="linear"
           dataKey="throughput"
           stroke="var(--color-throughput)"
           fill={`url(#${gradientId})`}
@@ -119,7 +119,7 @@ export function ThroughputAreaChart({ data, className, legend, tooltip }: BaseCh
         />
         {hasIncomplete && (
           <Area
-            type="monotone"
+            type="linear"
             dataKey="throughput_incomplete"
             stroke="var(--color-throughput)"
             fill={`url(#${fadedGradientId})`}
