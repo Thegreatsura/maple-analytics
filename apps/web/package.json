@@ -35,7 +35,7 @@
     "@tanstack/react-devtools": "^0.9.5",
     "@tanstack/react-router": "^1.159.5",
     "@tanstack/react-router-devtools": "^1.159.5",
-    "@tinybirdco/sdk": "0.0.54",
+    "@tinybirdco/sdk": "0.0.60",
     "@xyflow/react": "^12.10.0",
     "agents": "^0.5.1",
     "ai": "^6.0.100",
