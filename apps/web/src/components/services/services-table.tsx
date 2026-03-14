@@ -1,3 +1,4 @@
+import React from "react"
 import { Result } from "@effect-atom/atom-react"
 import { Link, useNavigate } from "@tanstack/react-router"
 
@@ -63,6 +64,27 @@ function formatErrorRate(rate: number): string {
     return `${rate.toFixed(2)}%`
   }
   return `${rate.toFixed(1)}%`
+}
+
+const ENVIRONMENT_PRIORITY: Record<string, number> = {
+  production: 0,
+  staging: 1,
+  development: 2,
+}
+
+function groupByEnvironment(services: ServiceOverview[]): [string, ServiceOverview[]][] {
+  const groups = new Map<string, ServiceOverview[]>()
+  for (const service of services) {
+    const env = service.environment
+    if (!groups.has(env)) groups.set(env, [])
+    groups.get(env)!.push(service)
+  }
+  return [...groups.entries()].sort(([a], [b]) => {
+    const pa = ENVIRONMENT_PRIORITY[a.toLowerCase()] ?? (a === "unknown" ? 999 : 3)
+    const pb = ENVIRONMENT_PRIORITY[b.toLowerCase()] ?? (b === "unknown" ? 999 : 3)
+    if (pa !== pb) return pa - pb
+    return a.localeCompare(b)
+  })
 }
 
 function truncateCommitSha(sha: string, length = 7): string {
@@ -148,7 +170,6 @@ function LoadingState() {
           <TableHeader>
             <TableRow>
               <TableHead>Service</TableHead>
-              <TableHead className="w-[120px]">Environment</TableHead>
               <TableHead className="w-[90px]">P50</TableHead>
               <TableHead className="w-[90px]">P95</TableHead>
               <TableHead className="w-[90px]">P99</TableHead>
@@ -162,9 +183,6 @@ function LoadingState() {
               <TableRow key={i}>
                 <TableCell>
                   <Skeleton className="h-4 w-32" />
-                </TableCell>
-                <TableCell>
-                  <Skeleton className="h-5 w-20" />
                 </TableCell>
                 <TableCell>
                   <Skeleton className="h-4 w-14" />
@@ -239,7 +257,6 @@ export function ServicesTable({ filters }: ServicesTableProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Service</TableHead>
-                  <TableHead className="hidden md:table-cell w-[120px]">Environment</TableHead>
                   <TableHead className="hidden lg:table-cell w-[90px]">P50</TableHead>
                   <TableHead className="hidden lg:table-cell w-[90px]">P95</TableHead>
                   <TableHead className="w-[90px]">P99</TableHead>
@@ -251,118 +268,129 @@ export function ServicesTable({ filters }: ServicesTableProps) {
               <TableBody>
                 {services.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center">
+                    <TableCell colSpan={7} className="h-24 text-center">
                       No services found
                     </TableCell>
                   </TableRow>
                 ) : (
-                  services.map((service: ServiceOverview) => {
-                    const serviceSeries = timeSeriesMap[service.serviceName]
-                    const throughputData = serviceSeries?.map((p) => ({ value: p.throughput })) ?? []
-                    const errorRateData = serviceSeries?.map((p) => ({ value: p.errorRate })) ?? []
+                  groupByEnvironment(services).map(([environment, envServices]) => (
+                    <React.Fragment key={environment}>
+                      <TableRow className="bg-muted/30 hover:bg-muted/30">
+                        <TableCell colSpan={7} className="py-2">
+                          <div className="flex items-center gap-2">
+                            <EnvironmentBadge environment={environment} />
+                            <span className="text-xs text-muted-foreground">
+                              {envServices.length} {envServices.length === 1 ? "service" : "services"}
+                            </span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                      {envServices.map((service: ServiceOverview) => {
+                        const serviceSeries = timeSeriesMap[service.serviceName]
+                        const throughputData = serviceSeries?.map((p) => ({ value: p.throughput })) ?? []
+                        const errorRateData = serviceSeries?.map((p) => ({ value: p.errorRate })) ?? []
 
-                    return (
-                      <TableRow
-                        key={`${service.serviceName}-${service.environment}`}
-                        className="cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset"
-                        tabIndex={0}
-                        onClick={() => navigate({
-                          to: "/services/$serviceName",
-                          params: { serviceName: service.serviceName },
-                          search: {
-                                startTime: filters?.startTime,
-                                endTime: filters?.endTime,
-                                timePreset: filters?.timePreset,
-                              },
-                        })}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault()
-                            navigate({
+                        return (
+                          <TableRow
+                            key={`${service.serviceName}-${service.environment}`}
+                            className="cursor-pointer hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset"
+                            tabIndex={0}
+                            onClick={() => navigate({
                               to: "/services/$serviceName",
                               params: { serviceName: service.serviceName },
                               search: {
-                                startTime: filters?.startTime,
-                                endTime: filters?.endTime,
-                                timePreset: filters?.timePreset,
-                              },
-                            })
-                          }
-                        }}
-                      >
-                        <TableCell>
-                          <Link
-                            to="/services/$serviceName"
-                            params={{ serviceName: service.serviceName }}
-                            search={{
-                              startTime: filters?.startTime,
-                              endTime: filters?.endTime,
-                              timePreset: filters?.timePreset,
+                                    startTime: filters?.startTime,
+                                    endTime: filters?.endTime,
+                                    timePreset: filters?.timePreset,
+                                  },
+                            })}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault()
+                                navigate({
+                                  to: "/services/$serviceName",
+                                  params: { serviceName: service.serviceName },
+                                  search: {
+                                    startTime: filters?.startTime,
+                                    endTime: filters?.endTime,
+                                    timePreset: filters?.timePreset,
+                                  },
+                                })
+                              }
                             }}
-                            className="font-medium text-primary hover:underline"
-                            onClick={(e) => e.stopPropagation()}
                           >
-                            {service.serviceName}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell">
-                          <EnvironmentBadge environment={service.environment} />
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell font-mono text-xs">
-                          {formatLatency(service.p50LatencyMs)}
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell font-mono text-xs">
-                          {formatLatency(service.p95LatencyMs)}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {formatLatency(service.p99LatencyMs)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="relative w-[120px] h-8" role="img" aria-label={`Error rate: ${formatErrorRate(service.errorRate)}`}>
-                            <Sparkline
-                              data={errorRateData}
-                              color="var(--color-destructive, #ef4444)"
-                              className="absolute inset-0 h-full w-full"
-                            />
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <span className="font-mono text-xs font-semibold [text-shadow:0_0_6px_var(--background),0_0_12px_var(--background),0_0_18px_var(--background)]">
-                                {formatErrorRate(service.errorRate)}
-                              </span>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell">
-                          <Tooltip>
-                            <TooltipTrigger className="relative w-[120px] h-8 block" aria-label={`Throughput: ${formatThroughput(service.throughput)}`}>
-                              <Sparkline
-                                data={throughputData}
-                                color="var(--color-primary, #3b82f6)"
-                                className="absolute inset-0 h-full w-full"
-                              />
-                              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <span className="font-mono text-xs font-semibold [text-shadow:0_0_6px_var(--background),0_0_12px_var(--background),0_0_18px_var(--background)]">
-                                  {service.hasSampling ? "~" : ""}{formatThroughput(service.throughput)}
-                                </span>
-                                {service.hasSampling && (
-                                  <span className="font-mono text-[9px] text-muted-foreground [text-shadow:0_0_6px_var(--background),0_0_12px_var(--background),0_0_18px_var(--background)]">
-                                    ~{formatThroughput(service.tracedThroughput)} traced
+                            <TableCell>
+                              <Link
+                                to="/services/$serviceName"
+                                params={{ serviceName: service.serviceName }}
+                                search={{
+                                  startTime: filters?.startTime,
+                                  endTime: filters?.endTime,
+                                  timePreset: filters?.timePreset,
+                                }}
+                                className="font-medium text-primary hover:underline"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {service.serviceName}
+                              </Link>
+                            </TableCell>
+                            <TableCell className="hidden lg:table-cell font-mono text-xs">
+                              {formatLatency(service.p50LatencyMs)}
+                            </TableCell>
+                            <TableCell className="hidden lg:table-cell font-mono text-xs">
+                              {formatLatency(service.p95LatencyMs)}
+                            </TableCell>
+                            <TableCell className="font-mono text-xs">
+                              {formatLatency(service.p99LatencyMs)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="relative w-[120px] h-8" role="img" aria-label={`Error rate: ${formatErrorRate(service.errorRate)}`}>
+                                <Sparkline
+                                  data={errorRateData}
+                                  color="var(--color-destructive, #ef4444)"
+                                  className="absolute inset-0 h-full w-full"
+                                />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <span className="font-mono text-xs font-semibold [text-shadow:0_0_6px_var(--background),0_0_12px_var(--background),0_0_18px_var(--background)]">
+                                    {formatErrorRate(service.errorRate)}
                                   </span>
-                                )}
+                                </div>
                               </div>
-                            </TooltipTrigger>
-                            {service.hasSampling && (
-                              <TooltipContent side="bottom">
-                                <p>Estimated from {((1 / service.samplingWeight) * 100).toFixed(0)}% sampled traces (x{service.samplingWeight.toFixed(0)} extrapolation)</p>
-                              </TooltipContent>
-                            )}
-                          </Tooltip>
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell font-mono text-xs text-muted-foreground">
-                          <CommitsList commits={service.commits} />
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell">
+                              <Tooltip>
+                                <TooltipTrigger className="relative w-[120px] h-8 block" aria-label={`Throughput: ${formatThroughput(service.throughput)}`}>
+                                  <Sparkline
+                                    data={throughputData}
+                                    color="var(--color-primary, #3b82f6)"
+                                    className="absolute inset-0 h-full w-full"
+                                  />
+                                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                    <span className="font-mono text-xs font-semibold [text-shadow:0_0_6px_var(--background),0_0_12px_var(--background),0_0_18px_var(--background)]">
+                                      {service.hasSampling ? "~" : ""}{formatThroughput(service.throughput)}
+                                    </span>
+                                    {service.hasSampling && (
+                                      <span className="font-mono text-[9px] text-muted-foreground [text-shadow:0_0_6px_var(--background),0_0_12px_var(--background),0_0_18px_var(--background)]">
+                                        ~{formatThroughput(service.tracedThroughput)} traced
+                                      </span>
+                                    )}
+                                  </div>
+                                </TooltipTrigger>
+                                {service.hasSampling && (
+                                  <TooltipContent side="bottom">
+                                    <p>Estimated from {((1 / service.samplingWeight) * 100).toFixed(0)}% sampled traces (x{service.samplingWeight.toFixed(0)} extrapolation)</p>
+                                  </TooltipContent>
+                                )}
+                              </Tooltip>
+                            </TableCell>
+                            <TableCell className="hidden lg:table-cell font-mono text-xs text-muted-foreground">
+                              <CommitsList commits={service.commits} />
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </React.Fragment>
+                  ))
                 )}
               </TableBody>
             </Table>
