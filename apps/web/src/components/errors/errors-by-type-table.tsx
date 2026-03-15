@@ -65,7 +65,7 @@ function ErrorDetailPanel({ errorRow, filters }: { errorRow: ErrorByType; filter
         <div>
           <p className="text-xs font-medium text-muted-foreground mb-1">Error Message</p>
           <pre className="text-sm font-mono whitespace-pre-wrap break-all bg-background border rounded-md p-3">
-            {errorRow.errorType}
+            {errorRow.sampleMessage}
           </pre>
         </div>
 

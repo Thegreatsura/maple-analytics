@@ -17,6 +17,7 @@ const OptionalStringArray = Schema.optional(Schema.mutable(Schema.Array(Schema.S
 
 export interface ErrorByType {
   errorType: string
+  sampleMessage: string
   count: number
   affectedServicesCount: number
   firstSeen: Date
@@ -42,6 +43,7 @@ export type GetErrorsByTypeInput = Schema.Schema.Type<typeof GetErrorsByTypeInpu
 function transformErrorByType(raw: ErrorsByTypeOutput): ErrorByType {
   return {
     errorType: raw.errorType,
+    sampleMessage: raw.sampleMessage,
     count: Number(raw.count),
     affectedServicesCount: Number(raw.affectedServicesCount),
     firstSeen: new Date(raw.firstSeen),

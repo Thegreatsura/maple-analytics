@@ -8,6 +8,22 @@ import {
 } from "@tinybirdco/sdk";
 
 /**
+ * Normalizes StatusMessage into a stable fingerprint by truncating at the first
+ * structural delimiter (': ', ' (', newline, or '{' if position > 10).
+ * Collapses high-cardinality dynamic messages (SQL queries, JSON blobs, parameterized URLs)
+ * into stable groups for efficient GROUP BY.
+ */
+const ERROR_FINGERPRINT_SQL = `if(StatusMessage = '', 'Unknown Error',
+  left(StatusMessage, multiIf(
+    position(StatusMessage, ': ') > 3, toInt64(position(StatusMessage, ': ')) - 1,
+    position(StatusMessage, ' (') > 3, toInt64(position(StatusMessage, ' (')) - 1,
+    position(StatusMessage, '\\n') > 3, toInt64(position(StatusMessage, '\\n')) - 1,
+    position(StatusMessage, '{') > 10, toInt64(position(StatusMessage, '{')) - 1,
+    least(toInt64(length(StatusMessage)), 150)
+  ))
+)`;
+
+/**
  * List traces endpoint - queries pre-materialized trace_list_mv for fast pagination.
  * No GROUP BY needed — each row in trace_list_mv IS a trace (root span).
  */
@@ -1683,7 +1699,8 @@ export const errorsByType = defineEndpoint("errors_by_type", {
       name: "errors_by_type_node",
       sql: `
         SELECT
-          if(StatusMessage = '', 'Unknown Error', StatusMessage) AS errorType,
+          ${ERROR_FINGERPRINT_SQL} AS errorType,
+          any(StatusMessage) AS sampleMessage,
           count() AS count,
           uniq(ServiceName) AS affectedServicesCount,
           min(Timestamp) AS firstSeen,
@@ -1703,10 +1720,7 @@ export const errorsByType = defineEndpoint("errors_by_type", {
           AND DeploymentEnv IN splitByChar(',', {{String(deployment_envs, "")}})
         {% end %}
         {% if defined(error_types) %}
-          AND (
-            StatusMessage IN splitByChar(',', {{String(error_types, "")}})
-            OR (StatusMessage = '' AND has(splitByChar(',', {{String(error_types, "")}}), 'Unknown Error'))
-          )
+          AND ${ERROR_FINGERPRINT_SQL} IN splitByChar(',', {{String(error_types, "")}})
         {% end %}
         {% if defined(exclude_spam_patterns) %}
           AND NOT arrayExists(
@@ -1724,6 +1738,7 @@ export const errorsByType = defineEndpoint("errors_by_type", {
   ],
   output: {
     errorType: t.string(),
+    sampleMessage: t.string(),
     count: t.uint64(),
     affectedServicesCount: t.uint64(),
     firstSeen: t.dateTime(),
@@ -1755,10 +1770,7 @@ export const errorDetailTraces = defineEndpoint("error_detail_traces", {
         SELECT DISTINCT TraceId
         FROM error_spans
         WHERE OrgId = {{String(org_id, "")}}
-        AND (
-            (StatusMessage = {{String(error_type)}} AND {{String(error_type)}} != 'Unknown Error')
-            OR (StatusMessage = '' AND {{String(error_type)}} = 'Unknown Error')
-          )
+        AND ${ERROR_FINGERPRINT_SQL} = {{String(error_type)}}
         {% if defined(start_time) %}
           AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
         {% end %}
@@ -1852,7 +1864,7 @@ export const errorsFacets = defineEndpoint("errors_facets", {
         SELECT
           ServiceName AS serviceName,
           DeploymentEnv AS deploymentEnv,
-          if(StatusMessage = '', 'Unknown Error', StatusMessage) AS errorType
+          ${ERROR_FINGERPRINT_SQL} AS errorType
         FROM error_spans
         WHERE OrgId = {{String(org_id, "")}}
         {% if defined(start_time) %}
@@ -1989,10 +2001,7 @@ export const errorsSummary = defineEndpoint("errors_summary", {
           AND DeploymentEnv IN splitByChar(',', {{String(deployment_envs, "")}})
         {% end %}
         {% if defined(error_types) %}
-          AND (
-            StatusMessage IN splitByChar(',', {{String(error_types, "")}})
-            OR (StatusMessage = '' AND has(splitByChar(',', {{String(error_types, "")}}), 'Unknown Error'))
-          )
+          AND ${ERROR_FINGERPRINT_SQL} IN splitByChar(',', {{String(error_types, "")}})
         {% end %}
         {% if defined(exclude_spam_patterns) %}
           AND NOT arrayExists(
