@@ -15,6 +15,11 @@ import "@xyflow/react/dist/style.css"
 import { Result } from "@effect-atom/atom-react"
 
 import { getServiceLegendColor } from "@maple/ui/colors"
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@maple/ui/components/ui/popover"
 import { getServiceMapResultAtom, getServiceOverviewResultAtom } from "@/lib/services/atoms/tinybird-query-atoms"
 import type { GetServiceMapInput, ServiceEdge } from "@/api/tinybird/service-map"
 import type { GetServiceOverviewInput, ServiceOverview } from "@/api/tinybird/services"
@@ -138,17 +143,40 @@ function ServiceMapCanvas({
         <span className="text-foreground/30">|</span>
         <span className="font-medium">Scroll to zoom</span>
         <span className="text-foreground/30">|</span>
-        <div className="flex items-center gap-3">
-          {services.map((service) => (
-            <div key={service} className="flex items-center gap-1.5">
-              <div
-                className="h-3 w-3 rounded-sm shadow-sm"
-                style={{ backgroundColor: getServiceLegendColor(service, services) }}
-              />
-              <span className="font-medium">{service}</span>
-            </div>
-          ))}
-        </div>
+        {services.length > 0 && (
+          <Popover>
+            <PopoverTrigger className="flex items-center gap-1 hover:opacity-80 transition-opacity cursor-pointer">
+                {services.slice(0, 5).map((service) => (
+                  <div
+                    key={service}
+                    className="h-3 w-3 rounded-sm shadow-sm"
+                    style={{ backgroundColor: getServiceLegendColor(service, services) }}
+                  />
+                ))}
+                {services.length > 5 && (
+                  <span className="text-[10px] text-muted-foreground font-medium ml-0.5">
+                    +{services.length - 5}
+                  </span>
+                )}
+                <span className="text-[10px] text-muted-foreground ml-1">
+                  {services.length} services
+                </span>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-64 p-3" side="top">
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                {services.map((service) => (
+                  <div key={service} className="flex items-center gap-1.5 truncate">
+                    <div
+                      className="h-3 w-3 rounded-sm shadow-sm shrink-0"
+                      style={{ backgroundColor: getServiceLegendColor(service, services) }}
+                    />
+                    <span className="truncate font-medium">{service}</span>
+                  </div>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
         <span className="flex-1" />
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
