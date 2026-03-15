@@ -86,7 +86,7 @@ export function getSpanColorStyle(
 ): React.CSSProperties {
   // Get service index for base hue
   const serviceIndex = services.indexOf(serviceName)
-  const baseHue = SERVICE_HUES[serviceIndex % SERVICE_HUES.length]
+  const baseHue = getServiceHue(serviceIndex, services.length)
   
   // Extract class name for variation within service
   const className = extractClassName(spanName)
@@ -115,12 +115,24 @@ export function getSpanColorStyle(
 }
 
 /**
+ * Get a hue for a service index, using hand-picked hues for ≤8 services
+ * and golden-angle distribution for larger counts to avoid collisions.
+ */
+function getServiceHue(serviceIndex: number, totalServices: number): number {
+  if (totalServices <= SERVICE_HUES.length) {
+    return SERVICE_HUES[serviceIndex % SERVICE_HUES.length]
+  }
+  // Golden angle (≈137.508°) maximizes separation between adjacent indices
+  return (serviceIndex * 137.508) % 360
+}
+
+/**
  * Get a legend color for a service
  */
 export function getServiceLegendColor(serviceName: string, services: string[]): string {
   const serviceIndex = services.indexOf(serviceName)
-  const baseHue = SERVICE_HUES[serviceIndex % SERVICE_HUES.length]
-  return `oklch(0.55 0.15 ${baseHue})`
+  const hue = getServiceHue(serviceIndex, services.length)
+  return `oklch(0.55 0.15 ${hue})`
 }
 
 /**
@@ -128,8 +140,8 @@ export function getServiceLegendColor(serviceName: string, services: string[]): 
  */
 export function getServiceBorderColor(serviceName: string, services: string[]): string {
   const serviceIndex = services.indexOf(serviceName)
-  const baseHue = SERVICE_HUES[serviceIndex % SERVICE_HUES.length]
-  return `oklch(0.45 0.18 ${baseHue})`
+  const hue = getServiceHue(serviceIndex, services.length)
+  return `oklch(0.45 0.18 ${hue})`
 }
 
 /**

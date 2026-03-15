@@ -142,40 +142,39 @@ function ServiceMapCanvas({
         <span className="font-medium">Drag nodes to arrange</span>
         <span className="text-foreground/30">|</span>
         <span className="font-medium">Scroll to zoom</span>
-        <span className="text-foreground/30">|</span>
         {services.length > 0 && (
-          <Popover>
-            <PopoverTrigger className="flex items-center gap-1 hover:opacity-80 transition-opacity cursor-pointer">
-                {services.slice(0, 5).map((service) => (
-                  <div
-                    key={service}
-                    className="h-3 w-3 rounded-sm shadow-sm"
-                    style={{ backgroundColor: getServiceLegendColor(service, services) }}
-                  />
-                ))}
-                {services.length > 5 && (
-                  <span className="text-[10px] text-muted-foreground font-medium ml-0.5">
-                    +{services.length - 5}
-                  </span>
-                )}
-                <span className="text-[10px] text-muted-foreground ml-1">
-                  {services.length} services
-                </span>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-64 p-3" side="top">
-              <div className="grid grid-cols-2 gap-2 text-[11px]">
-                {services.map((service) => (
-                  <div key={service} className="flex items-center gap-1.5 truncate">
-                    <div
-                      className="h-3 w-3 rounded-sm shadow-sm shrink-0"
-                      style={{ backgroundColor: getServiceLegendColor(service, services) }}
-                    />
-                    <span className="truncate font-medium">{service}</span>
-                  </div>
-                ))}
+          <>
+            <span className="text-foreground/30">|</span>
+            {services.slice(0, 3).map((service) => (
+              <div key={service} className="flex items-center gap-1.5">
+                <div
+                  className="h-2.5 w-2.5 rounded-sm shrink-0"
+                  style={{ backgroundColor: getServiceLegendColor(service, services) }}
+                />
+                <span className="font-medium">{service}</span>
               </div>
-            </PopoverContent>
-          </Popover>
+            ))}
+            {services.length > 3 && (
+              <Popover>
+                <PopoverTrigger className="font-medium hover:text-foreground transition-colors cursor-pointer">
+                  +{services.length - 3} more
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-64 p-3" side="top">
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    {services.map((service) => (
+                      <div key={service} className="flex items-center gap-1.5 min-w-0">
+                        <div
+                          className="h-2.5 w-2.5 rounded-sm shrink-0"
+                          style={{ backgroundColor: getServiceLegendColor(service, services) }}
+                        />
+                        <span className="truncate font-medium">{service}</span>
+                      </div>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
+          </>
         )}
         <span className="flex-1" />
         <div className="flex items-center gap-3">
