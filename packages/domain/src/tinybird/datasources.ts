@@ -193,6 +193,37 @@ export const serviceMapSpans = defineDatasource("service_map_spans", {
 export type ServiceMapSpansRow = InferRow<typeof serviceMapSpans>;
 
 /**
+ * Server/Consumer spans with ParentSpanId for efficient service map child-side JOIN lookups.
+ * Pre-filters to only Server/Consumer spans with a parent at write time,
+ * sorted by (OrgId, TraceId, ParentSpanId) to align with the JOIN key.
+ * Populated by materialized view, not direct ingestion.
+ */
+export const serviceMapChildren = defineDatasource("service_map_children", {
+  description:
+    "Server/Consumer spans with ParentSpanId for efficient service map child-side JOIN lookups. Populated by materialized view.",
+  jsonPaths: false,
+  schema: {
+    OrgId: t.string().lowCardinality(),
+    Timestamp: t.dateTime(),
+    TraceId: t.string(),
+    ParentSpanId: t.string(),
+    ServiceName: t.string().lowCardinality(),
+    SpanKind: t.string().lowCardinality(),
+    Duration: t.uint64(),
+    StatusCode: t.string().lowCardinality(),
+    TraceState: t.string(),
+    DeploymentEnv: t.string().lowCardinality(),
+  },
+  engine: engine.mergeTree({
+    partitionKey: "toDate(Timestamp)",
+    sortingKey: ["OrgId", "TraceId", "ParentSpanId", "Timestamp"],
+    ttl: "Timestamp + INTERVAL 90 DAY",
+  }),
+});
+
+export type ServiceMapChildrenRow = InferRow<typeof serviceMapChildren>;
+
+/**
  * Lightweight projection of root spans for service overview queries.
  * Pre-extracts deployment.environment and deployment.commit_sha from ResourceAttributes.
  * Only stores root spans (ParentSpanId = ''), sorted by (OrgId, ServiceName, Timestamp).

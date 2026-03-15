@@ -2,6 +2,7 @@ import { defineMaterializedView, node } from "@tinybirdco/sdk";
 import {
   serviceUsage,
   serviceMapSpans,
+  serviceMapChildren,
   serviceOverviewSpans,
   traceListMv,
 } from "./datasources";
@@ -301,6 +302,41 @@ export const serviceOverviewSpansMv = defineMaterializedView(
  * Pre-extracts HTTP attributes from SpanAttributes and normalizes span names
  * so the trace list query avoids scanning heavy Map columns and GROUP BY.
  */
+/**
+ * Materialized view populating service_map_children from Server/Consumer spans.
+ * Pre-filters to only spans with a parent and extracts deployment.environment
+ * so the service map JOIN query scans far fewer rows on the child side.
+ */
+export const serviceMapChildrenMv = defineMaterializedView(
+  "service_map_children_mv",
+  {
+    description:
+      "Populates service_map_children with Server/Consumer spans that have a parent for efficient JOIN lookups.",
+    datasource: serviceMapChildren,
+    nodes: [
+      node({
+        name: "service_map_children_mv_node",
+        sql: `
+        SELECT
+          OrgId,
+          toDateTime(Timestamp) AS Timestamp,
+          TraceId,
+          ParentSpanId,
+          ServiceName,
+          SpanKind,
+          Duration,
+          StatusCode,
+          TraceState,
+          ResourceAttributes['deployment.environment'] AS DeploymentEnv
+        FROM traces
+        WHERE SpanKind IN ('Server', 'Consumer')
+          AND ParentSpanId != ''
+      `,
+      }),
+    ],
+  }
+);
+
 export const traceListMvMv = defineMaterializedView("trace_list_mv_mv", {
   description:
     "Populates trace_list_mv from root spans with pre-extracted HTTP attributes and normalized span names.",

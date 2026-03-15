@@ -2584,10 +2584,8 @@ export const serviceDependencies = defineEndpoint("service_dependencies", {
         ) AS p
         INNER JOIN (
           SELECT TraceId, ParentSpanId, ServiceName, Duration, StatusCode, TraceState
-          FROM service_map_spans
+          FROM service_map_children
           WHERE OrgId = {{String(org_id, "")}}
-            AND ParentSpanId != ''
-            AND SpanKind IN ('Server', 'Consumer')
           {% if defined(start_time) %}
             AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
           {% end %}

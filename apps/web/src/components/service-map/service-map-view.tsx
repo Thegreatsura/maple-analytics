@@ -216,7 +216,9 @@ export function ServiceMapView({ startTime, endTime }: ServiceMapViewProps) {
   const mapResult = useRefreshableAtomValue(getServiceMapResultAtom(mapInput))
   const overviewResult = useRefreshableAtomValue(getServiceOverviewResultAtom(overviewInput))
 
-  // Both need to be loaded for the view
+  // Render map as soon as edges arrive — don't wait for overview metrics
+  const overviews = Result.isSuccess(overviewResult) ? overviewResult.value.data : []
+
   return Result.builder(mapResult)
     .onInitial(() => (
       <div className="flex items-center justify-center h-full">
@@ -233,27 +235,12 @@ export function ServiceMapView({ startTime, endTime }: ServiceMapViewProps) {
         </div>
       </div>
     ))
-    .onSuccess((mapResponse) =>
-      Result.builder(overviewResult)
-        .onInitial(() => (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-sm text-muted-foreground animate-pulse">
-              Loading service metrics...
-            </div>
-          </div>
-        ))
-        .onError(() => (
-          // Still render the map without overview metrics
-          <ServiceMapCanvas edges={mapResponse.edges} overviews={[]} durationSeconds={durationSeconds} />
-        ))
-        .onSuccess((overviewResponse) => (
-          <ServiceMapCanvas
-            edges={mapResponse.edges}
-            overviews={overviewResponse.data}
-            durationSeconds={durationSeconds}
-          />
-        ))
-        .render(),
-    )
+    .onSuccess((mapResponse) => (
+      <ServiceMapCanvas
+        edges={mapResponse.edges}
+        overviews={overviews}
+        durationSeconds={durationSeconds}
+      />
+    ))
     .render()
 }
