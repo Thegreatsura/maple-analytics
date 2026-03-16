@@ -86,8 +86,9 @@ export function buildSpec(output: StructuredToolOutput): Spec {
     case "error_detail": {
       const d = output.data
       const children: string[] = []
+      const traces = d.traces ?? []
 
-      const traceRows = d.traces.map((t) => ({
+      const traceRows = traces.map((t) => ({
         traceId: t.traceId,
         rootSpanName: t.rootSpanName,
         durationMs: t.durationMs,
@@ -101,8 +102,8 @@ export function buildSpec(output: StructuredToolOutput): Spec {
         addElement(elements, "TraceList", { traces: traceRows })
       )
 
-      const allLogs = d.traces.flatMap((t) =>
-        t.logs.map((l) => ({
+      const allLogs = traces.flatMap((t) =>
+        (t.logs ?? []).map((l) => ({
           timestamp: l.timestamp,
           severityText: l.severityText,
           serviceName: "",
@@ -127,13 +128,13 @@ export function buildSpec(output: StructuredToolOutput): Spec {
       children.push(
         addElement(elements, "SpanTree", {
           traceId: d.traceId,
-          spans: d.spans,
+          spans: d.spans ?? [],
         })
       )
 
-      if (d.logs.length > 0) {
+      if ((d.logs ?? []).length > 0) {
         children.push(
-          addElement(elements, "LogList", { logs: d.logs })
+          addElement(elements, "LogList", { logs: d.logs ?? [] })
         )
       }
 
@@ -157,21 +158,21 @@ export function buildSpec(output: StructuredToolOutput): Spec {
       children.push(
         addElement(elements, "StatCards", {
           cards: [
-            { label: "Throughput", value: d.health.throughput, format: "number" },
-            { label: "Error Rate", value: d.health.errorRate, format: "percent" },
-            { label: "Error Count", value: d.health.errorCount, format: "number" },
-            { label: "P50", value: d.health.p50Ms, format: "duration" },
-            { label: "P95", value: d.health.p95Ms, format: "duration" },
-            { label: "P99", value: d.health.p99Ms, format: "duration" },
-            { label: "Apdex", value: d.health.apdex, format: "decimal" },
+            { label: "Throughput", value: d.health?.throughput, format: "number" },
+            { label: "Error Rate", value: d.health?.errorRate, format: "percent" },
+            { label: "Error Count", value: d.health?.errorCount, format: "number" },
+            { label: "P50", value: d.health?.p50Ms, format: "duration" },
+            { label: "P95", value: d.health?.p95Ms, format: "duration" },
+            { label: "P99", value: d.health?.p99Ms, format: "duration" },
+            { label: "Apdex", value: d.health?.apdex, format: "decimal" },
           ],
         })
       )
 
-      if (d.topErrors.length > 0) {
+      if ((d.topErrors ?? []).length > 0) {
         children.push(
           addElement(elements, "ErrorList", {
-            errors: d.topErrors.map((e) => ({
+            errors: (d.topErrors ?? []).map((e) => ({
               errorType: e.errorType,
               count: e.count,
               affectedServices: [d.serviceName],
@@ -181,15 +182,15 @@ export function buildSpec(output: StructuredToolOutput): Spec {
         )
       }
 
-      if (d.recentTraces.length > 0) {
+      if ((d.recentTraces ?? []).length > 0) {
         children.push(
-          addElement(elements, "TraceList", { traces: d.recentTraces })
+          addElement(elements, "TraceList", { traces: d.recentTraces ?? [] })
         )
       }
 
-      if (d.recentLogs.length > 0) {
+      if ((d.recentLogs ?? []).length > 0) {
         children.push(
-          addElement(elements, "LogList", { logs: d.recentLogs })
+          addElement(elements, "LogList", { logs: d.recentLogs ?? [] })
         )
       }
 

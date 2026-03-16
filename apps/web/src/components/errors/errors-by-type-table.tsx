@@ -82,7 +82,7 @@ function ErrorDetailPanel({ errorRow, filters }: { errorRow: ErrorByType; filter
 
         {Result.builder(detailResult)
           .onSuccess((response) => {
-            const allServices = [...new Set(response.data.flatMap((t) => t.services))]
+            const allServices = [...new Set((response.data ?? []).flatMap((t) => t.services ?? []))]
             if (allServices.length === 0) return null
             return (
               <div>
@@ -128,7 +128,7 @@ function ErrorDetailPanel({ errorRow, filters }: { errorRow: ErrorByType; filter
             <p className="text-sm text-muted-foreground">No sample traces found</p>
           ))
           .onSuccess((response) => {
-            const traces = response.data
+            const traces = response.data ?? []
             if (traces.length === 0) {
               return <p className="text-sm text-muted-foreground">No sample traces found</p>
             }
@@ -219,7 +219,7 @@ export function ErrorsByTypeTable({ filters }: ErrorsByTypeTableProps) {
       </div>
     ))
     .onSuccess((response, result) => {
-      const errors = response.data
+      const errors = response.data ?? []
 
       const toggleExpanded = (errorType: string) => {
         setExpandedError((prev) => (prev === errorType ? null : errorType))
