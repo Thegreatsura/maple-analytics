@@ -11,7 +11,13 @@
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "tinybird:manifest": "bun run ./scripts/generate-tinybird-project-manifest.ts",
-    "tinybird:manifest:check": "bun run ./scripts/generate-tinybird-project-manifest.ts --check"
+    "tinybird:manifest:check": "bun run ./scripts/generate-tinybird-project-manifest.ts --check",
+    "deploy:prd": "bun scripts/deploy-stack.ts deploy prd",
+    "destroy:prd": "bun scripts/deploy-stack.ts destroy prd",
+    "deploy:stg": "bun scripts/deploy-stack.ts deploy stg",
+    "destroy:stg": "bun scripts/deploy-stack.ts destroy stg",
+    "deploy:pr": "bun scripts/deploy-stack.ts deploy pr",
+    "destroy:pr": "bun scripts/deploy-stack.ts destroy pr"
   },
   "devDependencies": {
     "@tinybirdco/sdk": "0.0.60",
