@@ -21,6 +21,15 @@ export const Route = createFileRoute("/service-map")({
 
 function ServiceMapPage() {
   const search = Route.useSearch()
+  return (
+    <PageRefreshProvider timePreset={search.timePreset ?? "12h"}>
+      <ServiceMapContent />
+    </PageRefreshProvider>
+  )
+}
+
+function ServiceMapContent() {
+  const search = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
   const { startTime: effectiveStartTime, endTime: effectiveEndTime } =
     useEffectiveTimeRange(search.startTime, search.endTime, search.timePreset ?? "12h")
@@ -40,27 +49,25 @@ function ServiceMapPage() {
   }
 
   return (
-    <PageRefreshProvider timePreset={search.timePreset ?? "12h"}>
-      <DashboardLayout
-        breadcrumbs={[{ label: "Service Map" }]}
-        title="Service Map"
-        description="Visualize service-to-service dependencies and data flow."
-        headerActions={
-          <TimeRangeHeaderControls
-            startTime={search.startTime}
-            endTime={search.endTime}
-            presetValue={search.timePreset ?? "12h"}
-            onTimeChange={handleTimeChange}
-          />
-        }
-      >
-        <div className="-mx-6 -mb-6 h-[calc(100vh-10rem)]">
-          <ServiceMapView
-            startTime={effectiveStartTime}
-            endTime={effectiveEndTime}
-          />
-        </div>
-      </DashboardLayout>
-    </PageRefreshProvider>
+    <DashboardLayout
+      breadcrumbs={[{ label: "Service Map" }]}
+      title="Service Map"
+      description="Visualize service-to-service dependencies and data flow."
+      headerActions={
+        <TimeRangeHeaderControls
+          startTime={search.startTime}
+          endTime={search.endTime}
+          presetValue={search.timePreset ?? "12h"}
+          onTimeChange={handleTimeChange}
+        />
+      }
+    >
+      <div className="-mx-6 -mb-6 h-[calc(100vh-10rem)]">
+        <ServiceMapView
+          startTime={effectiveStartTime}
+          endTime={effectiveEndTime}
+        />
+      </div>
+    </DashboardLayout>
   )
 }

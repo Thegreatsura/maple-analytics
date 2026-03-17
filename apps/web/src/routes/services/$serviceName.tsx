@@ -4,7 +4,7 @@ import { Schema } from "effect"
 
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { useEffectiveTimeRange } from "@/hooks/use-effective-time-range"
-import { useRefreshableAtomValue } from "@/hooks/use-refreshable-atom-value"
+import { useRetainedRefreshableResultValue } from "@/hooks/use-retained-refreshable-result-value"
 import { MetricsGrid } from "@/components/dashboard/metrics-grid"
 import type {
   ChartLegendMode,
@@ -47,6 +47,15 @@ const SERVICE_CHARTS: ServiceChartConfig[] = [
 ]
 
 function ServiceDetailPage() {
+  const search = Route.useSearch()
+  return (
+    <PageRefreshProvider timePreset={search.timePreset ?? "12h"}>
+      <ServiceDetailContent />
+    </PageRefreshProvider>
+  )
+}
+
+function ServiceDetailContent() {
   const { serviceName } = Route.useParams()
   const search = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
@@ -68,7 +77,7 @@ function ServiceDetailPage() {
     })
   }
 
-  const detailResult = useRefreshableAtomValue(
+  const detailResult = useRetainedRefreshableResultValue(
     getCustomChartServiceDetailResultAtom({
       data: {
         serviceName,
@@ -78,7 +87,7 @@ function ServiceDetailPage() {
     }),
   )
 
-  const apdexResult = useRefreshableAtomValue(
+  const apdexResult = useRetainedRefreshableResultValue(
     getServiceApdexTimeSeriesResultAtom({
       data: {
         serviceName,
@@ -87,6 +96,10 @@ function ServiceDetailPage() {
       },
     }),
   )
+
+  const isWaiting =
+    (Result.isSuccess(detailResult) && detailResult.waiting) ||
+    (Result.isSuccess(apdexResult) && apdexResult.waiting)
 
   const detailPoints = Result.builder(detailResult)
     .onSuccess((response) => response.data as unknown as Record<string, unknown>[])
@@ -114,24 +127,22 @@ function ServiceDetailPage() {
   }))
 
   return (
-    <PageRefreshProvider timePreset={search.timePreset ?? "12h"}>
-      <DashboardLayout
-        breadcrumbs={[
-          { label: "Services", href: "/services" },
-          { label: serviceName },
-        ]}
-        title={serviceName}
-        headerActions={
-          <TimeRangeHeaderControls
-            startTime={search.startTime}
-            endTime={search.endTime}
-            presetValue={search.timePreset ?? "12h"}
-            onTimeChange={handleTimeChange}
-          />
-        }
-      >
-        <MetricsGrid items={metrics} />
-      </DashboardLayout>
-    </PageRefreshProvider>
+    <DashboardLayout
+      breadcrumbs={[
+        { label: "Services", href: "/services" },
+        { label: serviceName },
+      ]}
+      title={serviceName}
+      headerActions={
+        <TimeRangeHeaderControls
+          startTime={search.startTime}
+          endTime={search.endTime}
+          presetValue={search.timePreset ?? "12h"}
+          onTimeChange={handleTimeChange}
+        />
+      }
+    >
+      <MetricsGrid items={metrics} waiting={!!isWaiting} />
+    </DashboardLayout>
   )
 }

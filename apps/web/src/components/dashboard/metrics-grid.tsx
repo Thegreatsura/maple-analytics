@@ -24,11 +24,12 @@ interface MetricsGridItem {
 interface MetricsGridProps {
   items: MetricsGridItem[]
   className?: string
+  waiting?: boolean
 }
 
-export function MetricsGrid({ items, className }: MetricsGridProps) {
+export function MetricsGrid({ items, className, waiting }: MetricsGridProps) {
   return (
-    <div className={cn("grid grid-cols-1 md:grid-cols-2 gap-3", className)}>
+    <div className={cn("grid grid-cols-1 md:grid-cols-2 gap-3 transition-opacity", waiting && "opacity-60", className)}>
       {items.map((item) => {
         const entry = getChartById(item.chartId)
         if (!entry) {

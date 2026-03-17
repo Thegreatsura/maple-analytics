@@ -30,6 +30,15 @@ export const Route = createFileRoute("/errors")({
 
 function ErrorsPage() {
   const search = Route.useSearch()
+  return (
+    <PageRefreshProvider timePreset={search.timePreset ?? "12h"}>
+      <ErrorsContent />
+    </PageRefreshProvider>
+  )
+}
+
+function ErrorsContent() {
+  const search = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
   const { startTime: effectiveStartTime, endTime: effectiveEndTime } =
     useEffectiveTimeRange(search.startTime, search.endTime, search.timePreset ?? "12h")
@@ -58,29 +67,27 @@ function ErrorsPage() {
   }
 
   return (
-    <PageRefreshProvider timePreset={search.timePreset ?? "12h"}>
-      <DashboardLayout
-        breadcrumbs={[{ label: "Errors" }]}
-        title="Errors"
-        description="Monitor and analyze errors across your services."
-        filterSidebar={<ErrorsFilterSidebar />}
-        headerActions={
-          <TimeRangeHeaderControls
-            startTime={search.startTime}
-            endTime={search.endTime}
-            presetValue={search.timePreset ?? "12h"}
-            onTimeChange={handleTimeChange}
-          />
-        }
-      >
-        <div className="space-y-6">
-          <ErrorsSummaryCards filters={apiFilters} />
-          <div>
-            <h2 className="text-lg font-semibold mb-4">Errors by Type</h2>
-            <ErrorsByTypeTable filters={apiFilters} />
-          </div>
+    <DashboardLayout
+      breadcrumbs={[{ label: "Errors" }]}
+      title="Errors"
+      description="Monitor and analyze errors across your services."
+      filterSidebar={<ErrorsFilterSidebar />}
+      headerActions={
+        <TimeRangeHeaderControls
+          startTime={search.startTime}
+          endTime={search.endTime}
+          presetValue={search.timePreset ?? "12h"}
+          onTimeChange={handleTimeChange}
+        />
+      }
+    >
+      <div className="space-y-6">
+        <ErrorsSummaryCards filters={apiFilters} />
+        <div>
+          <h2 className="text-lg font-semibold mb-4">Errors by Type</h2>
+          <ErrorsByTypeTable filters={apiFilters} />
         </div>
-      </DashboardLayout>
-    </PageRefreshProvider>
+      </div>
+    </DashboardLayout>
   )
 }

@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@maple/ui/components/ui/select"
 import { useEffectiveTimeRange } from "@/hooks/use-effective-time-range"
-import { useRefreshableAtomValue } from "@/hooks/use-refreshable-atom-value"
+import { useRetainedRefreshableResultValue } from "@/hooks/use-retained-refreshable-result-value"
 import { ServiceUsageCards } from "@/components/dashboard/service-usage-cards"
 import { MetricsGrid } from "@/components/dashboard/metrics-grid"
 import type {
@@ -64,6 +64,15 @@ const OVERVIEW_CHARTS: OverviewChartConfig[] = [
 
 function DashboardPage() {
   const search = Route.useSearch()
+  return (
+    <PageRefreshProvider timePreset={search.timePreset ?? "24h"}>
+      <DashboardContent />
+    </PageRefreshProvider>
+  )
+}
+
+function DashboardContent() {
+  const search = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
 
   const { startTime: effectiveStartTime, endTime: effectiveEndTime } =
@@ -92,7 +101,7 @@ function DashboardPage() {
     })
   }
 
-  const facetsResult = useRefreshableAtomValue(
+  const facetsResult = useRetainedRefreshableResultValue(
     getServicesFacetsResultAtom({
       data: {
         startTime: effectiveStartTime,
@@ -120,7 +129,7 @@ function DashboardPage() {
   // when environmentFilter changes from undefined → ["production"]
   const facetsReady = !Result.isInitial(facetsResult)
 
-  const overviewResult = useRefreshableAtomValue(
+  const overviewResult = useRetainedRefreshableResultValue(
     facetsReady
       ? getOverviewTimeSeriesResultAtom({
           data: {
@@ -133,7 +142,7 @@ function DashboardPage() {
       : disabledResultAtom<{ data: ServiceDetailTimeSeriesPoint[] }, any>(),
   )
 
-  const logVolumeResult = useRefreshableAtomValue(
+  const logVolumeResult = useRetainedRefreshableResultValue(
     facetsReady
       ? getCustomChartTimeSeriesResultAtom({
           data: {
@@ -151,6 +160,10 @@ function DashboardPage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       : disabledResultAtom<CustomChartTimeSeriesResponse, any>(),
   )
+
+  const isWaiting =
+    (Result.isSuccess(overviewResult) && overviewResult.waiting) ||
+    (Result.isSuccess(logVolumeResult) && logVolumeResult.waiting)
 
   const overviewPoints = Result.builder(overviewResult)
     .onSuccess((response) => response.data as unknown as Record<string, unknown>[])
@@ -205,40 +218,38 @@ function DashboardPage() {
   ], [environments])
 
   return (
-    <PageRefreshProvider timePreset={search.timePreset ?? "24h"}>
-      <DashboardLayout
-        breadcrumbs={[{ label: "Overview" }]}
-        title="Dashboard"
-        description="Observability overview for your services."
-        headerActions={
-          <div className="flex items-center gap-2">
-            <Select
-              value={selectedEnvironment}
-              onValueChange={handleEnvironmentChange}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {environmentItems.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <TimeRangeHeaderControls
-              startTime={search.startTime ?? effectiveStartTime}
-              endTime={search.endTime ?? effectiveEndTime}
-              presetValue={search.timePreset ?? "24h"}
-              onTimeChange={handleTimeChange}
-            />
-          </div>
-        }
-      >
-        <ServiceUsageCards startTime={effectiveStartTime} endTime={effectiveEndTime} />
-        <MetricsGrid items={metrics} className="mt-4" />
-      </DashboardLayout>
-    </PageRefreshProvider>
+    <DashboardLayout
+      breadcrumbs={[{ label: "Overview" }]}
+      title="Dashboard"
+      description="Observability overview for your services."
+      headerActions={
+        <div className="flex items-center gap-2">
+          <Select
+            value={selectedEnvironment}
+            onValueChange={handleEnvironmentChange}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {environmentItems.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <TimeRangeHeaderControls
+            startTime={search.startTime ?? effectiveStartTime}
+            endTime={search.endTime ?? effectiveEndTime}
+            presetValue={search.timePreset ?? "24h"}
+            onTimeChange={handleTimeChange}
+          />
+        </div>
+      }
+    >
+      <ServiceUsageCards startTime={effectiveStartTime} endTime={effectiveEndTime} />
+      <MetricsGrid items={metrics} className="mt-4" waiting={!!isWaiting} />
+    </DashboardLayout>
   )
 }

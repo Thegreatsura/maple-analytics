@@ -21,6 +21,15 @@ export const Route = createFileRoute("/query-builder-lab")({
 
 function QueryBuilderLabPage() {
   const search = Route.useSearch()
+  return (
+    <PageRefreshProvider timePreset={search.timePreset ?? "1h"}>
+      <QueryBuilderLabContent />
+    </PageRefreshProvider>
+  )
+}
+
+function QueryBuilderLabContent() {
+  const search = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
 
   const { startTime: effectiveStartTime, endTime: effectiveEndTime } =
@@ -43,28 +52,26 @@ function QueryBuilderLabPage() {
   }
 
   return (
-    <PageRefreshProvider timePreset={search.timePreset ?? "1h"}>
-      <DashboardLayout
-        breadcrumbs={[
-          { label: "Overview", href: "/" },
-          { label: "Query Builder Lab" },
-        ]}
-        title="Query Builder Lab"
-        description="MVP Query builder"
-        headerActions={
-          <TimeRangeHeaderControls
-            startTime={search.startTime}
-            endTime={search.endTime}
-            presetValue={search.timePreset ?? "1h"}
-            onTimeChange={handleTimeChange}
-          />
-        }
-      >
-        <QueryBuilderLab
-          startTime={effectiveStartTime}
-          endTime={effectiveEndTime}
+    <DashboardLayout
+      breadcrumbs={[
+        { label: "Overview", href: "/" },
+        { label: "Query Builder Lab" },
+      ]}
+      title="Query Builder Lab"
+      description="MVP Query builder"
+      headerActions={
+        <TimeRangeHeaderControls
+          startTime={search.startTime}
+          endTime={search.endTime}
+          presetValue={search.timePreset ?? "1h"}
+          onTimeChange={handleTimeChange}
         />
-      </DashboardLayout>
-    </PageRefreshProvider>
+      }
+    >
+      <QueryBuilderLab
+        startTime={effectiveStartTime}
+        endTime={effectiveEndTime}
+      />
+    </DashboardLayout>
   )
 }
