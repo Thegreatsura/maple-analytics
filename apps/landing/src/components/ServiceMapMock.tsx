@@ -45,12 +45,6 @@ function formatLatency(ms: number): string {
   return `${ms.toFixed(0)}ms`
 }
 
-function getHealthClass(errorRate: number): string {
-  if (errorRate > 5) return "ring-red-500/60"
-  if (errorRate > 1) return "ring-amber-500/60"
-  return "ring-emerald-500/40"
-}
-
 function getHealthDotClass(errorRate: number): string {
   if (errorRate > 5) return "bg-red-500"
   if (errorRate > 1) return "bg-amber-500"
@@ -62,7 +56,7 @@ function getHealthDotClass(errorRate: number): string {
 const MockNode = memo(function MockNode({ data }: NodeProps<Node>) {
   const mockData = data as unknown as MockNodeData
   const { label, throughput, errorRate, avgLatencyMs, services } = mockData
-  const color = getServiceLegendColor(label, services)
+  const accentColor = getServiceLegendColor(label, services)
 
   return (
     <>
@@ -72,39 +66,40 @@ const MockNode = memo(function MockNode({ data }: NodeProps<Node>) {
         className="!opacity-0 !w-0 !h-0 !min-w-0 !min-h-0"
         isConnectable={false}
       />
-      <div
-        className={cn(
-          "w-[140px] rounded-lg shadow-sm ring-2 transition-shadow hover:shadow-md bg-card",
-          getHealthClass(errorRate),
-        )}
-      >
+      <div className="w-[140px] rounded-lg bg-card border border-border overflow-hidden flex">
+        {/* Left accent stripe */}
         <div
-          className="flex items-center justify-center gap-2 px-3 py-1.5 rounded-t-lg text-[10px] font-semibold truncate"
-          style={{ backgroundColor: color, color: "oklch(0.91 0.015 75)" }}
-        >
-          <div className={cn("h-1.5 w-1.5 rounded-full shrink-0", getHealthDotClass(errorRate))} />
-          <span className="truncate">{label}</span>
-        </div>
-        <div className="grid grid-cols-2 divide-x divide-border px-1 py-1.5 text-center text-[9px]">
-          <div>
-            <div className="font-medium text-muted-foreground">req/s</div>
-            <div className="font-mono font-semibold text-foreground tabular-nums">
-              {formatRate(throughput)}
-            </div>
+          className="w-[3px] shrink-0"
+          style={{ backgroundColor: accentColor }}
+        />
+        <div className="flex flex-col gap-1.5 px-2.5 py-2 flex-1 min-w-0">
+          {/* Service name + health dot */}
+          <div className="flex items-center gap-1.5">
+            <div className={cn("h-1.5 w-1.5 rounded-full shrink-0", getHealthDotClass(errorRate))} />
+            <span className="text-[10px] font-medium text-foreground truncate">{label}</span>
           </div>
-          <div>
-            <div className="font-medium text-muted-foreground">P95</div>
-            <div
-              className={cn(
-                "font-mono font-semibold tabular-nums",
-                errorRate > 5
-                  ? "text-red-600 dark:text-red-400"
-                  : errorRate > 1
-                    ? "text-amber-600 dark:text-amber-400"
-                    : "text-foreground",
-              )}
-            >
-              {formatLatency(avgLatencyMs)}
+          {/* Metrics row */}
+          <div className="flex gap-3">
+            <div className="flex flex-col gap-px">
+              <span className="text-[8px] font-medium tracking-wide text-muted-foreground/60 uppercase">req/s</span>
+              <span className="text-[10px] font-medium text-secondary-foreground font-mono tabular-nums">
+                {formatRate(throughput)}
+              </span>
+            </div>
+            <div className="flex flex-col gap-px">
+              <span className="text-[8px] font-medium tracking-wide text-muted-foreground/60 uppercase">P95</span>
+              <span
+                className={cn(
+                  "text-[10px] font-medium font-mono tabular-nums",
+                  errorRate > 5
+                    ? "text-red-500"
+                    : errorRate > 1
+                      ? "text-amber-500"
+                      : "text-secondary-foreground",
+                )}
+              >
+                {formatLatency(avgLatencyMs)}
+              </span>
             </div>
           </div>
         </div>
