@@ -1,30 +1,29 @@
+import * as React from "react"
 import { Result } from "@effect-atom/atom-react"
-import { useState } from "react"
-
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@maple/ui/components/ui/table"
+  type ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+} from "@tanstack/react-table"
+import { useVirtualizer } from "@tanstack/react-virtual"
+
 import { Skeleton } from "@maple/ui/components/ui/skeleton"
 import { type Log } from "@/api/tinybird/logs"
 import { SeverityBadge } from "./severity-badge"
 import { LogDetailSheet } from "./log-detail-sheet"
 import type { LogsSearchParams } from "@/routes/logs"
-import { listLogsResultAtom } from "@/lib/services/atoms/tinybird-query-atoms"
 import { useTimezonePreference } from "@/hooks/use-timezone-preference"
 import { formatTimestampInTimezone } from "@/lib/timezone-format"
 import { formatRelativeTime } from "@/lib/format"
-import { useRetainedRefreshableResultValue } from "@/hooks/use-retained-refreshable-result-value"
-import { useTableRefreshTimeRange } from "@/hooks/use-table-refresh-time-range"
+import { useInfiniteLogs, FETCH_THRESHOLD } from "@/hooks/use-infinite-logs"
 
 function truncateBody(body: string, maxLength = 100): string {
   if (body.length <= maxLength) return body
   return body.slice(0, maxLength) + "..."
 }
+
+const ROW_HEIGHT = 44
 
 interface LogsTableProps {
   filters?: LogsSearchParams
@@ -32,64 +31,257 @@ interface LogsTableProps {
 
 function LoadingState() {
   return (
-    <div className="space-y-4">
+    <div className="flex-1 min-h-0 flex flex-col gap-4">
       <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[160px]">Timestamp</TableHead>
-              <TableHead className="w-[120px]">Service</TableHead>
-              <TableHead className="w-[80px]">Severity</TableHead>
-              <TableHead>Message</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+        <table className="w-full caption-bottom text-sm">
+          <thead className="[&_tr]:border-b">
+            <tr className="border-b transition-colors hover:bg-muted/50">
+              <th className="h-10 px-2 text-left align-middle font-medium text-muted-foreground w-[160px]">Timestamp</th>
+              <th className="h-10 px-2 text-left align-middle font-medium text-muted-foreground w-[120px]">Service</th>
+              <th className="h-10 px-2 text-left align-middle font-medium text-muted-foreground w-[80px]">Severity</th>
+              <th className="h-10 px-2 text-left align-middle font-medium text-muted-foreground">Message</th>
+            </tr>
+          </thead>
+          <tbody className="[&_tr:last-child]:border-0">
             {Array.from({ length: 10 }).map((_, i) => (
-              <TableRow key={i}>
-                <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-12" /></TableCell>
-                <TableCell><Skeleton className="h-4 w-full" /></TableCell>
-              </TableRow>
+              <tr key={i} className="border-b transition-colors">
+                <td className="p-2 align-middle"><Skeleton className="h-4 w-32" /></td>
+                <td className="p-2 align-middle"><Skeleton className="h-4 w-20" /></td>
+                <td className="p-2 align-middle"><Skeleton className="h-4 w-12" /></td>
+                <td className="p-2 align-middle"><Skeleton className="h-4 w-full" /></td>
+              </tr>
             ))}
-          </TableBody>
-        </Table>
+          </tbody>
+        </table>
       </div>
     </div>
   )
 }
 
-export function LogsTable({ filters }: LogsTableProps) {
-  const [selectedLog, setSelectedLog] = useState<Log | null>(null)
-  const [sheetOpen, setSheetOpen] = useState(false)
+function LogsTableContent({
+  allData,
+  totalCount,
+  isFetchingNextPage,
+  hasNextPage,
+  fetchNextPage,
+  waiting,
+}: {
+  allData: Log[]
+  totalCount: number
+  isFetchingNextPage: boolean
+  hasNextPage: boolean
+  fetchNextPage: () => void
+  waiting: boolean
+}) {
+  const [selectedLog, setSelectedLog] = React.useState<Log | null>(null)
+  const [sheetOpen, setSheetOpen] = React.useState(false)
   const { effectiveTimezone } = useTimezonePreference()
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null)
 
-  const { startTime: effectiveStartTime, endTime: effectiveEndTime } =
-    useTableRefreshTimeRange({
-      startTime: filters?.startTime,
-      endTime: filters?.endTime,
-      timePreset: filters?.timePreset,
-      defaultRange: "12h",
-    })
-
-  const logsResult = useRetainedRefreshableResultValue(
-    listLogsResultAtom({
-      data: {
-        startTime: effectiveStartTime,
-        endTime: effectiveEndTime,
-        service: filters?.services?.[0],
-        severity: filters?.severities?.[0],
-        search: filters?.search,
-      },
-    }),
-  )
-
-  const handleRowClick = (log: Log) => {
+  const handleRowClick = React.useCallback((log: Log) => {
     setSelectedLog(log)
     setSheetOpen(true)
+  }, [])
+
+  const columns = React.useMemo<ColumnDef<Log>[]>(
+    () => [
+      {
+        accessorKey: "timestamp",
+        header: "Timestamp",
+        size: 160,
+        cell: ({ row }) => (
+          <span className="font-mono text-muted-foreground">
+            {formatTimestampInTimezone(row.original.timestamp, {
+              timeZone: effectiveTimezone,
+            })}{" "}
+            <span className="text-muted-foreground/60">
+              ({formatRelativeTime(row.original.timestamp)})
+            </span>
+          </span>
+        ),
+      },
+      {
+        accessorKey: "serviceName",
+        header: "Service",
+        size: 120,
+        cell: ({ row }) => (
+          <span className="font-mono text-xs">{row.original.serviceName}</span>
+        ),
+      },
+      {
+        accessorKey: "severityText",
+        header: "Severity",
+        size: 80,
+        cell: ({ row }) => (
+          <SeverityBadge severity={row.original.severityText} />
+        ),
+      },
+      {
+        accessorKey: "body",
+        header: "Message",
+        cell: ({ row }) => (
+          <span className="font-mono text-xs">{truncateBody(row.original.body)}</span>
+        ),
+      },
+    ],
+    [effectiveTimezone],
+  )
+
+  const table = useReactTable({
+    data: allData,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+  })
+
+  const { rows } = table.getRowModel()
+
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 10,
+  })
+
+  const virtualItems = virtualizer.getVirtualItems()
+
+  React.useEffect(() => {
+    const lastItem = virtualItems[virtualItems.length - 1]
+    if (!lastItem) return
+
+    if (lastItem.index >= rows.length - FETCH_THRESHOLD && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage()
+    }
+  }, [virtualItems, rows.length, hasNextPage, isFetchingNextPage, fetchNextPage])
+
+  if (allData.length === 0) {
+    return (
+      <div className="flex-1 min-h-0 flex flex-col gap-4">
+        <div className="rounded-md border">
+          <table className="w-full caption-bottom text-sm">
+            <thead className="[&_tr]:border-b">
+              <tr className="border-b transition-colors hover:bg-muted/50">
+                <th className="h-10 px-2 text-left align-middle font-medium text-muted-foreground" colSpan={4}>
+                  <span className="sr-only">Log columns</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colSpan={4} className="h-24 text-center">
+                  No logs found
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
   }
 
-  return Result.builder(logsResult)
+  return (
+    <>
+      <div className={`flex-1 min-h-0 flex flex-col gap-4 transition-opacity ${waiting ? "opacity-60" : ""}`}>
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 min-h-0 overflow-auto rounded-md border"
+        >
+          <table className="w-full caption-bottom text-sm" aria-label="Logs">
+            <thead className="[&_tr]:border-b sticky top-0 z-10 bg-background">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id} className="border-b transition-colors hover:bg-muted/50">
+                  {headerGroup.headers.map((header) => (
+                    <th
+                      key={header.id}
+                      className={`h-10 px-2 text-left align-middle font-medium text-muted-foreground ${
+                        header.id === "serviceName" ? "hidden md:table-cell" : ""
+                      }`}
+                      style={{ width: header.getSize() !== 150 ? header.getSize() : undefined }}
+                    >
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                    </th>
+                  ))}
+                </tr>
+              ))}
+            </thead>
+            <tbody className="[&_tr:last-child]:border-0">
+              {virtualItems.length > 0 && (
+                <tr style={{ height: virtualItems[0].start }} aria-hidden="true">
+                  <td />
+                </tr>
+              )}
+              {virtualItems.map((virtualRow) => {
+                const row = rows[virtualRow.index]
+                return (
+                  <tr
+                    key={row.id}
+                    ref={virtualizer.measureElement}
+                    data-index={virtualRow.index}
+                    className="border-b transition-colors hover:bg-muted/50 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset"
+                    tabIndex={0}
+                    onClick={() => handleRowClick(row.original)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        handleRowClick(row.original)
+                      }
+                    }}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td
+                        key={cell.id}
+                        className={`p-2 align-middle [&:has([role=checkbox])]:pr-0 ${
+                          cell.column.id === "serviceName" ? "hidden md:table-cell" : ""
+                        }${cell.column.id === "body" ? " max-w-md" : ""}`}
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                )
+              })}
+              {virtualItems.length > 0 && (
+                <tr
+                  style={{
+                    height: virtualizer.getTotalSize() - (virtualItems[virtualItems.length - 1].end),
+                  }}
+                  aria-hidden="true"
+                >
+                  <td />
+                </tr>
+              )}
+              {isFetchingNextPage && (
+                <tr className="border-b transition-colors">
+                  <td colSpan={4} className="p-2 text-center text-sm text-muted-foreground">
+                    Loading more logs...
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="text-sm text-muted-foreground shrink-0">
+          Showing {allData.length} of {totalCount} logs
+          {!hasNextPage && allData.length > 0 && " (all loaded)"}
+        </div>
+      </div>
+
+      <LogDetailSheet
+        log={selectedLog}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+      />
+    </>
+  )
+}
+
+export function LogsTable({ filters }: LogsTableProps) {
+  const { firstPageResult, allData, totalCount, isFetchingNextPage, hasNextPage, fetchNextPage } =
+    useInfiniteLogs(filters)
+
+  return Result.builder(firstPageResult)
     .onInitial(() => <LoadingState />)
     .onError((error) => (
       <div className="rounded-md border border-destructive/50 bg-destructive/10 p-8">
@@ -97,75 +289,15 @@ export function LogsTable({ filters }: LogsTableProps) {
         <pre className="mt-2 text-xs text-destructive/80 whitespace-pre-wrap">{error.message}</pre>
       </div>
     ))
-    .onSuccess((response, result) => (
-      <>
-        <div className={`space-y-4 transition-opacity ${result.waiting ? "opacity-60" : ""}`}>
-          <div className="rounded-md border">
-            <Table aria-label="Logs">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[160px]">Timestamp</TableHead>
-                  <TableHead className="hidden md:table-cell w-[120px]">Service</TableHead>
-                  <TableHead className="w-[80px]">Severity</TableHead>
-                  <TableHead>Message</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {response.data.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center">
-                      No logs found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  response.data.map((log: Log) => (
-                    <TableRow
-                      key={`${log.timestamp}-${log.traceId}-${log.spanId}`}
-                      className="cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset"
-                      tabIndex={0}
-                      onClick={() => handleRowClick(log)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault()
-                          handleRowClick(log)
-                        }
-                      }}
-                    >
-                      <TableCell className="font-mono text-muted-foreground">
-                        {formatTimestampInTimezone(log.timestamp, {
-                          timeZone: effectiveTimezone,
-                        })}{" "}
-                        <span className="text-muted-foreground/60">
-                          ({formatRelativeTime(log.timestamp)})
-                        </span>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        <span className="font-mono text-xs">{log.serviceName}</span>
-                      </TableCell>
-                      <TableCell>
-                        <SeverityBadge severity={log.severityText} />
-                      </TableCell>
-                      <TableCell className="max-w-md">
-                        <span className="font-mono text-xs">{truncateBody(log.body)}</span>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          <div className="text-sm text-muted-foreground">
-            Showing {response.data.length} of {response.meta.total} logs
-          </div>
-        </div>
-
-        <LogDetailSheet
-          log={selectedLog}
-          open={sheetOpen}
-          onOpenChange={setSheetOpen}
-        />
-      </>
+    .onSuccess((_response, result) => (
+      <LogsTableContent
+        allData={allData}
+        totalCount={totalCount}
+        isFetchingNextPage={isFetchingNextPage}
+        hasNextPage={hasNextPage}
+        fetchNextPage={fetchNextPage}
+        waiting={result.waiting ?? false}
+      />
     ))
     .render()
 }

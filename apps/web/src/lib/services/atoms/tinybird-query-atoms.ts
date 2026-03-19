@@ -30,7 +30,7 @@ interface QueryAtomOptions {
   staleTime?: number
 }
 
-class QueryAtomError extends Schema.TaggedError<QueryAtomError>()("QueryAtomError", {
+export class QueryAtomError extends Schema.TaggedError<QueryAtomError>()("QueryAtomError", {
   message: Schema.String,
   cause: Schema.optional(Schema.Unknown),
 }) {}
