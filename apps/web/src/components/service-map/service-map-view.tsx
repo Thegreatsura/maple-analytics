@@ -5,7 +5,9 @@ import {
   MiniMap,
   Background,
   BackgroundVariant,
+  applyNodeChanges,
   type Node,
+  type NodeChange,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 
@@ -43,6 +45,29 @@ import { useRefreshableAtomValue } from "@/hooks/use-refreshable-atom-value"
 
 const nodeTypes = {
   serviceNode: ServiceMapNode,
+}
+
+// Custom MiniMap node that renders with the service's legend color
+function ServiceMiniMapNode({
+  x,
+  y,
+  width,
+  height,
+  color,
+  borderRadius,
+}: import("@xyflow/react").MiniMapNodeProps) {
+  return (
+    <rect
+      x={x}
+      y={y}
+      width={width}
+      height={height}
+      rx={borderRadius}
+      ry={borderRadius}
+      fill={color}
+      stroke="none"
+    />
+  )
 }
 
 const edgeTypes = {
@@ -372,7 +397,7 @@ function ServiceMapCanvas({
     return { layoutedNodes: positioned, flowEdges: rawEdges, services: allServices }
   }, [serviceEdges, overviews, durationSeconds, layoutConfig])
 
-  // Inject selected state into node data
+  // Merge layout positions with selection state
   const nodesWithSelection = useMemo(() => {
     return layoutedNodes.map((node) => ({
       ...node,
@@ -383,33 +408,28 @@ function ServiceMapCanvas({
     }))
   }, [layoutedNodes, selectedServiceId])
 
-  // Track drag overrides — when a user drags a node, store its position separately
-  const [dragPositions, setDragPositions] = useState<Map<string, { x: number; y: number }>>(new Map())
+  // Track nodes with full ReactFlow state (dimensions, positions from drag, etc.)
+  const [nodes, setNodes] = useState(nodesWithSelection)
 
-  // Reset drag overrides when layout config changes
-  const prevConfigRef = useRef(layoutConfig)
-  if (prevConfigRef.current !== layoutConfig) {
-    prevConfigRef.current = layoutConfig
-    setDragPositions(new Map())
+  // Sync layout changes into node state (preserving measured dimensions)
+  const prevLayoutRef = useRef(nodesWithSelection)
+  if (prevLayoutRef.current !== nodesWithSelection) {
+    prevLayoutRef.current = nodesWithSelection
+    setNodes((prev) => {
+      // Preserve measured dimensions from previous nodes
+      const dimMap = new Map<string, { width?: number; height?: number; measured?: { width?: number; height?: number } }>()
+      for (const n of prev) {
+        dimMap.set(n.id, { width: n.width, height: n.height, measured: n.measured })
+      }
+      return nodesWithSelection.map((n) => {
+        const dims = dimMap.get(n.id)
+        return dims ? { ...n, width: dims.width, height: dims.height, measured: dims.measured } : n
+      })
+    })
   }
 
-  const displayNodes = useMemo(() => {
-    return nodesWithSelection.map((node) => {
-      const dragPos = dragPositions.get(node.id)
-      return dragPos ? { ...node, position: dragPos } : node
-    })
-  }, [nodesWithSelection, dragPositions])
-
-  const onNodesChange = useCallback((changes: import("@xyflow/react").NodeChange[]) => {
-    for (const change of changes) {
-      if (change.type === "position" && change.position && change.id) {
-        setDragPositions((prev) => {
-          const next = new Map(prev)
-          next.set(change.id, change.position!)
-          return next
-        })
-      }
-    }
+  const onNodesChange = useCallback((changes: NodeChange[]) => {
+    setNodes((prev) => applyNodeChanges(changes, prev) as typeof prev)
   }, [])
 
   const handleNodeClick = useCallback((_: React.MouseEvent, node: Node<ServiceNodeData>) => {
@@ -420,7 +440,7 @@ function ServiceMapCanvas({
     setSelectedServiceId(null)
   }, [])
 
-  if (displayNodes.length === 0) {
+  if (nodes.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center space-y-2">
@@ -443,7 +463,7 @@ function ServiceMapCanvas({
             <div className="flex-1 min-h-0 relative">
               <LayoutDebugPanel config={layoutConfig} onChange={setLayoutConfig} />
               <ReactFlow
-                nodes={displayNodes}
+                nodes={nodes}
                 edges={flowEdges}
                 onNodesChange={onNodesChange}
                 onNodeClick={handleNodeClick}
@@ -466,6 +486,8 @@ function ServiceMapCanvas({
                     const data = node.data as ServiceNodeData
                     return getServiceLegendColor(data.label, data.services)
                   }}
+                  nodeComponent={ServiceMiniMapNode}
+                  nodeStrokeWidth={0}
                   maskColor="oklch(0.15 0 0 / 0.8)"
                   className="!bg-muted/50 !border-border"
                   pannable={false}
