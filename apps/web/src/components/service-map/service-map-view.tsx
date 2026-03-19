@@ -5,10 +5,7 @@ import {
   MiniMap,
   Background,
   BackgroundVariant,
-  useNodesState,
-  useEdgesState,
   type Node,
-  type Edge,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 
@@ -38,9 +35,9 @@ import { ServiceMapEdge } from "./service-map-edge"
 import {
   buildFlowElements,
   layoutNodes,
-  topologyChanged,
+  DEFAULT_LAYOUT_CONFIG,
+  type LayoutConfig,
   type ServiceNodeData,
-  type ServiceEdgeData,
 } from "./service-map-utils"
 import { useRefreshableAtomValue } from "@/hooks/use-refreshable-atom-value"
 
@@ -286,6 +283,76 @@ interface ServiceMapViewProps {
   endTime: string
 }
 
+// --- Debug Layout Sliders ---
+
+const SLIDER_DEFS: Array<{ key: keyof LayoutConfig; label: string; min: number; max: number; step: number }> = [
+  { key: "layerGapX", label: "Layer Gap X", min: 100, max: 800, step: 10 },
+  { key: "nodeGapY", label: "Node Gap Y", min: 0, max: 200, step: 5 },
+  { key: "componentGapY", label: "Component Gap Y", min: 20, max: 400, step: 10 },
+  { key: "disconnectedGapX", label: "Disconnected Gap X", min: 20, max: 300, step: 10 },
+  { key: "disconnectedMarginY", label: "Disconnected Margin Y", min: 20, max: 400, step: 10 },
+  { key: "nodeWidth", label: "Node Width (layout)", min: 100, max: 400, step: 10 },
+  { key: "nodeHeight", label: "Node Height (layout)", min: 30, max: 200, step: 5 },
+]
+
+function LayoutDebugPanel({
+  config,
+  onChange,
+}: {
+  config: LayoutConfig
+  onChange: (config: LayoutConfig) => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="absolute top-2 right-2 z-50">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="px-2 py-1 text-[10px] font-mono bg-card/90 backdrop-blur-sm border border-border rounded text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {open ? "Close" : "Debug"}
+      </button>
+      {open && (
+        <div className="absolute top-8 right-0 w-64 bg-card/95 backdrop-blur-sm border border-border rounded-lg p-3 space-y-3 shadow-lg">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">Layout Config</span>
+            <button
+              type="button"
+              onClick={() => onChange({ ...DEFAULT_LAYOUT_CONFIG })}
+              className="text-[10px] text-primary hover:text-primary/80 transition-colors"
+            >
+              Reset
+            </button>
+          </div>
+          {SLIDER_DEFS.map(({ key, label, min, max, step }) => (
+            <div key={key} className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] text-muted-foreground">{label}</label>
+                <span className="text-[10px] font-mono text-foreground tabular-nums">{config[key]}</span>
+              </div>
+              <input
+                type="range"
+                min={min}
+                max={max}
+                step={step}
+                value={config[key]}
+                onChange={(e) => onChange({ ...config, [key]: Number(e.target.value) })}
+                className="w-full h-1 accent-primary"
+              />
+            </div>
+          ))}
+          <div className="pt-1 border-t border-border">
+            <pre className="text-[9px] font-mono text-muted-foreground whitespace-pre-wrap select-all">
+              {JSON.stringify(config, null, 2)}
+            </pre>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ServiceMapCanvas({
   edges: serviceEdges,
   overviews,
@@ -295,34 +362,15 @@ function ServiceMapCanvas({
   overviews: ServiceOverview[]
   durationSeconds: number
 }) {
-  const prevNodesRef = useRef<Node<ServiceNodeData>[]>([])
-  const prevEdgesRef = useRef<Edge<ServiceEdgeData>[]>([])
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null)
+  const [layoutConfig, setLayoutConfig] = useState<LayoutConfig>({ ...DEFAULT_LAYOUT_CONFIG })
 
   const { layoutedNodes, flowEdges, services } = useMemo(() => {
     const { nodes: rawNodes, edges: rawEdges } = buildFlowElements(serviceEdges, overviews, durationSeconds)
-
-    const needsLayout = topologyChanged(
-      prevNodesRef.current,
-      rawNodes,
-      prevEdgesRef.current,
-      rawEdges,
-    )
-
-    const positioned = needsLayout
-      ? layoutNodes(rawNodes, rawEdges)
-      : rawNodes.map((n, i) => ({
-          ...n,
-          position: prevNodesRef.current[i]?.position ?? n.position,
-        }))
-
-    prevNodesRef.current = positioned
-    prevEdgesRef.current = rawEdges
-
+    const positioned = layoutNodes(rawNodes, rawEdges, layoutConfig)
     const allServices = [...new Set(positioned.map((n) => n.id))].sort()
-
     return { layoutedNodes: positioned, flowEdges: rawEdges, services: allServices }
-  }, [serviceEdges, overviews, durationSeconds])
+  }, [serviceEdges, overviews, durationSeconds, layoutConfig])
 
   // Inject selected state into node data
   const nodesWithSelection = useMemo(() => {
@@ -335,8 +383,34 @@ function ServiceMapCanvas({
     }))
   }, [layoutedNodes, selectedServiceId])
 
-  const [nodes, , onNodesChange] = useNodesState(nodesWithSelection)
-  const [edges] = useEdgesState(flowEdges)
+  // Track drag overrides — when a user drags a node, store its position separately
+  const [dragPositions, setDragPositions] = useState<Map<string, { x: number; y: number }>>(new Map())
+
+  // Reset drag overrides when layout config changes
+  const prevConfigRef = useRef(layoutConfig)
+  if (prevConfigRef.current !== layoutConfig) {
+    prevConfigRef.current = layoutConfig
+    setDragPositions(new Map())
+  }
+
+  const displayNodes = useMemo(() => {
+    return nodesWithSelection.map((node) => {
+      const dragPos = dragPositions.get(node.id)
+      return dragPos ? { ...node, position: dragPos } : node
+    })
+  }, [nodesWithSelection, dragPositions])
+
+  const onNodesChange = useCallback((changes: import("@xyflow/react").NodeChange[]) => {
+    for (const change of changes) {
+      if (change.type === "position" && change.position && change.id) {
+        setDragPositions((prev) => {
+          const next = new Map(prev)
+          next.set(change.id, change.position!)
+          return next
+        })
+      }
+    }
+  }, [])
 
   const handleNodeClick = useCallback((_: React.MouseEvent, node: Node<ServiceNodeData>) => {
     setSelectedServiceId((prev) => (prev === node.id ? null : node.id))
@@ -346,7 +420,7 @@ function ServiceMapCanvas({
     setSelectedServiceId(null)
   }, [])
 
-  if (nodes.length === 0) {
+  if (displayNodes.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center space-y-2">
@@ -366,11 +440,11 @@ function ServiceMapCanvas({
       <ResizablePanelGroup orientation="horizontal" className="flex-1 min-h-0">
         <ResizablePanel defaultSize={selectedServiceId ? 65 : 100} minSize={40}>
           <div className="flex flex-col h-full">
-            <div className="flex-1 min-h-0">
+            <div className="flex-1 min-h-0 relative">
+              <LayoutDebugPanel config={layoutConfig} onChange={setLayoutConfig} />
               <ReactFlow
-                key={nodes.map((n) => n.id).join(",")}
-                nodes={nodes}
-                edges={edges}
+                nodes={displayNodes}
+                edges={flowEdges}
                 onNodesChange={onNodesChange}
                 onNodeClick={handleNodeClick}
                 onPaneClick={handlePaneClick}

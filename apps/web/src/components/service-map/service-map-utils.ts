@@ -28,14 +28,20 @@ export interface ServiceEdgeData {
   [key: string]: unknown
 }
 
-// Layout constants
-const NODE_WIDTH = 220
-const NODE_HEIGHT = 70
-const LAYER_GAP_X = 350
-const NODE_GAP_Y = 40
-const COMPONENT_GAP_Y = 120
-const DISCONNECTED_GAP_X = 80
-const DISCONNECTED_MARGIN_Y = 100
+// Layout constants (defaults)
+export const DEFAULT_LAYOUT_CONFIG = {
+  nodeWidth: 220,
+  nodeHeight: 70,
+  layerGapX: 350,
+  nodeGapY: 40,
+  componentGapY: 60,
+  disconnectedGapX: 40,
+  disconnectedMarginY: 50,
+} as const
+
+export type LayoutConfig = {
+  [K in keyof typeof DEFAULT_LAYOUT_CONFIG]: number
+}
 
 /**
  * Derive the unique list of services from edges + service overview data
@@ -309,9 +315,11 @@ function computeLayers(
 export function layoutNodes(
   nodes: Node<ServiceNodeData>[],
   edges: Edge<ServiceEdgeData>[],
+  config: LayoutConfig = DEFAULT_LAYOUT_CONFIG,
 ): Node<ServiceNodeData>[] {
   if (nodes.length === 0) return nodes
 
+  const { nodeWidth, nodeHeight, layerGapX, nodeGapY, componentGapY, disconnectedGapX, disconnectedMarginY } = config
   const positions = new Map<string, { x: number; y: number }>()
 
   // Find connected components
@@ -352,11 +360,11 @@ export function layoutNodes(
       maxLayerSize = Math.max(maxLayerSize, layerSize)
     }
 
-    const cellHeight = NODE_HEIGHT + NODE_GAP_Y
+    const cellHeight = nodeHeight + nodeGapY
     const componentHeight = maxLayerSize * cellHeight
 
     for (const [id, assignment] of layers) {
-      const x = assignment.layer * LAYER_GAP_X
+      const x = assignment.layer * layerGapX
       // Center each layer's nodes vertically within the component's height
       const layerHeight = assignment.layerSize * cellHeight
       const layerOffsetY = (componentHeight - layerHeight) / 2
@@ -364,28 +372,28 @@ export function layoutNodes(
       positions.set(id, { x, y })
     }
 
-    currentYOffset += componentHeight + COMPONENT_GAP_Y
+    currentYOffset += componentHeight + componentGapY
   }
 
   // Place isolates in a horizontal row below the connected graph
   if (isolates.length > 0) {
-    const rowY = currentYOffset + DISCONNECTED_MARGIN_Y
+    const rowY = currentYOffset + disconnectedMarginY
     const totalWidth =
-      isolates.length * NODE_WIDTH + (isolates.length - 1) * DISCONNECTED_GAP_X
+      isolates.length * nodeWidth + (isolates.length - 1) * disconnectedGapX
 
     // Center the isolate row relative to the connected graph's horizontal extent
     let minX = Infinity
     let maxX = -Infinity
     for (const { x } of positions.values()) {
       minX = Math.min(minX, x)
-      maxX = Math.max(maxX, x + NODE_WIDTH)
+      maxX = Math.max(maxX, x + nodeWidth)
     }
     const graphCenterX = positions.size > 0 ? (minX + maxX) / 2 : 0
     const startX = graphCenterX - totalWidth / 2
 
     for (let i = 0; i < isolates.length; i++) {
       positions.set(isolates[i], {
-        x: startX + i * (NODE_WIDTH + DISCONNECTED_GAP_X),
+        x: startX + i * (nodeWidth + disconnectedGapX),
         y: rowY,
       })
     }
