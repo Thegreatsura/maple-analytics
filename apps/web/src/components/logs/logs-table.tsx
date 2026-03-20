@@ -60,14 +60,12 @@ function LoadingState() {
 
 function LogsTableContent({
   allData,
-  totalCount,
   isFetchingNextPage,
   hasNextPage,
   fetchNextPage,
   waiting,
 }: {
   allData: Log[]
-  totalCount: number
   isFetchingNextPage: boolean
   hasNextPage: boolean
   fetchNextPage: () => void
@@ -263,7 +261,7 @@ function LogsTableContent({
         </div>
 
         <div className="text-sm text-muted-foreground shrink-0">
-          Showing {allData.length} of {totalCount} logs
+          Showing {allData.length} logs
           {!hasNextPage && allData.length > 0 && " (all loaded)"}
         </div>
       </div>
@@ -278,7 +276,7 @@ function LogsTableContent({
 }
 
 export function LogsTable({ filters }: LogsTableProps) {
-  const { firstPageResult, allData, totalCount, isFetchingNextPage, hasNextPage, fetchNextPage } =
+  const { firstPageResult, allData, isFetchingNextPage, hasNextPage, fetchNextPage } =
     useInfiniteLogs(filters)
 
   return Result.builder(firstPageResult)
@@ -292,7 +290,6 @@ export function LogsTable({ filters }: LogsTableProps) {
     .onSuccess((_response, result) => (
       <LogsTableContent
         allData={allData}
-        totalCount={totalCount}
         isFetchingNextPage={isFetchingNextPage}
         hasNextPage={hasNextPage}
         fetchNextPage={fetchNextPage}

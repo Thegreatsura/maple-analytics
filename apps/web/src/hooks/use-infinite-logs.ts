@@ -14,7 +14,6 @@ const FETCH_THRESHOLD = 20
 export interface UseInfiniteLogsReturn {
   firstPageResult: Result.Result<LogsResponse, QueryAtomError>
   allData: Log[]
-  totalCount: number
   isFetchingNextPage: boolean
   hasNextPage: boolean
   fetchNextPage: () => void
@@ -77,13 +76,6 @@ export function useInfiniteLogs(filters: LogsSearchParams | undefined): UseInfin
     return [...firstPageData, ...additionalData]
   }, [firstPageResult, additionalPages])
 
-  const totalCount = React.useMemo(() => {
-    if (Result.isSuccess(firstPageResult)) {
-      return firstPageResult.value.meta.total
-    }
-    return 0
-  }, [firstPageResult])
-
   const hasNextPage = lastCursor !== null
 
   const fetchNextPage = React.useCallback(() => {
@@ -114,7 +106,6 @@ export function useInfiniteLogs(filters: LogsSearchParams | undefined): UseInfin
   return {
     firstPageResult,
     allData,
-    totalCount,
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,

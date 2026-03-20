@@ -43,13 +43,8 @@ export interface LogsResponse {
   data: Log[]
   meta: {
     limit: number
-    total: number
     cursor: string | null
   }
-}
-
-export interface LogsCountResponse {
-  data: Array<{ total: number }>
 }
 
 function parseAttributes(value: string | null | undefined): Record<string, string> {
@@ -89,34 +84,21 @@ const listLogsEffect = Effect.fn("Tinybird.listLogs")(function* ({
     const limit = input.limit ?? DEFAULT_LIMIT
     const tinybird = getTinybird()
 
-    const [logsResult, countResult] = yield* Effect.all([
-      runTinybirdQuery("list_logs", () =>
-        tinybird.query.list_logs({
-          limit,
-          service: input.service,
-          severity: input.severity,
-          min_severity: input.minSeverity,
-          start_time: input.startTime,
-          end_time: input.endTime,
-          trace_id: input.traceId,
-          span_id: input.spanId,
-          cursor: input.cursor,
-          search: input.search,
-        }),
-      ),
-      runTinybirdQuery("logs_count", () =>
-        tinybird.query.logs_count({
-          service: input.service,
-          severity: input.severity,
-          start_time: input.startTime,
-          end_time: input.endTime,
-          trace_id: input.traceId,
-          search: input.search,
-        }),
-      ),
-    ])
+    const logsResult = yield* runTinybirdQuery("list_logs", () =>
+      tinybird.query.list_logs({
+        limit,
+        service: input.service,
+        severity: input.severity,
+        min_severity: input.minSeverity,
+        start_time: input.startTime,
+        end_time: input.endTime,
+        trace_id: input.traceId,
+        span_id: input.spanId,
+        cursor: input.cursor,
+        search: input.search,
+      }),
+    )
 
-    const total = Number(countResult.data[0]?.total ?? 0)
     const logs = logsResult.data.map(transformLog)
     const cursor = logs.length === limit && logs.length > 0 ? logs[logs.length - 1].timestamp : null
 
@@ -124,7 +106,6 @@ const listLogsEffect = Effect.fn("Tinybird.listLogs")(function* ({
       data: logs,
       meta: {
         limit,
-        total,
         cursor,
       },
     }
