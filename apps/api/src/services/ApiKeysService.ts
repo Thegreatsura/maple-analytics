@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto"
-import { SqliteDrizzle } from "@effect/sql-drizzle/Sqlite"
 import {
   ApiKeyId,
   ApiKeyCreatedResponse,
@@ -18,8 +17,8 @@ import {
   parseIngestKeyLookupHmacKey,
 } from "@maple/db"
 import { and, desc, eq } from "drizzle-orm"
-import { Effect, Layer, Option, Redacted, Schema } from "effect"
-import { DatabaseLive } from "./DatabaseLive"
+import { Effect, Layer, Option, Redacted, Schema, ServiceMap } from "effect"
+import { Database, DatabaseLive } from "./DatabaseLive"
 import { Env } from "./Env"
 
 export interface ResolvedApiKey {
@@ -52,13 +51,11 @@ const rowToResponse = (row: typeof apiKeys.$inferSelect): ApiKeyResponse =>
     createdBy: decodeUserIdSync(row.createdBy),
   })
 
-export class ApiKeysService extends Effect.Service<ApiKeysService>()(
+export class ApiKeysService extends ServiceMap.Service<ApiKeysService>()(
   "ApiKeysService",
   {
-    accessors: true,
-    dependencies: [Env.Default],
-    effect: Effect.gen(function* () {
-      const db = yield* SqliteDrizzle
+    make: Effect.gen(function* () {
+      const database = yield* Database
       const env = yield* Env
       const hmacKey = parseIngestKeyLookupHmacKey(
         Redacted.value(env.MAPLE_INGEST_KEY_LOOKUP_HMAC_KEY),
@@ -68,14 +65,15 @@ export class ApiKeysService extends Effect.Service<ApiKeysService>()(
         orgId: OrgId,
         keyId: ApiKeyId,
       ) {
-        const rows = yield* db
-          .select()
-          .from(apiKeys)
-          .where(and(eq(apiKeys.id, keyId), eq(apiKeys.orgId, orgId)))
-          .limit(1)
-          .pipe(Effect.mapError(toPersistenceError))
+        const rows = yield* database.execute((db) =>
+          db
+            .select()
+            .from(apiKeys)
+            .where(and(eq(apiKeys.id, keyId), eq(apiKeys.orgId, orgId)))
+            .limit(1),
+        ).pipe(Effect.mapError(toPersistenceError))
 
-        return Option.fromNullable(rows[0])
+        return Option.fromNullishOr(rows[0])
       })
 
       const requireById = Effect.fn("ApiKeysService.requireById")(function* (
@@ -91,12 +89,13 @@ export class ApiKeysService extends Effect.Service<ApiKeysService>()(
       })
 
       const list = Effect.fn("ApiKeysService.list")(function* (orgId: OrgId) {
-        const rows = yield* db
-          .select()
-          .from(apiKeys)
-          .where(eq(apiKeys.orgId, orgId))
-          .orderBy(desc(apiKeys.createdAt))
-          .pipe(Effect.mapError(toPersistenceError))
+        const rows = yield* database.execute((db) =>
+          db
+            .select()
+            .from(apiKeys)
+            .where(eq(apiKeys.orgId, orgId))
+            .orderBy(desc(apiKeys.createdAt)),
+        ).pipe(Effect.mapError(toPersistenceError))
 
         return new ApiKeysListResponse({
           keys: rows.map(rowToResponse),
@@ -117,20 +116,21 @@ export class ApiKeysService extends Effect.Service<ApiKeysService>()(
           ? now + params.expiresInSeconds * 1000
           : undefined
 
-        yield* db
-          .insert(apiKeys)
-          .values({
-            id,
-            orgId,
-            name: params.name,
-            description: params.description ?? null,
-            keyHash,
-            keyPrefix,
-            expiresAt: expiresAt ?? null,
-            createdAt: now,
-            createdBy: userId,
-          })
-          .pipe(Effect.mapError(toPersistenceError))
+        yield* database.execute((db) =>
+          db
+            .insert(apiKeys)
+            .values({
+              id,
+              orgId,
+              name: params.name,
+              description: params.description ?? null,
+              keyHash,
+              keyPrefix,
+              expiresAt: expiresAt ?? null,
+              createdAt: now,
+              createdBy: userId,
+            }),
+        ).pipe(Effect.mapError(toPersistenceError))
 
         return new ApiKeyCreatedResponse({
           id,
@@ -154,11 +154,12 @@ export class ApiKeysService extends Effect.Service<ApiKeysService>()(
         const now = Date.now()
         const row = yield* requireById(orgId, keyId)
 
-        yield* db
-          .update(apiKeys)
-          .set({ revoked: true, revokedAt: now })
-          .where(eq(apiKeys.id, keyId))
-          .pipe(Effect.mapError(toPersistenceError))
+        yield* database.execute((db) =>
+          db
+            .update(apiKeys)
+            .set({ revoked: true, revokedAt: now })
+            .where(eq(apiKeys.id, keyId)),
+        ).pipe(Effect.mapError(toPersistenceError))
 
         return rowToResponse({ ...row, revoked: true, revokedAt: now })
       })
@@ -169,14 +170,15 @@ export class ApiKeysService extends Effect.Service<ApiKeysService>()(
         if (!rawKey.startsWith(API_KEY_PREFIX)) return Option.none()
 
         const keyHash = hashApiKey(rawKey, hmacKey)
-        const rows = yield* db
-          .select()
-          .from(apiKeys)
-          .where(eq(apiKeys.keyHash, keyHash))
-          .limit(1)
-          .pipe(Effect.mapError(toPersistenceError))
+        const rows = yield* database.execute((db) =>
+          db
+            .select()
+            .from(apiKeys)
+            .where(eq(apiKeys.keyHash, keyHash))
+            .limit(1),
+        ).pipe(Effect.mapError(toPersistenceError))
 
-        const row = Option.fromNullable(rows[0])
+        const row = Option.fromNullishOr(rows[0])
         if (Option.isNone(row)) return Option.none()
         if (row.value.revoked) return Option.none()
         if (row.value.expiresAt && row.value.expiresAt < Date.now()) return Option.none()
@@ -191,11 +193,12 @@ export class ApiKeysService extends Effect.Service<ApiKeysService>()(
       const touchLastUsed = Effect.fn("ApiKeysService.touchLastUsed")(function* (
         keyId: ApiKeyId,
       ) {
-        yield* db
-          .update(apiKeys)
-          .set({ lastUsedAt: Date.now() })
-          .where(eq(apiKeys.id, keyId))
-          .pipe(Effect.mapError(toPersistenceError))
+        yield* database.execute((db) =>
+          db
+            .update(apiKeys)
+            .set({ lastUsedAt: Date.now() })
+            .where(eq(apiKeys.id, keyId)),
+        ).pipe(Effect.mapError(toPersistenceError))
       })
 
       return {
@@ -208,5 +211,8 @@ export class ApiKeysService extends Effect.Service<ApiKeysService>()(
     }),
   },
 ) {
-  static readonly Live = this.Default.pipe(Layer.provide(DatabaseLive))
+  static readonly layer = Layer.effect(this, this.make).pipe(
+    Layer.provide(DatabaseLive),
+    Layer.provide(Env.layer),
+  )
 }

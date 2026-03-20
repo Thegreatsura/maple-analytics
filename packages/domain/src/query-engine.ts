@@ -3,32 +3,32 @@ import { Schema } from "effect"
 const dateTimePattern = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/
 
 export const TinybirdDateTime = Schema.String.pipe(
-  Schema.pattern(dateTimePattern),
-  Schema.annotations({
+  Schema.check(Schema.isPattern(dateTimePattern)),
+  Schema.annotate({
     identifier: "TinybirdDateTime",
     description: "Date time string in YYYY-MM-DD HH:mm:ss format",
   }),
 )
 
-export const TracesMetric = Schema.Literal(
+export const TracesMetric = Schema.Literals([
   "count",
   "avg_duration",
   "p50_duration",
   "p95_duration",
   "p99_duration",
   "error_rate",
-)
+])
 export type TracesMetric = Schema.Schema.Type<typeof TracesMetric>
 
-export const MetricsMetric = Schema.Literal("avg", "sum", "min", "max", "count")
+export const MetricsMetric = Schema.Literals(["avg", "sum", "min", "max", "count"])
 export type MetricsMetric = Schema.Schema.Type<typeof MetricsMetric>
 
-export const MetricType = Schema.Literal(
+export const MetricType = Schema.Literals([
   "sum",
   "gauge",
   "histogram",
   "exponential_histogram",
-)
+])
 export type MetricType = Schema.Schema.Type<typeof MetricType>
 
 export const TracesFilters = Schema.Struct({
@@ -62,17 +62,19 @@ export const TracesTimeseriesQuery = Schema.Struct({
   source: Schema.Literal("traces"),
   metric: TracesMetric,
   groupBy: Schema.optional(
-    Schema.Literal(
+    Schema.Literals([
       "service",
       "span_name",
       "status_code",
       "http_method",
       "attribute",
       "none",
-    ),
+    ]),
   ),
   filters: Schema.optional(TracesFilters),
-  bucketSeconds: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.greaterThan(0))),
+  bucketSeconds: Schema.optional(
+    Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  ),
 })
 export type TracesTimeseriesQuery = Schema.Schema.Type<typeof TracesTimeseriesQuery>
 
@@ -80,9 +82,11 @@ export const LogsTimeseriesQuery = Schema.Struct({
   kind: Schema.Literal("timeseries"),
   source: Schema.Literal("logs"),
   metric: Schema.Literal("count"),
-  groupBy: Schema.optional(Schema.Literal("service", "severity", "none")),
+  groupBy: Schema.optional(Schema.Literals(["service", "severity", "none"])),
   filters: Schema.optional(LogsFilters),
-  bucketSeconds: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.greaterThan(0))),
+  bucketSeconds: Schema.optional(
+    Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  ),
 })
 export type LogsTimeseriesQuery = Schema.Schema.Type<typeof LogsTimeseriesQuery>
 
@@ -90,9 +94,11 @@ export const MetricsTimeseriesQuery = Schema.Struct({
   kind: Schema.Literal("timeseries"),
   source: Schema.Literal("metrics"),
   metric: MetricsMetric,
-  groupBy: Schema.optional(Schema.Literal("service", "none")),
+  groupBy: Schema.optional(Schema.Literals(["service", "none"])),
   filters: MetricsFilters,
-  bucketSeconds: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.greaterThan(0))),
+  bucketSeconds: Schema.optional(
+    Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  ),
 })
 export type MetricsTimeseriesQuery = Schema.Schema.Type<typeof MetricsTimeseriesQuery>
 
@@ -100,16 +106,20 @@ export const TracesBreakdownQuery = Schema.Struct({
   kind: Schema.Literal("breakdown"),
   source: Schema.Literal("traces"),
   metric: TracesMetric,
-  groupBy: Schema.Literal(
+  groupBy: Schema.Literals([
     "service",
     "span_name",
     "status_code",
     "http_method",
     "attribute",
-  ),
+  ]),
   filters: Schema.optional(TracesFilters),
   limit: Schema.optional(
-    Schema.Number.pipe(Schema.int(), Schema.greaterThan(0), Schema.lessThanOrEqualTo(100)),
+    Schema.Number.check(
+      Schema.isInt(),
+      Schema.isGreaterThan(0),
+      Schema.isLessThanOrEqualTo(100),
+    ),
   ),
 })
 export type TracesBreakdownQuery = Schema.Schema.Type<typeof TracesBreakdownQuery>
@@ -118,10 +128,14 @@ export const LogsBreakdownQuery = Schema.Struct({
   kind: Schema.Literal("breakdown"),
   source: Schema.Literal("logs"),
   metric: Schema.Literal("count"),
-  groupBy: Schema.Literal("service", "severity"),
+  groupBy: Schema.Literals(["service", "severity"]),
   filters: Schema.optional(LogsFilters),
   limit: Schema.optional(
-    Schema.Number.pipe(Schema.int(), Schema.greaterThan(0), Schema.lessThanOrEqualTo(100)),
+    Schema.Number.check(
+      Schema.isInt(),
+      Schema.isGreaterThan(0),
+      Schema.isLessThanOrEqualTo(100),
+    ),
   ),
 })
 export type LogsBreakdownQuery = Schema.Schema.Type<typeof LogsBreakdownQuery>
@@ -129,23 +143,27 @@ export type LogsBreakdownQuery = Schema.Schema.Type<typeof LogsBreakdownQuery>
 export const MetricsBreakdownQuery = Schema.Struct({
   kind: Schema.Literal("breakdown"),
   source: Schema.Literal("metrics"),
-  metric: Schema.Literal("avg", "sum", "count"),
+  metric: Schema.Literals(["avg", "sum", "count"]),
   groupBy: Schema.Literal("service"),
   filters: MetricsFilters,
   limit: Schema.optional(
-    Schema.Number.pipe(Schema.int(), Schema.greaterThan(0), Schema.lessThanOrEqualTo(100)),
+    Schema.Number.check(
+      Schema.isInt(),
+      Schema.isGreaterThan(0),
+      Schema.isLessThanOrEqualTo(100),
+    ),
   ),
 })
 export type MetricsBreakdownQuery = Schema.Schema.Type<typeof MetricsBreakdownQuery>
 
-export const QuerySpec = Schema.Union(
+export const QuerySpec = Schema.Union([
   TracesTimeseriesQuery,
   LogsTimeseriesQuery,
   MetricsTimeseriesQuery,
   TracesBreakdownQuery,
   LogsBreakdownQuery,
   MetricsBreakdownQuery,
-)
+])
 export type QuerySpec = Schema.Schema.Type<typeof QuerySpec>
 
 export class QueryEngineExecuteRequest extends Schema.Class<QueryEngineExecuteRequest>(
@@ -158,7 +176,7 @@ export class QueryEngineExecuteRequest extends Schema.Class<QueryEngineExecuteRe
 
 export const TimeseriesPoint = Schema.Struct({
   bucket: Schema.String,
-  series: Schema.Record({ key: Schema.String, value: Schema.Number }),
+  series: Schema.Record(Schema.String, Schema.Number),
 })
 export type TimeseriesPoint = Schema.Schema.Type<typeof TimeseriesPoint>
 
@@ -168,18 +186,18 @@ export const BreakdownItem = Schema.Struct({
 })
 export type BreakdownItem = Schema.Schema.Type<typeof BreakdownItem>
 
-export const QueryEngineResult = Schema.Union(
+export const QueryEngineResult = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("timeseries"),
-    source: Schema.Literal("traces", "logs", "metrics"),
+    source: Schema.Literals(["traces", "logs", "metrics"]),
     data: Schema.Array(TimeseriesPoint),
   }),
   Schema.Struct({
     kind: Schema.Literal("breakdown"),
-    source: Schema.Literal("traces", "logs", "metrics"),
+    source: Schema.Literals(["traces", "logs", "metrics"]),
     data: Schema.Array(BreakdownItem),
   }),
-)
+])
 export type QueryEngineResult = Schema.Schema.Type<typeof QueryEngineResult>
 
 export class QueryEngineExecuteResponse extends Schema.Class<QueryEngineExecuteResponse>(
@@ -187,4 +205,3 @@ export class QueryEngineExecuteResponse extends Schema.Class<QueryEngineExecuteR
 )({
   result: QueryEngineResult,
 }) {}
-

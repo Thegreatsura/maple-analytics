@@ -1,14 +1,10 @@
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "@effect/platform";
+import { HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi";
 import { Schema } from "effect";
 import {
   CloudflareLogpushConnectorId,
   IsoDateTimeString,
 } from "../primitives";
 import { Authorization } from "./current-tenant";
-
-const CloudflareLogpushConnectorPath = Schema.Struct({
-  connectorId: CloudflareLogpushConnectorId,
-});
 
 export class CloudflareLogpushConnectorResponse extends Schema.Class<CloudflareLogpushConnectorResponse>(
   "CloudflareLogpushConnectorResponse",
@@ -76,89 +72,107 @@ export class UpdateCloudflareLogpushConnectorRequest extends Schema.Class<Update
   enabled: Schema.optional(Schema.Boolean),
 }) {}
 
-export class CloudflareLogpushPersistenceError extends Schema.TaggedError<CloudflareLogpushPersistenceError>()(
+export class CloudflareLogpushPersistenceError extends Schema.TaggedErrorClass<CloudflareLogpushPersistenceError>()(
   "CloudflareLogpushPersistenceError",
   {
     message: Schema.String,
   },
-  HttpApiSchema.annotations({ status: 503 }),
+  { httpApiStatus: 503 },
 ) {}
 
-export class CloudflareLogpushNotFoundError extends Schema.TaggedError<CloudflareLogpushNotFoundError>()(
+export class CloudflareLogpushNotFoundError extends Schema.TaggedErrorClass<CloudflareLogpushNotFoundError>()(
   "CloudflareLogpushNotFoundError",
   {
     connectorId: CloudflareLogpushConnectorId,
     message: Schema.String,
   },
-  HttpApiSchema.annotations({ status: 404 }),
+  { httpApiStatus: 404 },
 ) {}
 
-export class CloudflareLogpushValidationError extends Schema.TaggedError<CloudflareLogpushValidationError>()(
+export class CloudflareLogpushValidationError extends Schema.TaggedErrorClass<CloudflareLogpushValidationError>()(
   "CloudflareLogpushValidationError",
   {
     message: Schema.String,
   },
-  HttpApiSchema.annotations({ status: 400 }),
+  { httpApiStatus: 400 },
 ) {}
 
-export class CloudflareLogpushEncryptionError extends Schema.TaggedError<CloudflareLogpushEncryptionError>()(
+export class CloudflareLogpushEncryptionError extends Schema.TaggedErrorClass<CloudflareLogpushEncryptionError>()(
   "CloudflareLogpushEncryptionError",
   {
     message: Schema.String,
   },
-  HttpApiSchema.annotations({ status: 500 }),
+  { httpApiStatus: 500 },
 ) {}
 
 export class CloudflareLogpushApiGroup extends HttpApiGroup.make(
   "cloudflareLogpush",
 )
   .add(
-    HttpApiEndpoint.get("list", "/connectors")
-      .addSuccess(CloudflareLogpushListResponse)
-      .addError(CloudflareLogpushPersistenceError),
+    HttpApiEndpoint.get("list", "/connectors", {
+      success: CloudflareLogpushListResponse,
+      error: CloudflareLogpushPersistenceError,
+    }),
   )
   .add(
-    HttpApiEndpoint.post("create", "/connectors")
-      .setPayload(CreateCloudflareLogpushConnectorRequest)
-      .addSuccess(CloudflareLogpushCreateResponse)
-      .addError(CloudflareLogpushValidationError)
-      .addError(CloudflareLogpushPersistenceError)
-      .addError(CloudflareLogpushEncryptionError),
+    HttpApiEndpoint.post("create", "/connectors", {
+      payload: CreateCloudflareLogpushConnectorRequest,
+      success: CloudflareLogpushCreateResponse,
+      error: [
+        CloudflareLogpushValidationError,
+        CloudflareLogpushPersistenceError,
+        CloudflareLogpushEncryptionError,
+      ],
+    }),
   )
   .add(
-    HttpApiEndpoint.patch("update", "/connectors/:connectorId")
-      .setPath(CloudflareLogpushConnectorPath)
-      .setPayload(UpdateCloudflareLogpushConnectorRequest)
-      .addSuccess(CloudflareLogpushConnectorResponse)
-      .addError(CloudflareLogpushNotFoundError)
-      .addError(CloudflareLogpushValidationError)
-      .addError(CloudflareLogpushPersistenceError),
+    HttpApiEndpoint.patch("update", "/connectors/:connectorId", {
+      params: {
+        connectorId: CloudflareLogpushConnectorId,
+      },
+      payload: UpdateCloudflareLogpushConnectorRequest,
+      success: CloudflareLogpushConnectorResponse,
+      error: [
+        CloudflareLogpushNotFoundError,
+        CloudflareLogpushValidationError,
+        CloudflareLogpushPersistenceError,
+      ],
+    }),
   )
   .add(
-    HttpApiEndpoint.del("delete", "/connectors/:connectorId")
-      .setPath(CloudflareLogpushConnectorPath)
-      .addSuccess(CloudflareLogpushDeleteResponse)
-      .addError(CloudflareLogpushNotFoundError)
-      .addError(CloudflareLogpushPersistenceError),
+    HttpApiEndpoint.delete("delete", "/connectors/:connectorId", {
+      params: {
+        connectorId: CloudflareLogpushConnectorId,
+      },
+      success: CloudflareLogpushDeleteResponse,
+      error: [CloudflareLogpushNotFoundError, CloudflareLogpushPersistenceError],
+    }),
   )
   .add(
-    HttpApiEndpoint.get("getSetup", "/connectors/:connectorId/setup")
-      .setPath(CloudflareLogpushConnectorPath)
-      .addSuccess(CloudflareLogpushSetupResponse)
-      .addError(CloudflareLogpushNotFoundError)
-      .addError(CloudflareLogpushPersistenceError)
-      .addError(CloudflareLogpushEncryptionError),
+    HttpApiEndpoint.get("getSetup", "/connectors/:connectorId/setup", {
+      params: {
+        connectorId: CloudflareLogpushConnectorId,
+      },
+      success: CloudflareLogpushSetupResponse,
+      error: [
+        CloudflareLogpushNotFoundError,
+        CloudflareLogpushPersistenceError,
+        CloudflareLogpushEncryptionError,
+      ],
+    }),
   )
   .add(
-    HttpApiEndpoint.post(
-      "rotateSecret",
-      "/connectors/:connectorId/rotate-secret",
-    )
-      .setPath(CloudflareLogpushConnectorPath)
-      .addSuccess(CloudflareLogpushSetupResponse)
-      .addError(CloudflareLogpushNotFoundError)
-      .addError(CloudflareLogpushPersistenceError)
-      .addError(CloudflareLogpushEncryptionError),
+    HttpApiEndpoint.post("rotateSecret", "/connectors/:connectorId/rotate-secret", {
+      params: {
+        connectorId: CloudflareLogpushConnectorId,
+      },
+      success: CloudflareLogpushSetupResponse,
+      error: [
+        CloudflareLogpushNotFoundError,
+        CloudflareLogpushPersistenceError,
+        CloudflareLogpushEncryptionError,
+      ],
+    }),
   )
   .prefix("/api/cloudflare-logpush")
   .middleware(Authorization) {}

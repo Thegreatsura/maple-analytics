@@ -1,5 +1,5 @@
 import { useCallback } from "react"
-import { useAtom } from "@effect-atom/atom-react"
+import { useAtom } from "@/lib/effect-atom"
 import type { FrameworkId } from "@/components/quick-start/sdk-snippets"
 import {
   quickStartAtomFamily,

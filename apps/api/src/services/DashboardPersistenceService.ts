@@ -1,4 +1,3 @@
-import { SqliteDrizzle } from "@effect/sql-drizzle/Sqlite"
 import {
   DashboardDeleteResponse,
   DashboardId,
@@ -6,15 +5,18 @@ import {
   DashboardPersistenceError,
   DashboardValidationError,
   DashboardDocument,
+  DashboardsListResponse,
   OrgId,
   UserId,
 } from "@maple/domain/http"
 import { dashboards } from "@maple/db"
 import { and, desc, eq } from "drizzle-orm"
-import { Effect, Layer, Option, Schema } from "effect"
-import { DatabaseLive } from "./DatabaseLive"
+import { Effect, Layer, Option, Schema, ServiceMap } from "effect"
+import { Database, DatabaseLive } from "./DatabaseLive"
 
-const decodeDashboardDocument = Schema.decodeUnknown(Schema.Array(DashboardDocument))
+const decodeDashboardDocumentSync = Schema.decodeUnknownSync(
+  Schema.Array(DashboardDocument),
+)
 const decodeDashboardIdSync = Schema.decodeUnknownSync(DashboardId)
 
 const toPersistenceError = (error: unknown) =>
@@ -57,36 +59,38 @@ const stringifyPayload = (dashboard: DashboardDocument) =>
       }),
   })
 
-export class DashboardPersistenceService extends Effect.Service<DashboardPersistenceService>()(
+export class DashboardPersistenceService extends ServiceMap.Service<DashboardPersistenceService>()(
   "DashboardPersistenceService",
   {
-    accessors: true,
-    effect: Effect.gen(function* () {
-      const db = yield* SqliteDrizzle
+    make: Effect.gen(function* () {
+      const database = yield* Database
 
       const list = Effect.fn("DashboardPersistenceService.list")(function* (
         orgId: OrgId,
       ) {
-        const rows = yield* db
-          .select({
-            payloadJson: dashboards.payloadJson,
-          })
-          .from(dashboards)
-          .where(eq(dashboards.orgId, orgId))
-          .orderBy(desc(dashboards.updatedAt))
-          .pipe(Effect.mapError(toPersistenceError))
+        const rows: ReadonlyArray<{ readonly payloadJson: string }> = yield* database.execute((db) =>
+          db
+            .select({
+              payloadJson: dashboards.payloadJson,
+            })
+            .from(dashboards)
+            .where(eq(dashboards.orgId, orgId))
+            .orderBy(desc(dashboards.updatedAt)),
+        ).pipe(Effect.mapError(toPersistenceError))
 
-        const payloads = yield* Effect.forEach(rows, (row) =>
+        const payloads: ReadonlyArray<unknown> = yield* Effect.forEach(rows, (row) =>
           parsePayload(row.payloadJson),
         )
 
-        return yield* decodeDashboardDocument(payloads).pipe(
-          Effect.mapError(() =>
+        const dashboardDocuments = yield* Effect.try({
+          try: () => decodeDashboardDocumentSync(payloads),
+          catch: () =>
             new DashboardPersistenceError({
               message: "Stored dashboard payload does not match schema",
             }),
-          ),
-        )
+        })
+
+        return new DashboardsListResponse({ dashboards: dashboardDocuments })
       })
 
       const upsert = Effect.fn("DashboardPersistenceService.upsert")(function* (
@@ -98,28 +102,29 @@ export class DashboardPersistenceService extends Effect.Service<DashboardPersist
         const createdAt = yield* parseTimestamp("createdAt", dashboard.createdAt)
         const updatedAt = yield* parseTimestamp("updatedAt", dashboard.updatedAt)
 
-        yield* db
-          .insert(dashboards)
-          .values({
-            orgId,
-            id: dashboard.id,
-            name: dashboard.name,
-            payloadJson,
-            createdAt,
-            updatedAt,
-            createdBy: userId,
-            updatedBy: userId,
-          })
-          .onConflictDoUpdate({
-            target: [dashboards.orgId, dashboards.id],
-            set: {
+        yield* database.execute((db) =>
+          db
+            .insert(dashboards)
+            .values({
+              orgId,
+              id: dashboard.id,
               name: dashboard.name,
               payloadJson,
+              createdAt,
               updatedAt,
+              createdBy: userId,
               updatedBy: userId,
-            },
-          })
-          .pipe(Effect.mapError(toPersistenceError))
+            })
+            .onConflictDoUpdate({
+              target: [dashboards.orgId, dashboards.id],
+              set: {
+                name: dashboard.name,
+                payloadJson,
+                updatedAt,
+                updatedBy: userId,
+              },
+            }),
+        ).pipe(Effect.mapError(toPersistenceError))
 
         return dashboard
       })
@@ -128,18 +133,19 @@ export class DashboardPersistenceService extends Effect.Service<DashboardPersist
         orgId: OrgId,
         dashboardId: DashboardId,
       ) {
-        const rows = yield* db
-          .delete(dashboards)
-          .where(
-            and(
-              eq(dashboards.orgId, orgId),
-              eq(dashboards.id, dashboardId),
-            ),
-          )
-          .returning({ id: dashboards.id })
-          .pipe(Effect.mapError(toPersistenceError))
+        const rows = yield* database.execute((db) =>
+          db
+            .delete(dashboards)
+            .where(
+              and(
+                eq(dashboards.orgId, orgId),
+                eq(dashboards.id, dashboardId),
+              ),
+            )
+            .returning({ id: dashboards.id }),
+        ).pipe(Effect.mapError(toPersistenceError))
 
-        const deleted = Option.fromNullable(rows[0])
+        const deleted = Option.fromNullishOr(rows[0])
 
         if (Option.isNone(deleted)) {
           return yield* Effect.fail(
@@ -163,5 +169,21 @@ export class DashboardPersistenceService extends Effect.Service<DashboardPersist
     }),
   },
 ) {
-  static readonly Live = this.Default.pipe(Layer.provide(DatabaseLive))
+  static readonly layer = Layer.effect(this, this.make).pipe(Layer.provide(DatabaseLive))
+  static readonly Live = this.layer
+  static readonly Default = this.layer
+
+  static readonly list = (orgId: OrgId) =>
+    this.use((service) => service.list(orgId))
+
+  static readonly upsert = (
+    orgId: OrgId,
+    userId: UserId,
+    dashboard: DashboardDocument,
+  ) => this.use((service) => service.upsert(orgId, userId, dashboard))
+
+  static readonly delete = (
+    orgId: OrgId,
+    dashboardId: DashboardId,
+  ) => this.use((service) => service.delete(orgId, dashboardId))
 }

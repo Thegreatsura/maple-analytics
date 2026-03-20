@@ -22,7 +22,7 @@ export type ServicesSearchParams = Schema.Schema.Type<typeof servicesSearchSchem
 
 export const Route = createFileRoute("/services/")({
   component: ServicesPage,
-  validateSearch: Schema.standardSchemaV1(servicesSearchSchema),
+  validateSearch: Schema.toStandardSchemaV1(servicesSearchSchema),
 })
 
 export function ServicesPage() {

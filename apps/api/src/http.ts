@@ -1,6 +1,6 @@
-import { HttpLayerRouter } from "@effect/platform";
 import { MapleApi } from "@maple/domain/http";
 import { Layer } from "effect";
+import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { HttpApiKeysLive } from "./routes/api-keys.http";
 import { HttpAuthLive, HttpAuthPublicLive } from "./routes/auth.http";
 import { HttpCloudflareLogpushLive } from "./routes/cloudflare-logpush.http";
@@ -12,16 +12,16 @@ import { HttpScrapeTargetsLive } from "./routes/scrape-targets.http";
 import { HttpServiceDiscoveryLive } from "./routes/sd.http";
 import { HttpTinybirdLive } from "./routes/tinybird.http";
 
-export const HttpApiRoutes = HttpLayerRouter.addHttpApi(MapleApi).pipe(
-  Layer.provideMerge(HttpAuthPublicLive),
-  Layer.provideMerge(HttpAuthLive),
-  Layer.provideMerge(HttpApiKeysLive),
-  Layer.provideMerge(HttpCloudflareLogpushLive),
-  Layer.provideMerge(HttpDashboardsLive),
-  Layer.provideMerge(HttpIngestKeysLive),
-  Layer.provideMerge(HttpOrgTinybirdSettingsLive),
-  Layer.provideMerge(HttpScrapeTargetsLive),
-  Layer.provideMerge(HttpServiceDiscoveryLive),
-  Layer.provideMerge(HttpTinybirdLive),
-  Layer.provideMerge(HttpQueryEngineLive),
+export const HttpApiRoutes = HttpApiBuilder.layer(MapleApi).pipe(
+  Layer.provide(HttpAuthPublicLive),
+  Layer.provide(HttpAuthLive),
+  Layer.provide(HttpApiKeysLive),
+  Layer.provide(HttpCloudflareLogpushLive),
+  Layer.provide(HttpDashboardsLive),
+  Layer.provide(HttpIngestKeysLive),
+  Layer.provide(HttpOrgTinybirdSettingsLive),
+  Layer.provide(HttpScrapeTargetsLive),
+  Layer.provide(HttpServiceDiscoveryLive),
+  Layer.provide(HttpTinybirdLive),
+  Layer.provide(HttpQueryEngineLive),
 );

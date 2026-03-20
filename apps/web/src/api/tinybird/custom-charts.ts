@@ -47,7 +47,7 @@ function querySpanMetricsCalls(
           attribute_key: "span.kind",
           attribute_value: "SPAN_KIND_SERVER",
         }),
-      ).pipe(Effect.catchAll(() => Effect.succeed({ data: [] as never[] })))
+      ).pipe(Effect.orElseSucceed(() => ({ data: [] as Array<Record<string, unknown>> })))
 
       if (result.data.length > 0) {
         return result
@@ -136,7 +136,7 @@ const SharedFiltersSchema = Schema.Struct({
   severity: Schema.optional(Schema.String),
   metricName: Schema.optional(Schema.String),
   metricType: Schema.optional(
-    Schema.Literal("sum", "gauge", "histogram", "exponential_histogram"),
+    Schema.Literals(["sum", "gauge", "histogram", "exponential_histogram"]),
   ),
   rootSpansOnly: Schema.optional(Schema.Boolean),
   environments: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
@@ -148,16 +148,16 @@ const SharedFiltersSchema = Schema.Struct({
 })
 
 const CustomChartTimeSeriesInputSchema = Schema.Struct({
-  source: Schema.Literal("traces", "logs", "metrics"),
+  source: Schema.Literals(["traces", "logs", "metrics"]),
   metric: Schema.String,
   groupBy: Schema.optional(
-    Schema.Literal("service", "span_name", "status_code", "severity", "attribute", "none"),
+    Schema.Literals(["service", "span_name", "status_code", "severity", "attribute", "none"]),
   ),
   filters: Schema.optional(SharedFiltersSchema),
   startTime: dateTimeString,
   endTime: dateTimeString,
   bucketSeconds: Schema.optional(
-    Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1)),
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
   ),
 })
 
@@ -201,7 +201,9 @@ function executeQueryEngine(payload: QueryEngineExecuteRequest) {
 const executeQueryEngineEffect = Effect.fn("Tinybird.executeQueryEngine")(
   function* (payload: QueryEngineExecuteRequest) {
     const client = yield* MapleApiAtomClient
-    return yield* client.queryEngine.execute({ payload })
+    return yield* client.queryEngine.execute({
+      payload: new QueryEngineExecuteRequest(payload),
+    })
   },
 )
 
@@ -277,11 +279,13 @@ function buildTimeseriesQuerySpec(data: CustomChartTimeSeriesInput): QuerySpec |
     return `Unsupported metrics groupBy: ${data.groupBy}`
   }
 
+  const metricsGroupBy = data.groupBy as "service" | "none" | undefined
+
   return {
     kind: "timeseries",
     source: "metrics",
     metric: data.metric as MetricsMetric,
-    groupBy: data.groupBy === "none" ? "none" : "service",
+    groupBy: metricsGroupBy === "none" ? "none" : "service",
     filters: {
       metricName: data.filters.metricName,
       metricType: data.filters.metricType,
@@ -344,21 +348,21 @@ const getCustomChartTimeSeriesEffect = Effect.fn("Tinybird.getCustomChartTimeSer
 )
 
 const CustomChartBreakdownInputSchema = Schema.Struct({
-  source: Schema.Literal("traces", "logs", "metrics"),
+  source: Schema.Literals(["traces", "logs", "metrics"]),
   metric: Schema.String,
-  groupBy: Schema.Literal(
+  groupBy: Schema.Literals([
     "service",
     "span_name",
     "status_code",
     "http_method",
     "severity",
     "attribute",
-  ),
+  ]),
   filters: Schema.optional(SharedFiltersSchema),
   startTime: dateTimeString,
   endTime: dateTimeString,
   limit: Schema.optional(
-    Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1), Schema.lessThanOrEqualTo(100)),
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(100)),
   ),
 })
 
@@ -551,7 +555,7 @@ const getCustomChartServiceDetailEffect = Effect.fn("Tinybird.getCustomChartServ
     ], { concurrency: 2 })
 
     const metricsMap = new Map(
-      metricsResult.data.map((r) => [toIsoBucket(r.bucket), Number(r.sumValue)]),
+      metricsResult.data.map((r) => [toIsoBucket(String(r.bucket)), Number(r.sumValue)]),
     )
 
     const points = tracesResult.data.map((row): ServiceDetailTimeSeriesPoint => {
@@ -652,7 +656,7 @@ const getOverviewTimeSeriesEffect = Effect.fn("Tinybird.getOverviewTimeSeries")(
     // SpanMetrics: aggregate across all services per bucket
     const metricsMap = new Map<string, number>()
     for (const r of metricsResult.data) {
-      const key = toIsoBucket(r.bucket)
+      const key = toIsoBucket(String(r.bucket))
       metricsMap.set(key, (metricsMap.get(key) ?? 0) + Number(r.sumValue))
     }
 
@@ -757,7 +761,7 @@ const getCustomChartServiceSparklinesEffect = Effect.fn("Tinybird.getCustomChart
     // SpanMetrics: keyed by "serviceName::bucket"
     const metricsMap = new Map<string, number>()
     for (const r of metricsResult.data) {
-      const key = `${r.serviceName}::${toIsoBucket(r.bucket)}`
+      const key = `${String(r.serviceName)}::${toIsoBucket(String(r.bucket))}`
       metricsMap.set(key, (metricsMap.get(key) ?? 0) + Number(r.sumValue))
     }
 

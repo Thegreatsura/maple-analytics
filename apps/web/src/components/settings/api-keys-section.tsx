@@ -1,7 +1,7 @@
-import { Result, useAtomRefresh, useAtomSet, useAtomValue } from "@effect-atom/atom-react"
+import { Result, useAtomRefresh, useAtomSet, useAtomValue } from "@/lib/effect-atom"
 import { useState } from "react"
 import { Exit } from "effect"
-import type { ApiKeyId, ApiKeyResponse } from "@maple/domain/http"
+import { CreateApiKeyRequest, type ApiKeyId, type ApiKeyResponse } from "@maple/domain/http"
 import { toast } from "sonner"
 
 import { Button } from "@maple/ui/components/ui/button"
@@ -98,10 +98,10 @@ export function ApiKeysSection() {
     if (!newName.trim()) return
     setIsCreating(true)
     const result = await createMutation({
-      payload: {
+      payload: new CreateApiKeyRequest({
         name: newName.trim(),
         description: newDescription.trim() || undefined,
-      },
+      }),
     })
     if (Exit.isSuccess(result)) {
       setNewSecret(result.value.secret)
@@ -144,7 +144,7 @@ export function ApiKeysSection() {
   async function handleRevoke() {
     if (!revokingKeyId) return
     setIsRevoking(true)
-    const result = await revokeMutation({ path: { keyId: revokingKeyId } })
+    const result = await revokeMutation({ params: { keyId: revokingKeyId } })
     if (Exit.isSuccess(result)) {
       toast.success("API key revoked")
       refreshKeys()

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import * as JSONSchema from "effect/JSONSchema"
+import { Schema } from "effect"
 import { buildQuerySpec, queryDataArgsSchema } from "./query-data"
 
 describe("query_data", () => {
@@ -141,7 +141,8 @@ describe("query_data", () => {
   })
 
   it("generates a flat object schema with no anyOf for Claude Code compatibility", () => {
-    const schema = JSONSchema.make(queryDataArgsSchema) as unknown as Record<string, unknown>
+    const schema = Schema.toJsonSchemaDocument(queryDataArgsSchema)
+      .schema as Record<string, unknown>
 
     expect(schema.type).toBe("object")
     expect("anyOf" in schema).toBe(false)

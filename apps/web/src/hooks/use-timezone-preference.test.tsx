@@ -7,7 +7,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react"
-import { Registry, RegistryContext } from "@effect-atom/atom-react"
+import { Registry, RegistryContext } from "@/lib/effect-atom"
 import type { ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {

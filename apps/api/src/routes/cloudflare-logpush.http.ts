@@ -1,4 +1,4 @@
-import { HttpApiBuilder } from "@effect/platform";
+import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { CurrentTenant, MapleApi } from "@maple/domain/http";
 import { Effect } from "effect";
 import { CloudflareLogpushService } from "../services/CloudflareLogpushService";
@@ -14,8 +14,7 @@ export const HttpCloudflareLogpushLive = HttpApiBuilder.group(
         .handle("list", () =>
           Effect.gen(function* () {
             const tenant = yield* CurrentTenant.Context;
-            const connectors = yield* service.list(tenant.orgId);
-            return { connectors };
+            return yield* service.list(tenant.orgId);
           }),
         )
         .handle("create", ({ payload }) =>
@@ -24,35 +23,35 @@ export const HttpCloudflareLogpushLive = HttpApiBuilder.group(
             return yield* service.create(tenant.orgId, tenant.userId, payload);
           }),
         )
-        .handle("update", ({ path, payload }) =>
+        .handle("update", ({ params, payload }) =>
           Effect.gen(function* () {
             const tenant = yield* CurrentTenant.Context;
             return yield* service.update(
               tenant.orgId,
-              path.connectorId,
+              params.connectorId,
               tenant.userId,
               payload,
             );
           }),
         )
-        .handle("delete", ({ path }) =>
+        .handle("delete", ({ params }) =>
           Effect.gen(function* () {
             const tenant = yield* CurrentTenant.Context;
-            return yield* service.delete(tenant.orgId, path.connectorId);
+            return yield* service.delete(tenant.orgId, params.connectorId);
           }),
         )
-        .handle("getSetup", ({ path }) =>
+        .handle("getSetup", ({ params }) =>
           Effect.gen(function* () {
             const tenant = yield* CurrentTenant.Context;
-            return yield* service.getSetup(tenant.orgId, path.connectorId);
+            return yield* service.getSetup(tenant.orgId, params.connectorId);
           }),
         )
-        .handle("rotateSecret", ({ path }) =>
+        .handle("rotateSecret", ({ params }) =>
           Effect.gen(function* () {
             const tenant = yield* CurrentTenant.Context;
             return yield* service.rotateSecret(
               tenant.orgId,
-              path.connectorId,
+              params.connectorId,
               tenant.userId,
             );
           }),

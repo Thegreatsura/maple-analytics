@@ -1,4 +1,4 @@
-import { Atom, Result } from "@effect-atom/atom-react"
+import { Atom, Result } from "@/lib/effect-atom"
 import * as React from "react"
 
 import { useRefreshableAtomValue } from "@/hooks/use-refreshable-atom-value"

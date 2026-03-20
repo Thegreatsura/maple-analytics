@@ -1,4 +1,4 @@
-import { Result } from "@effect-atom/atom-react"
+import { Result } from "@/lib/effect-atom"
 import { useNavigate } from "@tanstack/react-router"
 
 import { useEffectiveTimeRange } from "@/hooks/use-effective-time-range"

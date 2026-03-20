@@ -1,30 +1,89 @@
 import { randomUUID } from "node:crypto"
-import { SqliteDrizzle } from "@effect/sql-drizzle/Sqlite"
 import {
   IsoDateTimeString,
   OrgId,
   ScrapeAuthType,
+  ScrapeIntervalSeconds,
+  ScrapeTargetDeleteResponse,
   ScrapeTargetEncryptionError,
   ScrapeTargetId,
   ScrapeTargetNotFoundError,
   ScrapeTargetPersistenceError,
+  ScrapeTargetProbeResponse,
   ScrapeTargetResponse,
-  ScrapeIntervalSeconds,
+  ScrapeTargetsListResponse,
   ScrapeTargetValidationError,
   type CreateScrapeTargetRequest,
   type UpdateScrapeTargetRequest,
 } from "@maple/domain/http"
 import { scrapeTargets } from "@maple/db"
 import { and, eq } from "drizzle-orm"
-import { Effect, Layer, Option, Redacted, Schema } from "effect"
+import {
+  Cause,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Redacted,
+  Schema,
+  ServiceMap,
+} from "effect"
 import {
   decryptAes256Gcm,
   encryptAes256Gcm,
   parseBase64Aes256GcmKey,
   type EncryptedValue,
 } from "./Crypto"
-import { DatabaseLive } from "./DatabaseLive"
+import { Database, DatabaseLive } from "./DatabaseLive"
 import { Env } from "./Env"
+
+type ScrapeTargetRow = typeof scrapeTargets.$inferSelect
+
+export interface ScrapeTargetsServiceShape {
+  readonly list: (
+    orgId: OrgId,
+  ) => Effect.Effect<ScrapeTargetsListResponse, ScrapeTargetPersistenceError>
+  readonly create: (
+    orgId: OrgId,
+    request: CreateScrapeTargetRequest,
+  ) => Effect.Effect<
+    ScrapeTargetResponse,
+    | ScrapeTargetValidationError
+    | ScrapeTargetPersistenceError
+    | ScrapeTargetEncryptionError
+  >
+  readonly update: (
+    orgId: OrgId,
+    targetId: ScrapeTargetId,
+    request: UpdateScrapeTargetRequest,
+  ) => Effect.Effect<
+    ScrapeTargetResponse,
+    | ScrapeTargetNotFoundError
+    | ScrapeTargetValidationError
+    | ScrapeTargetPersistenceError
+    | ScrapeTargetEncryptionError
+  >
+  readonly delete: (
+    orgId: OrgId,
+    targetId: ScrapeTargetId,
+  ) => Effect.Effect<
+    ScrapeTargetDeleteResponse,
+    ScrapeTargetNotFoundError | ScrapeTargetPersistenceError
+  >
+  readonly listAllEnabled: () => Effect.Effect<
+    ReadonlyArray<ScrapeTargetRow>,
+    ScrapeTargetPersistenceError
+  >
+  readonly probe: (
+    orgId: OrgId,
+    targetId: ScrapeTargetId,
+  ) => Effect.Effect<
+    ScrapeTargetProbeResponse,
+    | ScrapeTargetNotFoundError
+    | ScrapeTargetPersistenceError
+    | ScrapeTargetEncryptionError
+  >
+}
 
 const toPersistenceError = (error: unknown) =>
   new ScrapeTargetPersistenceError({
@@ -64,15 +123,21 @@ const encryptCredentials = (
   )
 
 const decryptCredentials = (
-  row: { authCredentialsCiphertext: string; authCredentialsIv: string; authCredentialsTag: string },
+  row: {
+    authCredentialsCiphertext: string
+    authCredentialsIv: string
+    authCredentialsTag: string
+  },
   encryptionKey: Buffer,
 ): Effect.Effect<string, ScrapeTargetEncryptionError> =>
-  decryptAes256Gcm({
-    ciphertext: row.authCredentialsCiphertext,
-    iv: row.authCredentialsIv,
-    tag: row.authCredentialsTag,
-  }, encryptionKey, () =>
-    toEncryptionError("Failed to decrypt auth credentials"),
+  decryptAes256Gcm(
+    {
+      ciphertext: row.authCredentialsCiphertext,
+      iv: row.authCredentialsIv,
+      tag: row.authCredentialsTag,
+    },
+    encryptionKey,
+    () => toEncryptionError("Failed to decrypt auth credentials"),
   )
 
 const VALID_AUTH_TYPES = ["none", "bearer", "basic"] as const
@@ -114,11 +179,16 @@ const validateAuthCredentials = (
         )
       }
     } else if (authType === "basic") {
-      if (!parsed.username || typeof parsed.username !== "string" ||
-          !parsed.password || typeof parsed.password !== "string") {
+      if (
+        !parsed.username ||
+        typeof parsed.username !== "string" ||
+        !parsed.password ||
+        typeof parsed.password !== "string"
+      ) {
         return Effect.fail(
           new ScrapeTargetValidationError({
-            message: 'Basic auth credentials must include "username" and "password" string fields',
+            message:
+              'Basic auth credentials must include "username" and "password" string fields',
           }),
         )
       }
@@ -134,7 +204,7 @@ const validateAuthCredentials = (
   return Effect.succeed(authCredentials)
 }
 
-const rowToResponse = (row: typeof scrapeTargets.$inferSelect) =>
+const rowToResponse = (row: ScrapeTargetRow): ScrapeTargetResponse =>
   new ScrapeTargetResponse({
     id: decodeTargetIdSync(row.id),
     name: row.name,
@@ -175,7 +245,11 @@ const validateUrl = (url: string) => {
 
 const validateInterval = (seconds: number | undefined) => {
   if (seconds === undefined) return Effect.succeed(undefined)
-  if (!Number.isInteger(seconds) || seconds < MIN_SCRAPE_INTERVAL || seconds > MAX_SCRAPE_INTERVAL) {
+  if (
+    !Number.isInteger(seconds) ||
+    seconds < MIN_SCRAPE_INTERVAL ||
+    seconds > MAX_SCRAPE_INTERVAL
+  ) {
     return Effect.fail(
       new ScrapeTargetValidationError({
         message: `Scrape interval must be an integer between ${MIN_SCRAPE_INTERVAL} and ${MAX_SCRAPE_INTERVAL} seconds`,
@@ -194,8 +268,8 @@ const validateLabelsJson = (labelsJson: string | null | undefined) => {
         new ScrapeTargetValidationError({ message: "labelsJson must be a JSON object" }),
       )
     }
-    for (const v of Object.values(parsed)) {
-      if (typeof v !== "string") {
+    for (const value of Object.values(parsed)) {
+      if (typeof value !== "string") {
         return Effect.fail(
           new ScrapeTargetValidationError({ message: "labelsJson values must be strings" }),
         )
@@ -209,13 +283,11 @@ const validateLabelsJson = (labelsJson: string | null | undefined) => {
   return Effect.succeed(labelsJson)
 }
 
-export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()(
+export class ScrapeTargetsService extends ServiceMap.Service<ScrapeTargetsService, ScrapeTargetsServiceShape>()(
   "ScrapeTargetsService",
   {
-    accessors: true,
-    dependencies: [Env.Default],
-    effect: Effect.gen(function* () {
-      const db = yield* SqliteDrizzle
+    make: Effect.gen(function* () {
+      const database = yield* Database
       const env = yield* Env
       const encryptionKey = yield* parseEncryptionKey(
         Redacted.value(env.MAPLE_INGEST_KEY_ENCRYPTION_KEY),
@@ -225,19 +297,15 @@ export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()
         orgId: OrgId,
         targetId: ScrapeTargetId,
       ) {
-        const rows = yield* db
-          .select()
-          .from(scrapeTargets)
-          .where(
-            and(
-              eq(scrapeTargets.orgId, orgId),
-              eq(scrapeTargets.id, targetId),
-            ),
-          )
-          .limit(1)
-          .pipe(Effect.mapError(toPersistenceError))
+        const rows = yield* database.execute((db) =>
+          db
+            .select()
+            .from(scrapeTargets)
+            .where(and(eq(scrapeTargets.orgId, orgId), eq(scrapeTargets.id, targetId)))
+            .limit(1),
+        ).pipe(Effect.mapError(toPersistenceError))
 
-        return Option.fromNullable(rows[0])
+        return Option.fromNullishOr(rows[0])
       })
 
       const requireTarget = Effect.fn("ScrapeTargetsService.requireTarget")(function* (
@@ -258,13 +326,13 @@ export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()
       const list = Effect.fn("ScrapeTargetsService.list")(function* (
         orgId: OrgId,
       ) {
-        const rows = yield* db
-          .select()
-          .from(scrapeTargets)
-          .where(eq(scrapeTargets.orgId, orgId))
-          .pipe(Effect.mapError(toPersistenceError))
+        const rows = yield* database.execute((db) =>
+          db.select().from(scrapeTargets).where(eq(scrapeTargets.orgId, orgId)),
+        ).pipe(Effect.mapError(toPersistenceError))
 
-        return rows.map(rowToResponse)
+        return new ScrapeTargetsListResponse({
+          targets: rows.map(rowToResponse),
+        })
       })
 
       const create = Effect.fn("ScrapeTargetsService.create")(function* (
@@ -276,6 +344,8 @@ export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()
         yield* validateLabelsJson(request.labelsJson)
 
         const authType = (yield* validateAuthType(request.authType)) ?? "none"
+        const name = request.name.trim()
+        const serviceName = request.serviceName ?? null
 
         let credentialFields: {
           authCredentialsCiphertext: string | null
@@ -300,13 +370,12 @@ export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()
         const now = Date.now()
         const id = decodeTargetIdSync(randomUUID())
 
-        yield* db
-          .insert(scrapeTargets)
-          .values({
+        yield* database.execute((db) =>
+          db.insert(scrapeTargets).values({
             id,
             orgId,
-            name: request.name.trim(),
-            serviceName: request.serviceName ?? null,
+            name,
+            serviceName,
             url,
             scrapeIntervalSeconds: request.scrapeIntervalSeconds ?? 15,
             labelsJson: request.labelsJson ?? null,
@@ -315,8 +384,8 @@ export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()
             enabled: request.enabled === false ? 0 : 1,
             createdAt: now,
             updatedAt: now,
-          })
-          .pipe(Effect.mapError(toPersistenceError))
+          }),
+        ).pipe(Effect.mapError(toPersistenceError))
 
         const row = yield* selectById(orgId, id)
         if (Option.isNone(row)) {
@@ -327,9 +396,7 @@ export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()
           )
         }
 
-        yield* Effect.fork(
-          probe(orgId, id).pipe(Effect.catchAll(() => Effect.void)),
-        )
+        yield* probe(orgId, id).pipe(Effect.ignore, Effect.forkDetach)
 
         return rowToResponse(row.value)
       })
@@ -352,33 +419,29 @@ export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()
 
         if (request.name !== undefined) updates.name = request.name.trim()
         if (request.url !== undefined) updates.url = request.url.trim()
-        if (request.scrapeIntervalSeconds !== undefined)
+        if (request.scrapeIntervalSeconds !== undefined) {
           updates.scrapeIntervalSeconds = request.scrapeIntervalSeconds
+        }
         if (request.labelsJson !== undefined) updates.labelsJson = request.labelsJson
         if (request.enabled !== undefined) updates.enabled = request.enabled ? 1 : 0
         if (request.serviceName !== undefined) updates.serviceName = request.serviceName
 
-        // Handle auth type changes
         if (request.authType !== undefined) {
           const newAuthType = yield* validateAuthType(request.authType)
           updates.authType = newAuthType
 
           if (newAuthType === "none") {
-            // Clearing auth — remove credentials
             updates.authCredentialsCiphertext = null
             updates.authCredentialsIv = null
             updates.authCredentialsTag = null
           } else if (newAuthType !== existing.authType || request.authCredentials) {
-            // Auth type changed or new credentials provided — require and encrypt
             yield* validateAuthCredentials(newAuthType!, request.authCredentials)
             const encrypted = yield* encryptCredentials(request.authCredentials!, encryptionKey)
             updates.authCredentialsCiphertext = encrypted.ciphertext
             updates.authCredentialsIv = encrypted.iv
             updates.authCredentialsTag = encrypted.tag
           }
-          // Same auth type, no new credentials — keep existing
         } else if (request.authCredentials) {
-          // No auth type change but new credentials provided — re-encrypt for current type
           const currentAuthType = existing.authType
           if (currentAuthType !== "none") {
             yield* validateAuthCredentials(currentAuthType, request.authCredentials)
@@ -389,16 +452,12 @@ export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()
           }
         }
 
-        yield* db
-          .update(scrapeTargets)
-          .set(updates)
-          .where(
-            and(
-              eq(scrapeTargets.orgId, orgId),
-              eq(scrapeTargets.id, targetId),
-            ),
-          )
-          .pipe(Effect.mapError(toPersistenceError))
+        yield* database.execute((db) =>
+          db
+            .update(scrapeTargets)
+            .set(updates)
+            .where(and(eq(scrapeTargets.orgId, orgId), eq(scrapeTargets.id, targetId))),
+        ).pipe(Effect.mapError(toPersistenceError))
 
         const row = yield* selectById(orgId, targetId)
         if (Option.isNone(row)) {
@@ -416,19 +475,14 @@ export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()
         orgId: OrgId,
         targetId: ScrapeTargetId,
       ) {
-        const rows = yield* db
-          .delete(scrapeTargets)
-          .where(
-            and(
-              eq(scrapeTargets.orgId, orgId),
-              eq(scrapeTargets.id, targetId),
-            ),
-          )
-          .returning({ id: scrapeTargets.id })
-          .pipe(Effect.mapError(toPersistenceError))
+        const rows = yield* database.execute((db) =>
+          db
+            .delete(scrapeTargets)
+            .where(and(eq(scrapeTargets.orgId, orgId), eq(scrapeTargets.id, targetId)))
+            .returning({ id: scrapeTargets.id }),
+        ).pipe(Effect.mapError(toPersistenceError))
 
-        const deleted = Option.fromNullable(rows[0])
-
+        const deleted = Option.fromNullishOr(rows[0])
         if (Option.isNone(deleted)) {
           return yield* Effect.fail(
             new ScrapeTargetNotFoundError({
@@ -438,15 +492,15 @@ export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()
           )
         }
 
-        return { id: decodeTargetIdSync(deleted.value.id) }
+        return new ScrapeTargetDeleteResponse({
+          id: decodeTargetIdSync(deleted.value.id),
+        })
       })
 
       const listAllEnabled = Effect.fn("ScrapeTargetsService.listAllEnabled")(function* () {
-        const rows = yield* db
-          .select()
-          .from(scrapeTargets)
-          .where(eq(scrapeTargets.enabled, 1))
-          .pipe(Effect.mapError(toPersistenceError))
+        const rows = yield* database.execute((db) =>
+          db.select().from(scrapeTargets).where(eq(scrapeTargets.enabled, 1)),
+        ).pipe(Effect.mapError(toPersistenceError))
 
         return rows
       })
@@ -472,17 +526,19 @@ export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()
             },
             encryptionKey,
           )
-          const creds = JSON.parse(credentialsJson) as Record<string, string>
+          const credentials = JSON.parse(credentialsJson) as Record<string, string>
           if (row.authType === "bearer") {
-            headers["Authorization"] = `Bearer ${creds.token}`
+            headers.Authorization = `Bearer ${credentials.token}`
           } else if (row.authType === "basic") {
-            const encoded = Buffer.from(`${creds.username}:${creds.password}`).toString("base64")
-            headers["Authorization"] = `Basic ${encoded}`
+            const encoded = Buffer.from(
+              `${credentials.username}:${credentials.password}`,
+            ).toString("base64")
+            headers.Authorization = `Basic ${encoded}`
           }
         }
 
         const now = Date.now()
-        const result = yield* Effect.either(Effect.tryPromise({
+        const requestExit = yield* Effect.tryPromise({
           try: async () => {
             const controller = new AbortController()
             const timeout = setTimeout(() => controller.abort(), 10_000)
@@ -496,45 +552,59 @@ export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()
               if (!response.ok) {
                 throw new Error(`HTTP ${response.status} ${response.statusText}`)
               }
-              return { success: true as const, error: null }
             } finally {
               clearTimeout(timeout)
             }
           },
           catch: (error) =>
-            error instanceof Error ? error.message : "Connection failed",
-        }))
+            error instanceof Error ? error : new Error("Connection failed"),
+        }).pipe(Effect.exit)
 
-        if (result._tag === "Right") {
-          yield* db
-            .update(scrapeTargets)
-            .set({ lastScrapeAt: now, lastScrapeError: null, updatedAt: now })
-            .where(eq(scrapeTargets.id, targetId))
-            .pipe(Effect.mapError(toPersistenceError))
+        if (Exit.isSuccess(requestExit)) {
+          yield* database.execute((db) =>
+            db
+              .update(scrapeTargets)
+              .set({ lastScrapeAt: now, lastScrapeError: null, updatedAt: now })
+              .where(eq(scrapeTargets.id, targetId)),
+          ).pipe(Effect.mapError(toPersistenceError))
         } else {
-          yield* db
-            .update(scrapeTargets)
-            .set({ lastScrapeError: result.left, updatedAt: now })
-            .where(eq(scrapeTargets.id, targetId))
-            .pipe(Effect.mapError(toPersistenceError))
+          yield* database.execute((db) =>
+            db
+              .update(scrapeTargets)
+              .set({
+                lastScrapeError: Cause.pretty(requestExit.cause),
+                updatedAt: now,
+              })
+              .where(eq(scrapeTargets.id, targetId)),
+          ).pipe(Effect.mapError(toPersistenceError))
         }
 
-        const updated = yield* db
-          .select()
-          .from(scrapeTargets)
-          .where(eq(scrapeTargets.id, targetId))
-          .limit(1)
-          .pipe(Effect.mapError(toPersistenceError))
+        const updatedRows = yield* database.execute((db) =>
+          db
+            .select()
+            .from(scrapeTargets)
+            .where(eq(scrapeTargets.id, targetId))
+            .limit(1),
+        ).pipe(Effect.mapError(toPersistenceError))
 
-        return {
-          success: result._tag === "Right",
-          lastScrapeAt: updated[0]?.lastScrapeAt
+        const updated = Option.fromNullishOr(updatedRows[0])
+        if (Option.isNone(updated)) {
+          return yield* Effect.fail(
+            new ScrapeTargetPersistenceError({
+              message: "Failed to load probed scrape target",
+            }),
+          )
+        }
+
+        return new ScrapeTargetProbeResponse({
+          success: Exit.isSuccess(requestExit),
+          lastScrapeAt: updated.value.lastScrapeAt
             ? decodeIsoDateTimeStringSync(
-                new Date(updated[0].lastScrapeAt).toISOString(),
+                new Date(updated.value.lastScrapeAt).toISOString(),
               )
             : null,
-          lastScrapeError: updated[0]?.lastScrapeError ?? null,
-        }
+          lastScrapeError: updated.value.lastScrapeError ?? null,
+        })
       })
 
       return {
@@ -544,9 +614,12 @@ export class ScrapeTargetsService extends Effect.Service<ScrapeTargetsService>()
         delete: remove,
         listAllEnabled,
         probe,
-      }
+      } satisfies ScrapeTargetsServiceShape
     }),
   },
 ) {
-  static readonly Live = this.Default.pipe(Layer.provide(DatabaseLive))
+  static readonly layer = Layer.effect(this, this.make).pipe(
+    Layer.provide(DatabaseLive),
+    Layer.provide(Env.layer),
+  )
 }

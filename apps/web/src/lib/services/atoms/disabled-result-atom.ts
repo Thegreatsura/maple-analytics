@@ -1,4 +1,4 @@
-import { Atom, Result } from "@effect-atom/atom-react"
+import { Atom, Result } from "@/lib/effect-atom"
 
 const disabledResultQueryAtom = Atom.make(Result.initial<never, Error>()).pipe(Atom.keepAlive)
 

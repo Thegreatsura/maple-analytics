@@ -16,7 +16,7 @@ const serviceMapSearchSchema = Schema.Struct({
 
 export const Route = createFileRoute("/service-map")({
   component: ServiceMapPage,
-  validateSearch: Schema.standardSchemaV1(serviceMapSearchSchema),
+  validateSearch: Schema.toStandardSchemaV1(serviceMapSearchSchema),
 })
 
 function ServiceMapPage() {

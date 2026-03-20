@@ -1,7 +1,7 @@
-import { SqliteDrizzle } from "@effect/sql-drizzle/Sqlite"
 import {
   IsoDateTimeString,
   OrgTinybirdDeploymentStatusResponse,
+  OrgTinybirdSettingsDeleteResponse,
   OrgTinybirdInstanceHealthResponse,
   OrgTinybirdSettingsEncryptionError,
   OrgTinybirdSettingsForbiddenError,
@@ -17,20 +17,87 @@ import {
 import { getCurrentTinybirdProjectRevision, fetchInstanceHealth as fetchInstanceHealthFn, getDeploymentStatus as getDeploymentStatusFn, syncTinybirdProject } from "@maple/domain/tinybird-project-sync"
 import { orgTinybirdSettings } from "@maple/db"
 import { eq } from "drizzle-orm"
-import { Effect, Layer, Option, Redacted, Schema } from "effect"
+import { Effect, Layer, Option, Redacted, Schema, ServiceMap } from "effect"
 import {
   decryptAes256Gcm,
   encryptAes256Gcm,
   parseBase64Aes256GcmKey,
   type EncryptedValue,
 } from "./Crypto"
-import { DatabaseLive } from "./DatabaseLive"
+import { Database, DatabaseLive } from "./DatabaseLive"
 import { Env } from "./Env"
 
 interface RuntimeTinybirdConfig {
   readonly host: string
   readonly token: string
   readonly projectRevision: string
+}
+
+export interface OrgTinybirdSettingsServiceShape {
+  readonly get: (
+    orgId: OrgId,
+    roles: ReadonlyArray<RoleName>,
+  ) => Effect.Effect<
+    OrgTinybirdSettingsResponse,
+    OrgTinybirdSettingsForbiddenError | OrgTinybirdSettingsPersistenceError
+  >
+  readonly upsert: (
+    orgId: OrgId,
+    userId: UserId,
+    roles: ReadonlyArray<RoleName>,
+    payload: OrgTinybirdSettingsUpsertRequest,
+  ) => Effect.Effect<
+    OrgTinybirdSettingsResponse,
+    | OrgTinybirdSettingsForbiddenError
+    | OrgTinybirdSettingsValidationError
+    | OrgTinybirdSettingsPersistenceError
+    | OrgTinybirdSettingsEncryptionError
+    | OrgTinybirdSettingsSyncError
+  >
+  readonly delete: (
+    orgId: OrgId,
+    roles: ReadonlyArray<RoleName>,
+  ) => Effect.Effect<
+    OrgTinybirdSettingsDeleteResponse,
+    OrgTinybirdSettingsForbiddenError | OrgTinybirdSettingsPersistenceError
+  >
+  readonly resync: (
+    orgId: OrgId,
+    userId: UserId,
+    roles: ReadonlyArray<RoleName>,
+  ) => Effect.Effect<
+    OrgTinybirdSettingsResponse,
+    | OrgTinybirdSettingsForbiddenError
+    | OrgTinybirdSettingsValidationError
+    | OrgTinybirdSettingsPersistenceError
+    | OrgTinybirdSettingsEncryptionError
+    | OrgTinybirdSettingsSyncError
+  >
+  readonly getDeploymentStatus: (
+    orgId: OrgId,
+    roles: ReadonlyArray<RoleName>,
+  ) => Effect.Effect<
+    OrgTinybirdDeploymentStatusResponse,
+    | OrgTinybirdSettingsForbiddenError
+    | OrgTinybirdSettingsValidationError
+    | OrgTinybirdSettingsPersistenceError
+    | OrgTinybirdSettingsEncryptionError
+    | OrgTinybirdSettingsSyncError
+  >
+  readonly getInstanceHealth: (
+    orgId: OrgId,
+    roles: ReadonlyArray<RoleName>,
+  ) => Effect.Effect<
+    OrgTinybirdInstanceHealthResponse,
+    | OrgTinybirdSettingsForbiddenError
+    | OrgTinybirdSettingsValidationError
+    | OrgTinybirdSettingsPersistenceError
+    | OrgTinybirdSettingsEncryptionError
+    | OrgTinybirdSettingsSyncError
+  >
+  readonly resolveRuntimeConfig: (
+    orgId: OrgId,
+  ) => Effect.Effect<Option.Option<RuntimeTinybirdConfig>, OrgTinybirdSettingsPersistenceError | OrgTinybirdSettingsEncryptionError | OrgTinybirdSettingsSyncError>
 }
 
 const decodeIsoDateTimeStringSync = Schema.decodeUnknownSync(IsoDateTimeString)
@@ -116,13 +183,11 @@ const isOrgAdmin = (roles: ReadonlyArray<RoleName>) =>
 
 const OUT_OF_SYNC_MESSAGE = "BYO Tinybird project is out of sync with Maple. Please resync the project in settings."
 
-export class OrgTinybirdSettingsService extends Effect.Service<OrgTinybirdSettingsService>()(
+export class OrgTinybirdSettingsService extends ServiceMap.Service<OrgTinybirdSettingsService, OrgTinybirdSettingsServiceShape>()(
   "OrgTinybirdSettingsService",
   {
-    accessors: true,
-    dependencies: [Env.Default],
-    effect: Effect.gen(function* () {
-      const db = yield* SqliteDrizzle
+    make: Effect.gen(function* () {
+      const database = yield* Database
       const env = yield* Env
       const encryptionKey = yield* parseEncryptionKey(
         Redacted.value(env.MAPLE_INGEST_KEY_ENCRYPTION_KEY),
@@ -141,14 +206,15 @@ export class OrgTinybirdSettingsService extends Effect.Service<OrgTinybirdSettin
       })
 
       const selectRow = Effect.fn("OrgTinybirdSettingsService.selectRow")(function* (orgId: OrgId) {
-        const rows = yield* db
-          .select()
-          .from(orgTinybirdSettings)
-          .where(eq(orgTinybirdSettings.orgId, orgId))
-          .limit(1)
-          .pipe(Effect.mapError(toPersistenceError))
+        const rows = yield* database.execute((db) =>
+          db
+            .select()
+            .from(orgTinybirdSettings)
+            .where(eq(orgTinybirdSettings.orgId, orgId))
+            .limit(1),
+        ).pipe(Effect.mapError(toPersistenceError))
 
-        return Option.fromNullable(rows[0])
+        return Option.fromNullishOr(rows[0])
       })
 
       const requireRow = Effect.fn("OrgTinybirdSettingsService.requireRow")(function* (orgId: OrgId) {
@@ -257,27 +323,11 @@ export class OrgTinybirdSettingsService extends Effect.Service<OrgTinybirdSettin
         const encryptedToken = yield* encryptToken(token, encryptionKey)
         const now = Date.now()
 
-        yield* db
-          .insert(orgTinybirdSettings)
-          .values({
-            orgId,
-            host,
-            tokenCiphertext: encryptedToken.ciphertext,
-            tokenIv: encryptedToken.iv,
-            tokenTag: encryptedToken.tag,
-            syncStatus: "active",
-            lastSyncAt: now,
-            lastSyncError: null,
-            projectRevision: syncResult.projectRevision,
-            lastDeploymentId: syncResult.deploymentId ?? null,
-            createdAt: Option.isSome(existing) ? existing.value.createdAt : now,
-            updatedAt: now,
-            createdBy: Option.isSome(existing) ? existing.value.createdBy : userId,
-            updatedBy: userId,
-          })
-          .onConflictDoUpdate({
-            target: orgTinybirdSettings.orgId,
-            set: {
+        yield* database.execute((db) =>
+          db
+            .insert(orgTinybirdSettings)
+            .values({
+              orgId,
               host,
               tokenCiphertext: encryptedToken.ciphertext,
               tokenIv: encryptedToken.iv,
@@ -287,11 +337,28 @@ export class OrgTinybirdSettingsService extends Effect.Service<OrgTinybirdSettin
               lastSyncError: null,
               projectRevision: syncResult.projectRevision,
               lastDeploymentId: syncResult.deploymentId ?? null,
+              createdAt: Option.isSome(existing) ? existing.value.createdAt : now,
               updatedAt: now,
+              createdBy: Option.isSome(existing) ? existing.value.createdBy : userId,
               updatedBy: userId,
-            },
-          })
-          .pipe(Effect.mapError(toPersistenceError))
+            })
+            .onConflictDoUpdate({
+              target: orgTinybirdSettings.orgId,
+              set: {
+                host,
+                tokenCiphertext: encryptedToken.ciphertext,
+                tokenIv: encryptedToken.iv,
+                tokenTag: encryptedToken.tag,
+                syncStatus: "active",
+                lastSyncAt: now,
+                lastSyncError: null,
+                projectRevision: syncResult.projectRevision,
+                lastDeploymentId: syncResult.deploymentId ?? null,
+                updatedAt: now,
+                updatedBy: userId,
+              },
+            }),
+        ).pipe(Effect.mapError(toPersistenceError))
 
         const stored = yield* requireRow(orgId)
         return toResponse(stored, syncResult.projectRevision)
@@ -303,14 +370,15 @@ export class OrgTinybirdSettingsService extends Effect.Service<OrgTinybirdSettin
       ) {
         yield* requireAdmin(roles)
 
-        yield* db
-          .delete(orgTinybirdSettings)
-          .where(eq(orgTinybirdSettings.orgId, orgId))
-          .pipe(Effect.mapError(toPersistenceError))
+        yield* database.execute((db) =>
+          db
+            .delete(orgTinybirdSettings)
+            .where(eq(orgTinybirdSettings.orgId, orgId)),
+        ).pipe(Effect.mapError(toPersistenceError))
 
-        return {
-          configured: false as const,
-        }
+        return new OrgTinybirdSettingsDeleteResponse({
+          configured: false,
+        })
       })
 
       const resync = Effect.fn("OrgTinybirdSettingsService.resync")(function* (
@@ -331,19 +399,20 @@ export class OrgTinybirdSettingsService extends Effect.Service<OrgTinybirdSettin
         const syncResult = yield* syncCandidate(row.host, token)
         const now = Date.now()
 
-        yield* db
-          .update(orgTinybirdSettings)
-          .set({
-            syncStatus: "active",
-            lastSyncAt: now,
-            lastSyncError: null,
-            projectRevision: syncResult.projectRevision,
-            lastDeploymentId: syncResult.deploymentId ?? null,
-            updatedAt: now,
-            updatedBy: userId,
-          })
-          .where(eq(orgTinybirdSettings.orgId, orgId))
-          .pipe(Effect.mapError(toPersistenceError))
+        yield* database.execute((db) =>
+          db
+            .update(orgTinybirdSettings)
+            .set({
+              syncStatus: "active",
+              lastSyncAt: now,
+              lastSyncError: null,
+              projectRevision: syncResult.projectRevision,
+              lastDeploymentId: syncResult.deploymentId ?? null,
+              updatedAt: now,
+              updatedBy: userId,
+            })
+            .where(eq(orgTinybirdSettings.orgId, orgId)),
+        ).pipe(Effect.mapError(toPersistenceError))
 
         const updated = yield* requireRow(orgId)
         return toResponse(updated, syncResult.projectRevision)
@@ -481,7 +550,38 @@ export class OrgTinybirdSettingsService extends Effect.Service<OrgTinybirdSettin
     }),
   },
 ) {
-  static readonly Live = this.Default.pipe(Layer.provide(DatabaseLive))
+  static readonly layer = Layer.effect(this, this.make).pipe(
+    Layer.provide(DatabaseLive),
+    Layer.provide(Env.layer),
+  )
+  static readonly Live = this.layer
+  static readonly Default = this.layer
+
+  static readonly get = (
+    orgId: OrgId,
+    roles: ReadonlyArray<RoleName>,
+  ) => this.use((service) => service.get(orgId, roles))
+
+  static readonly upsert = (
+    orgId: OrgId,
+    userId: UserId,
+    roles: ReadonlyArray<RoleName>,
+    payload: OrgTinybirdSettingsUpsertRequest,
+  ) => this.use((service) => service.upsert(orgId, userId, roles, payload))
+
+  static readonly delete = (
+    orgId: OrgId,
+    roles: ReadonlyArray<RoleName>,
+  ) => this.use((service) => service.delete(orgId, roles))
+
+  static readonly resync = (
+    orgId: OrgId,
+    userId: UserId,
+    roles: ReadonlyArray<RoleName>,
+  ) => this.use((service) => service.resync(orgId, userId, roles))
+
+  static readonly resolveRuntimeConfig = (orgId: OrgId) =>
+    this.use((service) => service.resolveRuntimeConfig(orgId))
 }
 
 export const __testables = {

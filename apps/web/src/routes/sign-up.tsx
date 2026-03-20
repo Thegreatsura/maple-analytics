@@ -11,7 +11,7 @@ const SignUpSearch = Schema.Struct({
 
 export const Route = createFileRoute("/sign-up")({
   component: SignUpPage,
-  validateSearch: Schema.standardSchemaV1(SignUpSearch),
+  validateSearch: Schema.toStandardSchemaV1(SignUpSearch),
 })
 
 function SignUpPage() {

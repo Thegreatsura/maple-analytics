@@ -1,4 +1,4 @@
-import { Result } from "@effect-atom/atom-react"
+import { Result } from "@/lib/effect-atom"
 import { Fragment, useState } from "react"
 import { Link } from "@tanstack/react-router"
 import { formatDistanceToNow, format } from "date-fns"

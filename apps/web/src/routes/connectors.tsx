@@ -13,16 +13,13 @@ import {
 import { FireIcon, ShieldIcon } from "@/components/icons";
 
 const ConnectorsSearch = Schema.Struct({
-  tab: Schema.optionalWith(
-    Schema.Literal("cloudflare", "prometheus"),
-    { default: () => "cloudflare" as const },
-  ),
-});
+  tab: Schema.optional(Schema.Literals(["cloudflare", "prometheus"])),
+})
 
 export const Route = createFileRoute("/connectors")({
   component: ConnectorsPage,
-  validateSearch: Schema.standardSchemaV1(ConnectorsSearch),
-});
+  validateSearch: Schema.toStandardSchemaV1(ConnectorsSearch),
+})
 
 function ConnectorsPage() {
   const search = Route.useSearch();
@@ -35,7 +32,7 @@ function ConnectorsPage() {
       description="Connect external data sources to ingest metrics alongside your OpenTelemetry data."
     >
       <Tabs
-        value={search.tab}
+        value={search.tab ?? "cloudflare"}
         onValueChange={(tab) =>
           navigate({
             search: { tab: tab as "cloudflare" | "prometheus" },

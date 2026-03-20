@@ -117,8 +117,8 @@ vi.mock("@/lib/services/atoms/tinybird-query-atoms", () => ({
   getResourceAttributeValuesResultAtom: () => atoms.resourceAttributeValues,
 }))
 
-vi.mock("@effect-atom/atom-react", async () => {
-  const actual = await vi.importActual<typeof import("@effect-atom/atom-react")>("@effect-atom/atom-react")
+vi.mock("@/lib/effect-atom", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/effect-atom")>("@/lib/effect-atom")
 
   return {
     ...actual,

@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { Result, useAtomValue } from "@effect-atom/atom-react"
+import { Result, useAtomValue } from "@/lib/effect-atom"
 import { useCustomer } from "autumn-js/react"
 import { Schema } from "effect"
 
@@ -31,15 +31,12 @@ const tabValues = ["members", "ingestion", "api-keys", "mcp", "connectors", "bil
 type SettingsTab = (typeof tabValues)[number]
 
 const SettingsSearch = Schema.Struct({
-  tab: Schema.optionalWith(
-    Schema.Literal(...tabValues),
-    { default: () => "members" as const },
-  ),
+  tab: Schema.optional(Schema.Literals(tabValues)),
 })
 
 export const Route = createFileRoute("/settings")({
   component: SettingsPage,
-  validateSearch: Schema.standardSchemaV1(SettingsSearch),
+  validateSearch: Schema.toStandardSchemaV1(SettingsSearch),
 })
 
 interface NavItem {
@@ -122,9 +119,11 @@ export function SettingsPage() {
     return true
   })
 
-  const activeTab = visibleItems.some((i) => i.id === search.tab)
-    ? search.tab
-    : visibleItems[0]?.id ?? "ingestion"
+  const activeTab: SettingsTab = (
+    visibleItems.some((i) => i.id === search.tab)
+      ? search.tab
+      : visibleItems[0]?.id ?? "ingestion"
+  ) as SettingsTab
 
   function handleTabSelect(tab: SettingsTab) {
     navigate({ search: { tab } })

@@ -16,7 +16,7 @@ const queryBuilderLabSearchSchema = Schema.Struct({
 
 export const Route = createFileRoute("/query-builder-lab")({
   component: QueryBuilderLabPage,
-  validateSearch: Schema.standardSchemaV1(queryBuilderLabSearchSchema),
+  validateSearch: Schema.toStandardSchemaV1(queryBuilderLabSearchSchema),
 })
 
 function QueryBuilderLabPage() {

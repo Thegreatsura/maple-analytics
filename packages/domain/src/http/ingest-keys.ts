@@ -1,4 +1,4 @@
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "@effect/platform"
+import { HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 import { Schema } from "effect"
 import { IsoDateTimeString } from "../primitives"
 import { Authorization } from "./current-tenant"
@@ -10,40 +10,40 @@ export class IngestKeysResponse extends Schema.Class<IngestKeysResponse>("Ingest
   privateRotatedAt: IsoDateTimeString,
 }) {}
 
-export class IngestKeyPersistenceError extends Schema.TaggedError<IngestKeyPersistenceError>()(
+export class IngestKeyPersistenceError extends Schema.TaggedErrorClass<IngestKeyPersistenceError>()(
   "IngestKeyPersistenceError",
   {
     message: Schema.String,
   },
-  HttpApiSchema.annotations({ status: 503 }),
+  { httpApiStatus: 503 },
 ) {}
 
-export class IngestKeyEncryptionError extends Schema.TaggedError<IngestKeyEncryptionError>()(
+export class IngestKeyEncryptionError extends Schema.TaggedErrorClass<IngestKeyEncryptionError>()(
   "IngestKeyEncryptionError",
   {
     message: Schema.String,
   },
-  HttpApiSchema.annotations({ status: 500 }),
+  { httpApiStatus: 500 },
 ) {}
 
 export class IngestKeysApiGroup extends HttpApiGroup.make("ingestKeys")
   .add(
-    HttpApiEndpoint.get("get", "/")
-      .addSuccess(IngestKeysResponse)
-      .addError(IngestKeyPersistenceError)
-      .addError(IngestKeyEncryptionError),
+    HttpApiEndpoint.get("get", "/", {
+      success: IngestKeysResponse,
+      error: [IngestKeyPersistenceError, IngestKeyEncryptionError],
+    }),
   )
   .add(
-    HttpApiEndpoint.post("rerollPublic", "/public/reroll")
-      .addSuccess(IngestKeysResponse)
-      .addError(IngestKeyPersistenceError)
-      .addError(IngestKeyEncryptionError),
+    HttpApiEndpoint.post("rerollPublic", "/public/reroll", {
+      success: IngestKeysResponse,
+      error: [IngestKeyPersistenceError, IngestKeyEncryptionError],
+    }),
   )
   .add(
-    HttpApiEndpoint.post("rerollPrivate", "/private/reroll")
-      .addSuccess(IngestKeysResponse)
-      .addError(IngestKeyPersistenceError)
-      .addError(IngestKeyEncryptionError),
+    HttpApiEndpoint.post("rerollPrivate", "/private/reroll", {
+      success: IngestKeysResponse,
+      error: [IngestKeyPersistenceError, IngestKeyEncryptionError],
+    }),
   )
   .prefix("/api/ingest-keys")
   .middleware(Authorization) {}

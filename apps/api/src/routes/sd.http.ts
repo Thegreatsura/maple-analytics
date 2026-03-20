@@ -1,6 +1,12 @@
 import { timingSafeEqual } from "node:crypto"
-import { HttpApiBuilder, HttpServerRequest } from "@effect/platform"
-import { MapleApi, SDPersistenceError, SDUnauthorizedError } from "@maple/domain/http"
+import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpServerRequest } from "effect/unstable/http"
+import {
+  MapleApi,
+  PrometheusSDTarget,
+  SDPersistenceError,
+  SDUnauthorizedError,
+} from "@maple/domain/http"
 import { Effect, Option, Redacted } from "effect"
 import { Env } from "../services/Env"
 import { ScrapeTargetsService } from "../services/ScrapeTargetsService"
@@ -46,7 +52,7 @@ export const HttpServiceDiscoveryLive = HttpApiBuilder.group(
             ),
           )
 
-          const sdTargets: Array<{ targets: string[]; labels: Record<string, string> }> = []
+          const sdTargets: Array<PrometheusSDTarget> = []
 
           for (const row of rows) {
             let url: URL
@@ -87,7 +93,7 @@ export const HttpServiceDiscoveryLive = HttpApiBuilder.group(
               }
             }
 
-            sdTargets.push({ targets: [url.host], labels })
+            sdTargets.push(new PrometheusSDTarget({ targets: [url.host], labels }))
           }
 
           return sdTargets

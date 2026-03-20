@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { createFileRoute, Link } from "@tanstack/react-router"
-import { Result, useAtomValue } from "@effect-atom/atom-react"
+import { Result, useAtomValue } from "@/lib/effect-atom"
 import { useAuth } from "@clerk/clerk-react"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "motion/react"

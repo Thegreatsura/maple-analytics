@@ -1,4 +1,4 @@
-import { HttpApi, OpenApi } from "@effect/platform";
+import { HttpApi, OpenApi } from "effect/unstable/httpapi";
 import { ApiKeysApiGroup } from "./api-keys";
 import { AuthApiGroup, AuthPublicApiGroup } from "./auth";
 import { CloudflareLogpushApiGroup } from "./cloudflare-logpush";
@@ -22,7 +22,7 @@ export class MapleApi extends HttpApi.make("MapleApi")
   .add(ScrapeTargetsApiGroup)
   .add(ServiceDiscoveryApiGroup)
   .add(TinybirdApiGroup)
-  .annotateContext(
+  .annotateMerge(
     OpenApi.annotations({
       title: "Maple API",
       version: "1.0.0",

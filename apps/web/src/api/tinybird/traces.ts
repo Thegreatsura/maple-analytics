@@ -13,13 +13,13 @@ import {
 } from "@/api/tinybird/effect-utils"
 import { getHttpInfo, type HttpInfo } from "@maple/ui/lib/http"
 
-const ContainsMatchMode = Schema.optional(Schema.Literal("contains"))
+const ContainsMatchMode = Schema.optional(Schema.Literals(["contains"]))
 
 const ListTracesInputSchema = Schema.Struct({
   limit: Schema.optional(
-    Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1), Schema.lessThanOrEqualTo(1000)),
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(1000)),
   ),
-  offset: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(0))),
+  offset: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   service: Schema.optional(Schema.String),
   startTime: Schema.optional(TinybirdDateTimeString),
   endTime: Schema.optional(TinybirdDateTimeString),
@@ -191,7 +191,7 @@ export interface SpanHierarchyResponse {
 }
 
 const GetSpanHierarchyInputSchema = Schema.Struct({
-  traceId: Schema.String.pipe(Schema.minLength(1)),
+  traceId: Schema.String.check(Schema.isMinLength(1)),
   spanId: Schema.optional(Schema.String),
 })
 

@@ -1,12 +1,13 @@
-import { HttpApiBuilder } from "@effect/platform"
+import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { CurrentTenant, MapleApi } from "@maple/domain/http"
 import { Effect } from "effect"
 import { AuthService } from "../services/AuthService"
 
 export const HttpAuthPublicLive = HttpApiBuilder.group(MapleApi, "authPublic", (handlers) =>
   Effect.gen(function* () {
+    const authService = yield* AuthService
     return handlers.handle("login", ({ payload }) =>
-      AuthService.loginSelfHosted(payload.password),
+      authService.loginSelfHosted(payload.password),
     )
   }),
 )

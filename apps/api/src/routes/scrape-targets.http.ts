@@ -1,4 +1,4 @@
-import { HttpApiBuilder } from "@effect/platform"
+import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { CurrentTenant, MapleApi } from "@maple/domain/http"
 import { Effect } from "effect"
 import { ScrapeTargetsService } from "../services/ScrapeTargetsService"
@@ -14,8 +14,7 @@ export const HttpScrapeTargetsLive = HttpApiBuilder.group(
         .handle("list", () =>
           Effect.gen(function* () {
             const tenant = yield* CurrentTenant.Context
-            const targets = yield* service.list(tenant.orgId)
-            return { targets }
+            return yield* service.list(tenant.orgId)
           }),
         )
         .handle("create", ({ payload }) =>
@@ -24,26 +23,26 @@ export const HttpScrapeTargetsLive = HttpApiBuilder.group(
             return yield* service.create(tenant.orgId, payload)
           }),
         )
-        .handle("update", ({ path, payload }) =>
+        .handle("update", ({ params, payload }) =>
           Effect.gen(function* () {
             const tenant = yield* CurrentTenant.Context
             return yield* service.update(
               tenant.orgId,
-              path.targetId,
+              params.targetId,
               payload,
             )
           }),
         )
-        .handle("delete", ({ path }) =>
+        .handle("delete", ({ params }) =>
           Effect.gen(function* () {
             const tenant = yield* CurrentTenant.Context
-            return yield* service.delete(tenant.orgId, path.targetId)
+            return yield* service.delete(tenant.orgId, params.targetId)
           }),
         )
-        .handle("probe", ({ path }) =>
+        .handle("probe", ({ params }) =>
           Effect.gen(function* () {
             const tenant = yield* CurrentTenant.Context
-            return yield* service.probe(tenant.orgId, path.targetId)
+            return yield* service.probe(tenant.orgId, params.targetId)
           }),
         )
     }),

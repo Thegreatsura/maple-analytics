@@ -1,4 +1,4 @@
-import { Result, useAtomValue } from "@effect-atom/atom-react"
+import { Result, useAtomValue } from "@/lib/effect-atom"
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
 import {

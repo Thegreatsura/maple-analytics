@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Result, useAtomValue } from "@effect-atom/atom-react"
+import { Result, useAtomValue } from "@/lib/effect-atom"
 import { XmarkIcon, ClockIcon, CircleWarningIcon, CircleInfoIcon, SquareTerminalIcon, ChevronDownIcon, ChevronUpIcon, CopyIcon } from "@/components/icons"
 import { toast } from "sonner"
 

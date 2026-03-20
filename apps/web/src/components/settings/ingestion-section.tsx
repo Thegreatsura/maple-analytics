@@ -1,4 +1,4 @@
-import { Result, useAtomRefresh, useAtomSet, useAtomValue } from "@effect-atom/atom-react"
+import { Result, useAtomRefresh, useAtomSet, useAtomValue } from "@/lib/effect-atom"
 import { useMemo, useState } from "react"
 import { Exit } from "effect"
 import { toast } from "sonner"

@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
-import type { ConfigError } from "effect/ConfigError"
 import { Cause, ConfigProvider, Effect, Exit, Layer, Option, Schema } from "effect"
 import {
   IngestKeyEncryptionError,
@@ -26,10 +25,10 @@ afterEach(() => {
 const getError = <A, E>(exit: Exit.Exit<A, E>): unknown => {
   if (!Exit.isFailure(exit)) return undefined
 
-  const failure = Option.getOrUndefined(Cause.failureOption(exit.cause))
+  const failure = Option.getOrUndefined(Exit.findErrorOption(exit))
   if (failure !== undefined) return failure
 
-  return Option.getOrUndefined(Cause.dieOption(exit.cause))
+  return Cause.squash(exit.cause)
 }
 
 const createTempDbUrl = () => {
@@ -47,36 +46,28 @@ const makeConfigProvider = (
   url: string,
   encryptionKey?: string,
 ) =>
-  Layer.setConfigProvider(
-    ConfigProvider.fromMap(
-      new Map([
-        ["PORT", "3472"],
-        ["MCP_PORT", "3473"],
-        ["TINYBIRD_HOST", "https://api.tinybird.co"],
-        ["TINYBIRD_TOKEN", "test-token"],
-        ["MAPLE_DB_URL", url],
-        ["MAPLE_DB_AUTH_TOKEN", ""],
-        ["MAPLE_AUTH_MODE", "self_hosted"],
-        ["MAPLE_ROOT_PASSWORD", "test-root-password"],
-        ["MAPLE_DEFAULT_ORG_ID", "default"],
-        ...(encryptionKey === undefined
-          ? []
-          : [["MAPLE_INGEST_KEY_ENCRYPTION_KEY", encryptionKey] as const]),
-        ["MAPLE_INGEST_KEY_LOOKUP_HMAC_KEY", "maple-test-lookup-secret"],
-        ["CLERK_SECRET_KEY", ""],
-        ["CLERK_PUBLISHABLE_KEY", ""],
-        ["CLERK_JWT_KEY", ""],
-      ]),
-    ),
+  ConfigProvider.layer(
+    ConfigProvider.fromUnknown({
+      PORT: "3472",
+      MCP_PORT: "3473",
+      TINYBIRD_HOST: "https://api.tinybird.co",
+      TINYBIRD_TOKEN: "test-token",
+      MAPLE_DB_URL: url,
+      MAPLE_DB_AUTH_TOKEN: "",
+      MAPLE_AUTH_MODE: "self_hosted",
+      MAPLE_ROOT_PASSWORD: "test-root-password",
+      MAPLE_DEFAULT_ORG_ID: "default",
+      ...(encryptionKey === undefined
+        ? {}
+        : { MAPLE_INGEST_KEY_ENCRYPTION_KEY: encryptionKey }),
+      MAPLE_INGEST_KEY_LOOKUP_HMAC_KEY: "maple-test-lookup-secret",
+      CLERK_SECRET_KEY: "",
+      CLERK_PUBLISHABLE_KEY: "",
+      CLERK_JWT_KEY: "",
+    }),
   )
 
-const makeLayer = (
-  url: string,
-  encryptionKey = Buffer.alloc(32, 7).toString("base64"),
-): Layer.Layer<
-  OrgIngestKeysService,
-  IngestKeyEncryptionError | ConfigError
-> =>
+const makeLayer = (url: string, encryptionKey = Buffer.alloc(32, 7).toString("base64")) =>
   OrgIngestKeysService.Live.pipe(
     Layer.provide(Env.Default),
     Layer.provide(makeConfigProvider(url, encryptionKey)),
@@ -371,6 +362,6 @@ describe("OrgIngestKeysService", () => {
       return
     }
 
-    expect(String(failure)).toContain("UnknownException")
+    expect(String(failure)).toContain("DatabaseError")
   })
 })

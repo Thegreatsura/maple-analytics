@@ -1,4 +1,4 @@
-import { Result, useAtomRefresh, useAtomSet, useAtomValue } from "@effect-atom/atom-react"
+import { Result, useAtomRefresh, useAtomSet, useAtomValue } from "@/lib/effect-atom"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Cause, Exit, Option } from "effect"
 import { toast } from "sonner"
@@ -29,11 +29,12 @@ import {
 import { AlertWarningIcon, LoaderIcon } from "@/components/icons"
 import { formatLatency, formatNumber } from "@/lib/format"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
+import { OrgTinybirdSettingsUpsertRequest } from "@maple/domain/http"
 
 function getExitErrorMessage(exit: Exit.Exit<unknown, unknown>, fallback: string): string {
   if (Exit.isSuccess(exit)) return fallback
 
-  const failure = Option.getOrUndefined(Cause.failureOption(exit.cause))
+  const failure = Option.getOrUndefined(Exit.findErrorOption(exit))
   if (failure instanceof Error && failure.message.trim().length > 0) {
     return failure.message
   }
@@ -47,7 +48,7 @@ function getExitErrorMessage(exit: Exit.Exit<unknown, unknown>, fallback: string
     return failure.message
   }
 
-  const defect = Option.getOrUndefined(Cause.dieOption(exit.cause))
+  const defect = Cause.squash(exit.cause)
   if (defect instanceof Error && defect.message.trim().length > 0) {
     return defect.message
   }
@@ -210,10 +211,10 @@ export function OrgTinybirdSettingsSection({
   async function handleSave() {
     setIsSaving(true)
     const result = await upsertMutation({
-      payload: {
+      payload: new OrgTinybirdSettingsUpsertRequest({
         host,
         token,
-      },
+      }),
     })
     setIsSaving(false)
 

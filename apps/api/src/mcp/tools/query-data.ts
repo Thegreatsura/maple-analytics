@@ -1,4 +1,5 @@
 import {
+  McpQueryError,
   McpTenantError,
   optionalBooleanParam,
   optionalNumberParam,
@@ -8,11 +9,10 @@ import {
 } from "./types"
 import { defaultTimeRange } from "../lib/time"
 import { formatDurationFromMs, formatNumber, formatPercent, formatTable } from "../lib/format"
-import { HttpServerRequest } from "@effect/platform"
-import { Cause, Effect, Exit, Layer, ManagedRuntime, Option, ParseResult, Schema } from "effect"
+import { HttpServerRequest } from "effect/unstable/http"
+import { Cause, Effect, Exit, ManagedRuntime, Option, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
 import { resolveMcpTenantContext } from "@/mcp/lib/resolve-tenant"
-import { Env } from "@/services/Env"
 import { QueryEngineService } from "@/services/QueryEngineService"
 import {
   QuerySpec,
@@ -22,10 +22,9 @@ import {
   type QuerySpec as QuerySpecType,
   type TracesFilters,
 } from "@maple/domain"
+import type { TenantContext } from "@/services/AuthService"
 
-const QueryEngineRuntime = ManagedRuntime.make(
-  QueryEngineService.Default.pipe(Layer.provide(Env.Default)),
-)
+const QueryEngineRuntime = ManagedRuntime.make(QueryEngineService.layer)
 
 const commonTimeRangeFields = {
   start_time: optionalStringParam("Start time (YYYY-MM-DD HH:mm:ss). Defaults to 1 hour ago"),
@@ -37,10 +36,10 @@ const commonTimeRangeFields = {
 // which causes Claude Code to silently drop all tools from the MCP server.
 // Runtime validation of valid source/kind/metric combinations is handled by the QuerySpec decoder.
 export const queryDataArgsSchema = Schema.Struct({
-  source: Schema.Literal("traces", "logs", "metrics").annotations({
+  source: Schema.Literals(["traces", "logs", "metrics"]).annotate({
     description: "Data source: traces, logs, or metrics",
   }),
-  kind: Schema.Literal("timeseries", "breakdown").annotations({
+  kind: Schema.Literals(["timeseries", "breakdown"]).annotate({
     description: "Query type: timeseries or breakdown",
   }),
   metric: optionalStringParam(
@@ -77,12 +76,16 @@ const queryDataToolDescription =
   "Example: traces timeseries grouped by service to compare traffic over time. " +
   "Example: call list_metrics first, then query a specific metric timeseries with metric_name and metric_type."
 
-const querySpecDecoder = Schema.validateEither(QuerySpec)
+const decodeQuerySpecSync = Schema.decodeUnknownSync(QuerySpec)
 
 const splitCsv = (value: string): Array<string> =>
   value.split(",").map((entry) => entry.trim()).filter((entry) => entry.length > 0)
 
-const resolveTenant = Effect.gen(function* () {
+const resolveTenant: Effect.Effect<
+  TenantContext,
+  McpTenantError,
+  HttpServerRequest.HttpServerRequest
+> = Effect.gen(function* () {
   const req = yield* HttpServerRequest.HttpServerRequest
   const nativeReq = yield* HttpServerRequest.toWeb(req)
   return yield* Effect.tryPromise({
@@ -93,7 +96,7 @@ const resolveTenant = Effect.gen(function* () {
       }),
   })
 }).pipe(
-  Effect.catchTag("RequestError", (error) =>
+  Effect.catchTag("RequestParseError", (error) =>
     Effect.fail(new McpTenantError({ message: error.message })),
   ),
 )
@@ -318,8 +321,8 @@ function formatQueryResult(
   return { content: createDualContent(lines.join("\n"), structuredData) }
 }
 
-function toInvalidQuerySpecMessage(error: ParseResult.ParseError): string {
-  return `Invalid query specification:\n${ParseResult.TreeFormatter.formatErrorSync(error)}`
+function toInvalidQuerySpecMessage(error: unknown): string {
+  return `Invalid query specification:\n${String(error)}`
 }
 
 export function registerQueryDataTool(server: McpToolRegistrar) {
@@ -341,27 +344,35 @@ export function registerQueryDataTool(server: McpToolRegistrar) {
           }
         }
 
-        const decodedQuery = querySpecDecoder(query.spec)
-        if (decodedQuery._tag === "Left") {
+        let decodedQuery: QuerySpecType
+        try {
+          decodedQuery = decodeQuerySpecSync(query.spec)
+        } catch (error) {
           return {
             isError: true,
-            content: [{ type: "text", text: toInvalidQuerySpecMessage(decodedQuery.left) }],
+            content: [{ type: "text", text: toInvalidQuerySpecMessage(error) }],
           }
         }
 
         const tenant = yield* resolveTenant
-        const exit = yield* Effect.promise(() =>
-          QueryEngineRuntime.runPromiseExit(
-            QueryEngineService.execute(tenant, {
-              startTime: st,
-              endTime: et,
-              query: decodedQuery.right,
+        const exit = yield* Effect.tryPromise({
+          try: () =>
+            QueryEngineRuntime.runPromiseExit(
+              QueryEngineService.use((service) => service.execute(tenant, {
+                startTime: st,
+                endTime: et,
+                query: decodedQuery,
+              })),
+            ),
+          catch: (error) =>
+            new McpQueryError({
+              message: error instanceof Error ? error.message : String(error),
+              pipe: "query_data",
             }),
-          ),
-        )
+        })
 
         if (Exit.isFailure(exit)) {
-          const failure = Option.getOrUndefined(Cause.failureOption(exit.cause))
+          const failure = Option.getOrUndefined(Exit.findErrorOption(exit))
           if (failure && typeof failure === "object" && "_tag" in failure) {
             const tagged = failure as { _tag: string; message: string; details?: string[] }
             const details = tagged.details ? `\n${tagged.details.join("\n")}` : ""
@@ -373,7 +384,7 @@ export function registerQueryDataTool(server: McpToolRegistrar) {
 
           return {
             isError: true,
-            content: [{ type: "text", text: "Query execution failed unexpectedly." }],
+            content: [{ type: "text", text: Cause.pretty(exit.cause) }],
           }
         }
 

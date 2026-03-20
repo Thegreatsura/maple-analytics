@@ -1,9 +1,9 @@
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "@effect/platform"
+import { HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 import { Schema } from "effect"
 import { Authorization } from "./current-tenant"
 import { IsoDateTimeString } from "../primitives"
 
-export const OrgTinybirdSyncStatus = Schema.Literal("active", "error", "out_of_sync")
+export const OrgTinybirdSyncStatus = Schema.Literals(["active", "error", "out_of_sync"])
 export type OrgTinybirdSyncStatus = Schema.Schema.Type<typeof OrgTinybirdSyncStatus>
 
 export class OrgTinybirdSettingsResponse extends Schema.Class<OrgTinybirdSettingsResponse>(
@@ -56,95 +56,107 @@ export class OrgTinybirdSettingsDeleteResponse extends Schema.Class<OrgTinybirdS
   configured: Schema.Literal(false),
 }) {}
 
-export class OrgTinybirdSettingsForbiddenError extends Schema.TaggedError<OrgTinybirdSettingsForbiddenError>()(
+export class OrgTinybirdSettingsForbiddenError extends Schema.TaggedErrorClass<OrgTinybirdSettingsForbiddenError>()(
   "OrgTinybirdSettingsForbiddenError",
   {
     message: Schema.String,
   },
-  HttpApiSchema.annotations({ status: 403 }),
+  { httpApiStatus: 403 },
 ) {}
 
-export class OrgTinybirdSettingsValidationError extends Schema.TaggedError<OrgTinybirdSettingsValidationError>()(
+export class OrgTinybirdSettingsValidationError extends Schema.TaggedErrorClass<OrgTinybirdSettingsValidationError>()(
   "OrgTinybirdSettingsValidationError",
   {
     message: Schema.String,
   },
-  HttpApiSchema.annotations({ status: 400 }),
+  { httpApiStatus: 400 },
 ) {}
 
-export class OrgTinybirdSettingsPersistenceError extends Schema.TaggedError<OrgTinybirdSettingsPersistenceError>()(
+export class OrgTinybirdSettingsPersistenceError extends Schema.TaggedErrorClass<OrgTinybirdSettingsPersistenceError>()(
   "OrgTinybirdSettingsPersistenceError",
   {
     message: Schema.String,
   },
-  HttpApiSchema.annotations({ status: 503 }),
+  { httpApiStatus: 503 },
 ) {}
 
-export class OrgTinybirdSettingsEncryptionError extends Schema.TaggedError<OrgTinybirdSettingsEncryptionError>()(
+export class OrgTinybirdSettingsEncryptionError extends Schema.TaggedErrorClass<OrgTinybirdSettingsEncryptionError>()(
   "OrgTinybirdSettingsEncryptionError",
   {
     message: Schema.String,
   },
-  HttpApiSchema.annotations({ status: 500 }),
+  { httpApiStatus: 500 },
 ) {}
 
-export class OrgTinybirdSettingsSyncError extends Schema.TaggedError<OrgTinybirdSettingsSyncError>()(
+export class OrgTinybirdSettingsSyncError extends Schema.TaggedErrorClass<OrgTinybirdSettingsSyncError>()(
   "OrgTinybirdSettingsSyncError",
   {
     message: Schema.String,
   },
-  HttpApiSchema.annotations({ status: 502 }),
+  { httpApiStatus: 502 },
 ) {}
 
 export class OrgTinybirdSettingsApiGroup extends HttpApiGroup.make("orgTinybirdSettings")
   .add(
-    HttpApiEndpoint.get("get", "/")
-      .addSuccess(OrgTinybirdSettingsResponse)
-      .addError(OrgTinybirdSettingsForbiddenError)
-      .addError(OrgTinybirdSettingsPersistenceError),
+    HttpApiEndpoint.get("get", "/", {
+      success: OrgTinybirdSettingsResponse,
+      error: [OrgTinybirdSettingsForbiddenError, OrgTinybirdSettingsPersistenceError],
+    }),
   )
   .add(
-    HttpApiEndpoint.put("upsert", "/")
-      .setPayload(OrgTinybirdSettingsUpsertRequest)
-      .addSuccess(OrgTinybirdSettingsResponse)
-      .addError(OrgTinybirdSettingsForbiddenError)
-      .addError(OrgTinybirdSettingsValidationError)
-      .addError(OrgTinybirdSettingsPersistenceError)
-      .addError(OrgTinybirdSettingsEncryptionError)
-      .addError(OrgTinybirdSettingsSyncError),
+    HttpApiEndpoint.put("upsert", "/", {
+      payload: OrgTinybirdSettingsUpsertRequest,
+      success: OrgTinybirdSettingsResponse,
+      error: [
+        OrgTinybirdSettingsForbiddenError,
+        OrgTinybirdSettingsValidationError,
+        OrgTinybirdSettingsPersistenceError,
+        OrgTinybirdSettingsEncryptionError,
+        OrgTinybirdSettingsSyncError,
+      ],
+    }),
   )
   .add(
-    HttpApiEndpoint.post("resync", "/resync")
-      .addSuccess(OrgTinybirdSettingsResponse)
-      .addError(OrgTinybirdSettingsForbiddenError)
-      .addError(OrgTinybirdSettingsValidationError)
-      .addError(OrgTinybirdSettingsPersistenceError)
-      .addError(OrgTinybirdSettingsEncryptionError)
-      .addError(OrgTinybirdSettingsSyncError),
+    HttpApiEndpoint.post("resync", "/resync", {
+      success: OrgTinybirdSettingsResponse,
+      error: [
+        OrgTinybirdSettingsForbiddenError,
+        OrgTinybirdSettingsValidationError,
+        OrgTinybirdSettingsPersistenceError,
+        OrgTinybirdSettingsEncryptionError,
+        OrgTinybirdSettingsSyncError,
+      ],
+    }),
   )
   .add(
-    HttpApiEndpoint.get("deploymentStatus", "/deployment-status")
-      .addSuccess(OrgTinybirdDeploymentStatusResponse)
-      .addError(OrgTinybirdSettingsForbiddenError)
-      .addError(OrgTinybirdSettingsValidationError)
-      .addError(OrgTinybirdSettingsPersistenceError)
-      .addError(OrgTinybirdSettingsEncryptionError)
-      .addError(OrgTinybirdSettingsSyncError),
+    HttpApiEndpoint.get("deploymentStatus", "/deployment-status", {
+      success: OrgTinybirdDeploymentStatusResponse,
+      error: [
+        OrgTinybirdSettingsForbiddenError,
+        OrgTinybirdSettingsValidationError,
+        OrgTinybirdSettingsPersistenceError,
+        OrgTinybirdSettingsEncryptionError,
+        OrgTinybirdSettingsSyncError,
+      ],
+    }),
   )
   .add(
-    HttpApiEndpoint.get("instanceHealth", "/instance-health")
-      .addSuccess(OrgTinybirdInstanceHealthResponse)
-      .addError(OrgTinybirdSettingsForbiddenError)
-      .addError(OrgTinybirdSettingsValidationError)
-      .addError(OrgTinybirdSettingsPersistenceError)
-      .addError(OrgTinybirdSettingsEncryptionError)
-      .addError(OrgTinybirdSettingsSyncError),
+    HttpApiEndpoint.get("instanceHealth", "/instance-health", {
+      success: OrgTinybirdInstanceHealthResponse,
+      error: [
+        OrgTinybirdSettingsForbiddenError,
+        OrgTinybirdSettingsValidationError,
+        OrgTinybirdSettingsPersistenceError,
+        OrgTinybirdSettingsEncryptionError,
+        OrgTinybirdSettingsSyncError,
+      ],
+    }),
   )
   .add(
-    HttpApiEndpoint.del("delete", "/")
-      .addSuccess(OrgTinybirdSettingsDeleteResponse)
-      .addError(OrgTinybirdSettingsForbiddenError)
-      .addError(OrgTinybirdSettingsPersistenceError),
+    HttpApiEndpoint.delete("delete", "/", {
+      success: OrgTinybirdSettingsDeleteResponse,
+      error: [OrgTinybirdSettingsForbiddenError, OrgTinybirdSettingsPersistenceError],
+    }),
   )
   .prefix("/api/org-tinybird-settings")
   .middleware(Authorization) {}

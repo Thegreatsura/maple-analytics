@@ -34,7 +34,7 @@ const GetErrorsByTypeInputSchema = Schema.Struct({
   services: OptionalStringArray,
   deploymentEnvs: OptionalStringArray,
   errorTypes: OptionalStringArray,
-  limit: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.greaterThan(0))),
+  limit: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
   showSpam: Schema.optional(Schema.Boolean),
 })
 
@@ -250,7 +250,7 @@ const GetErrorDetailTracesInputSchema = Schema.Struct({
   startTime: Schema.optional(TinybirdDateTimeString),
   endTime: Schema.optional(TinybirdDateTimeString),
   services: OptionalStringArray,
-  limit: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.greaterThan(0))),
+  limit: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
   showSpam: Schema.optional(Schema.Boolean),
 })
 

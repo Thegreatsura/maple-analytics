@@ -1,5 +1,5 @@
 import { useMemo } from "react"
-import { Atom, Result, useAtomValue } from "@effect-atom/atom-react"
+import { Atom, Result, useAtomValue } from "@/lib/effect-atom"
 import { Effect, Schedule, Schema } from "effect"
 import { useDashboardTimeRange } from "@/components/dashboard-builder/dashboard-providers"
 import { serverFunctionMap } from "@/components/dashboard-builder/data-source-registry"
@@ -174,7 +174,7 @@ function applyTransform(
   return rows
 }
 
-class WidgetDataAtomError extends Schema.TaggedError<WidgetDataAtomError>()("WidgetDataAtomError", {
+class WidgetDataAtomError extends Schema.TaggedErrorClass<WidgetDataAtomError>()("WidgetDataAtomError", {
   message: Schema.String,
   cause: Schema.optional(Schema.Unknown),
 }) {}
@@ -241,9 +241,9 @@ const widgetDataResultFamily = Atom.family((key: string) =>
           )
         }
 
-        return serverFn({ data: params }).pipe(
+        return (serverFn({ data: params }) as Effect.Effect<unknown, unknown, never>).pipe(
           Effect.map((response) => {
-            const rawData = response?.data ?? response
+            const rawData = (response as { data?: unknown })?.data ?? response
             return applyTransform(rawData, transform)
           }),
         )
@@ -285,7 +285,7 @@ export function useWidgetData(widget: DashboardWidget) {
           params: resolvedParams,
           transform: widget.dataSource.transform,
         })
-      : disabledResultAtom(),
+      : disabledResultAtom<unknown, WidgetDataAtomError>(),
   )
 
   const dataState: WidgetDataState = useMemo(

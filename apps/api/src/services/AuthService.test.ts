@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { Cause, Effect, Exit, Option, Redacted, Schema } from "effect"
+import { Effect, Exit, Option, Redacted, Schema } from "effect"
 import { OrgId, RoleName, UserId } from "@maple/domain/http"
 import { makeLoginSelfHosted, makeResolveMcpTenant, makeResolveTenant } from "./AuthService"
 
@@ -18,7 +18,7 @@ const baseEnv = {
 } as const
 
 const getFailure = <A, E>(exit: Exit.Exit<A, E>): E | undefined =>
-  Exit.isFailure(exit) ? Option.getOrUndefined(Cause.failureOption(exit.cause)) : undefined
+  Option.getOrUndefined(Exit.findErrorOption(exit))
 
 describe("makeResolveTenant", () => {
   it("resolves a Clerk tenant from verified session claims", async () => {

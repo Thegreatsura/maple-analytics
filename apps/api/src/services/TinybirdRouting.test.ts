@@ -3,7 +3,6 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { Database } from "bun:sqlite"
-import type { ConfigError } from "effect/ConfigError"
 import { ConfigProvider, Effect, Layer, Schema } from "effect"
 import {
   OrgId,
@@ -37,38 +36,32 @@ const createTempDbUrl = () => {
 }
 
 const makeConfigProvider = (url: string) =>
-  Layer.setConfigProvider(
-    ConfigProvider.fromMap(
-      new Map([
-        ["PORT", "3472"],
-        ["TINYBIRD_HOST", "https://managed.tinybird.co"],
-        ["TINYBIRD_TOKEN", "managed-token"],
-        ["MAPLE_DB_URL", url],
-        ["MAPLE_DB_AUTH_TOKEN", ""],
-        ["MAPLE_AUTH_MODE", "self_hosted"],
-        ["MAPLE_ROOT_PASSWORD", "test-root-password"],
-        ["MAPLE_DEFAULT_ORG_ID", "default"],
-        ["MAPLE_INGEST_KEY_ENCRYPTION_KEY", Buffer.alloc(32, 7).toString("base64")],
-        ["MAPLE_INGEST_KEY_LOOKUP_HMAC_KEY", "maple-test-lookup-secret"],
-        ["CLERK_SECRET_KEY", ""],
-        ["CLERK_PUBLISHABLE_KEY", ""],
-        ["CLERK_JWT_KEY", ""],
-      ]),
-    ),
+  ConfigProvider.layer(
+    ConfigProvider.fromUnknown({
+      PORT: "3472",
+      TINYBIRD_HOST: "https://managed.tinybird.co",
+      TINYBIRD_TOKEN: "managed-token",
+      MAPLE_DB_URL: url,
+      MAPLE_DB_AUTH_TOKEN: "",
+      MAPLE_AUTH_MODE: "self_hosted",
+      MAPLE_ROOT_PASSWORD: "test-root-password",
+      MAPLE_DEFAULT_ORG_ID: "default",
+      MAPLE_INGEST_KEY_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString("base64"),
+      MAPLE_INGEST_KEY_LOOKUP_HMAC_KEY: "maple-test-lookup-secret",
+      CLERK_SECRET_KEY: "",
+      CLERK_PUBLISHABLE_KEY: "",
+      CLERK_JWT_KEY: "",
+    }),
   )
 
-const makeTinybirdLayer = (
-  url: string,
-): Layer.Layer<TinybirdService, OrgTinybirdSettingsEncryptionError | ConfigError> =>
+const makeTinybirdLayer = (url: string) =>
   TinybirdService.Default.pipe(
     Layer.provide(OrgTinybirdSettingsService.Live),
     Layer.provide(Env.Default),
     Layer.provide(makeConfigProvider(url)),
   )
 
-const makeOrgTinybirdLayer = (
-  url: string,
-): Layer.Layer<OrgTinybirdSettingsService, OrgTinybirdSettingsEncryptionError | ConfigError> =>
+const makeOrgTinybirdLayer = (url: string) =>
   OrgTinybirdSettingsService.Live.pipe(
     Layer.provide(Env.Default),
     Layer.provide(makeConfigProvider(url)),

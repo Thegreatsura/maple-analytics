@@ -1,17 +1,64 @@
-import { TinybirdQueryError, type TinybirdQueryRequest } from "@maple/domain/http"
+import {
+  TinybirdQueryError,
+  type TinybirdQueryRequest,
+  TinybirdQueryResponse,
+} from "@maple/domain/http"
 import type { OrgId } from "@maple/domain"
 import { Tinybird } from "@tinybirdco/sdk"
-import { Effect, Option, Redacted } from "effect"
+import { Effect, Layer, Option, Redacted, ServiceMap } from "effect"
 import { Env } from "./Env"
 import type { TenantContext } from "./AuthService"
 import { OrgTinybirdSettingsService } from "./OrgTinybirdSettingsService"
 
 const CLIENT_CACHE_TTL_MS = 30_000
 interface CachedClient {
-  client: ReturnType<typeof createClient>
+  client: TinybirdClient
   host: string
   token: string
   expiresAt: number
+}
+
+export interface TinybirdServiceShape {
+  readonly query: (
+    tenant: TenantContext,
+    payload: TinybirdQueryRequest,
+  ) => Effect.Effect<TinybirdQueryResponse, TinybirdQueryError>
+  readonly customTracesTimeseriesQuery: (
+    tenant: TenantContext,
+    params: Omit<CustomTracesTimeseriesParams, "org_id">,
+  ) => Effect.Effect<ReadonlyArray<CustomTracesTimeseriesOutput>, TinybirdQueryError>
+  readonly customTracesBreakdownQuery: (
+    tenant: TenantContext,
+    params: Omit<CustomTracesBreakdownParams, "org_id">,
+  ) => Effect.Effect<ReadonlyArray<CustomTracesBreakdownOutput>, TinybirdQueryError>
+  readonly customLogsTimeseriesQuery: (
+    tenant: TenantContext,
+    params: Omit<CustomLogsTimeseriesParams, "org_id">,
+  ) => Effect.Effect<ReadonlyArray<CustomLogsTimeseriesOutput>, TinybirdQueryError>
+  readonly customLogsBreakdownQuery: (
+    tenant: TenantContext,
+    params: Omit<CustomLogsBreakdownParams, "org_id">,
+  ) => Effect.Effect<ReadonlyArray<CustomLogsBreakdownOutput>, TinybirdQueryError>
+  readonly customMetricsBreakdownQuery: (
+    tenant: TenantContext,
+    params: Omit<CustomMetricsBreakdownParams, "org_id">,
+  ) => Effect.Effect<ReadonlyArray<CustomMetricsBreakdownOutput>, TinybirdQueryError>
+  readonly metricTimeSeriesSumQuery: (
+    tenant: TenantContext,
+    params: Omit<MetricTimeSeriesSumParams, "org_id">,
+  ) => Effect.Effect<ReadonlyArray<MetricTimeSeriesSumOutput>, TinybirdQueryError>
+  readonly metricTimeSeriesGaugeQuery: (
+    tenant: TenantContext,
+    params: Omit<MetricTimeSeriesGaugeParams, "org_id">,
+  ) => Effect.Effect<ReadonlyArray<MetricTimeSeriesGaugeOutput>, TinybirdQueryError>
+  readonly metricTimeSeriesHistogramQuery: (
+    tenant: TenantContext,
+    params: Omit<MetricTimeSeriesHistogramParams, "org_id">,
+  ) => Effect.Effect<ReadonlyArray<MetricTimeSeriesHistogramOutput>, TinybirdQueryError>
+  readonly metricTimeSeriesExpHistogramQuery: (
+    tenant: TenantContext,
+    params: Omit<MetricTimeSeriesExpHistogramParams, "org_id">,
+  ) => Effect.Effect<ReadonlyArray<MetricTimeSeriesExpHistogramOutput>, TinybirdQueryError>
 }
 const clientCache = new Map<string, CachedClient>()
 import {
@@ -102,20 +149,63 @@ const pipes = {
   resource_attribute_values: resourceAttributeValues,
 } as const
 
-const createClient = (baseUrl: string, token: string) =>
+interface TinybirdPipeQuery<TParams extends Record<string, unknown>, TRow> {
+  readonly query: (
+    params: TParams & { org_id: OrgId },
+  ) => Promise<{ data: ReadonlyArray<TRow> }>
+}
+
+interface TinybirdClient {
+  readonly custom_traces_timeseries: TinybirdPipeQuery<
+    Omit<CustomTracesTimeseriesParams, "org_id">,
+    CustomTracesTimeseriesOutput
+  >
+  readonly custom_traces_breakdown: TinybirdPipeQuery<
+    Omit<CustomTracesBreakdownParams, "org_id">,
+    CustomTracesBreakdownOutput
+  >
+  readonly custom_logs_timeseries: TinybirdPipeQuery<
+    Omit<CustomLogsTimeseriesParams, "org_id">,
+    CustomLogsTimeseriesOutput
+  >
+  readonly custom_logs_breakdown: TinybirdPipeQuery<
+    Omit<CustomLogsBreakdownParams, "org_id">,
+    CustomLogsBreakdownOutput
+  >
+  readonly custom_metrics_breakdown: TinybirdPipeQuery<
+    Omit<CustomMetricsBreakdownParams, "org_id">,
+    CustomMetricsBreakdownOutput
+  >
+  readonly metric_time_series_sum: TinybirdPipeQuery<
+    Omit<MetricTimeSeriesSumParams, "org_id">,
+    MetricTimeSeriesSumOutput
+  >
+  readonly metric_time_series_gauge: TinybirdPipeQuery<
+    Omit<MetricTimeSeriesGaugeParams, "org_id">,
+    MetricTimeSeriesGaugeOutput
+  >
+  readonly metric_time_series_histogram: TinybirdPipeQuery<
+    Omit<MetricTimeSeriesHistogramParams, "org_id">,
+    MetricTimeSeriesHistogramOutput
+  >
+  readonly metric_time_series_exp_histogram: TinybirdPipeQuery<
+    Omit<MetricTimeSeriesExpHistogramParams, "org_id">,
+    MetricTimeSeriesExpHistogramOutput
+  >
+}
+
+const createClient = (baseUrl: string, token: string): TinybirdClient =>
   new Tinybird({
     baseUrl,
     token,
     datasources: {},
     pipes,
-  })
+  }) as unknown as TinybirdClient
 
 let tinybirdClientFactory: typeof createClient = createClient
 
-export class TinybirdService extends Effect.Service<TinybirdService>()("TinybirdService", {
-  accessors: true,
-  dependencies: [Env.Default, OrgTinybirdSettingsService.Live],
-  effect: Effect.gen(function* () {
+export class TinybirdService extends ServiceMap.Service<TinybirdService, TinybirdServiceShape>()("TinybirdService", {
+  make: Effect.gen(function* () {
     const env = yield* Env
     const orgTinybirdSettings = yield* OrgTinybirdSettingsService
 
@@ -136,13 +226,13 @@ export class TinybirdService extends Effect.Service<TinybirdService>()("Tinybird
       return client
     }
 
-    const resolveClient = Effect.fn("TinybirdService.resolveClient")(function* (
-      tenant: TenantContext,
-      pipe: TinybirdQueryRequest["pipe"],
-    ) {
-      const override = yield* orgTinybirdSettings.resolveRuntimeConfig(tenant.orgId).pipe(
-        Effect.catchAll((error) => Effect.fail(toTinybirdQueryError(pipe, error))),
-      )
+      const resolveClient = Effect.fn("TinybirdService.resolveClient")(function* (
+        tenant: TenantContext,
+        pipe: TinybirdQueryRequest["pipe"],
+      ) {
+      const override = yield* orgTinybirdSettings
+        .resolveRuntimeConfig(tenant.orgId)
+        .pipe(Effect.mapError((error) => toTinybirdQueryError(pipe, error)))
 
       if (Option.isSome(override)) {
         return getCachedOrCreateClient(tenant.orgId, override.value.host, override.value.token)
@@ -159,17 +249,19 @@ export class TinybirdService extends Effect.Service<TinybirdService>()("Tinybird
       pipe: TPipe,
       tenant: TenantContext,
       params: TParams,
-      execute: (params: TParams & { org_id: OrgId }) => Promise<{ data: TRow[] }>,
+      execute: (
+        params: TParams & { org_id: OrgId },
+      ) => PromiseLike<{ data: ReadonlyArray<TRow> }>,
     ) {
       const result = yield* Effect.tryPromise({
-        try: () =>
+        try: async (_signal) =>
           execute({
             ...params,
             org_id: tenant.orgId,
           }),
         catch: (error) => toTinybirdQueryError(pipe, error),
       })
-      return result.data
+      return result.data as ReadonlyArray<TRow>
     })
 
     const query = Effect.fn("TinybirdService.query")(function* (
@@ -177,9 +269,16 @@ export class TinybirdService extends Effect.Service<TinybirdService>()("Tinybird
       payload: TinybirdQueryRequest,
     ) {
       const client = yield* resolveClient(tenant, payload.pipe)
-      const pipeAccessor = (client as unknown as Record<string, { query: (params?: Record<string, unknown>) => Promise<unknown> }>)[
-        payload.pipe
-      ]
+      const pipeAccessor = (
+        client as unknown as Record<
+          string,
+          {
+            readonly query: (
+              params?: Record<string, unknown>,
+            ) => Promise<{ data?: ReadonlyArray<unknown> }>
+          }
+        >
+      )[payload.pipe]
       const queryFunction = pipeAccessor?.query
 
       if (!queryFunction) {
@@ -189,18 +288,18 @@ export class TinybirdService extends Effect.Service<TinybirdService>()("Tinybird
         })
       }
 
-      const result = (yield* Effect.tryPromise({
-        try: () =>
+      const result = yield* Effect.tryPromise({
+        try: async (_signal) =>
           queryFunction({
             ...(payload.params ?? {}),
             org_id: tenant.orgId,
           }),
         catch: (error) => toTinybirdQueryError(payload.pipe, error),
-      })) as { data?: unknown[] }
+      })
 
-      return {
-        data: result.data ?? [],
-      }
+      return new TinybirdQueryResponse({
+        data: Array.from(result.data ?? []),
+      })
     })
 
     const customTracesTimeseriesQuery = Effect.fn("TinybirdService.customTracesTimeseriesQuery")(function* (
@@ -331,9 +430,21 @@ export class TinybirdService extends Effect.Service<TinybirdService>()("Tinybird
       metricTimeSeriesGaugeQuery,
       metricTimeSeriesHistogramQuery,
       metricTimeSeriesExpHistogramQuery,
-    }
+    } satisfies TinybirdServiceShape
   }),
-}) {}
+}) {
+  static readonly layer = Layer.effect(this, this.make).pipe(
+    Layer.provide(OrgTinybirdSettingsService.layer),
+    Layer.provide(Env.layer),
+  )
+  static readonly Live = this.layer
+  static readonly Default = this.layer
+
+  static readonly query = (
+    tenant: TenantContext,
+    payload: TinybirdQueryRequest,
+  ) => this.use((service) => service.query(tenant, payload))
+}
 
 export const __testables = {
   setClientFactory: (factory: typeof createClient) => {

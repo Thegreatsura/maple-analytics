@@ -29,7 +29,7 @@ const dashboardsSearchSchema = Schema.Struct({
 
 export const Route = createFileRoute("/dashboards")({
   component: DashboardsPage,
-  validateSearch: Schema.standardSchemaV1(dashboardsSearchSchema),
+  validateSearch: Schema.toStandardSchemaV1(dashboardsSearchSchema),
 })
 
 function DashboardsPage() {

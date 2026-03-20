@@ -1,4 +1,4 @@
-import { Result, useAtomValue } from "@effect-atom/atom-react"
+import { Result, useAtomValue } from "@/lib/effect-atom"
 import { useEffect, useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
 import { XmarkIcon, MagnifierIcon } from "@/components/icons"

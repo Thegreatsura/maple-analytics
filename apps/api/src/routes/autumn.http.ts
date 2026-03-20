@@ -1,21 +1,22 @@
-import { HttpLayerRouter, HttpServerRequest, HttpServerResponse } from "@effect/platform"
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { Effect, Option, Redacted } from "effect"
 import { autumnHandler } from "autumn-js/backend"
 import { Env } from "../services/Env"
 import { AuthService } from "../services/AuthService"
 
-export const AutumnRouter = HttpLayerRouter.use((router) =>
+export const AutumnRouter = HttpRouter.use((router) =>
   Effect.gen(function* () {
     const env = yield* Env
+    const authService = yield* AuthService
     const secretKey = Option.match(env.AUTUMN_SECRET_KEY, {
       onNone: () => undefined,
-      onSome: Redacted.value,
+      onSome: (value) => Redacted.value(value),
     })
     if (!secretKey) return
 
     const handle = (req: HttpServerRequest.HttpServerRequest) =>
       Effect.gen(function* () {
-        const tenant = yield* AuthService.resolveTenant(
+        const tenant = yield* authService.resolveTenant(
           req.headers as Record<string, string>,
         )
 

@@ -10,7 +10,7 @@ import {
   UnauthorizedError,
   UserId,
 } from "@maple/domain/http"
-import { Effect, Option, Redacted, Schema } from "effect"
+import { Effect, Layer, Option, Redacted, Schema, ServiceMap } from "effect"
 import { Env } from "./Env"
 
 export interface TenantContext {
@@ -18,6 +18,14 @@ export interface TenantContext {
   readonly userId: UserId
   readonly roles: readonly RoleName[]
   readonly authMode: AuthMode
+}
+
+export interface AuthServiceShape {
+  readonly resolveTenant: (headers: HeaderRecord) => Effect.Effect<TenantContext, UnauthorizedError>
+  readonly resolveMcpTenant: (headers: HeaderRecord) => Effect.Effect<TenantContext, UnauthorizedError>
+  readonly loginSelfHosted: (
+    password: string,
+  ) => Effect.Effect<SelfHostedLoginResponse, SelfHostedAuthDisabledError | SelfHostedInvalidPasswordError>
 }
 
 type HeaderRecord = Record<string, string | undefined>
@@ -254,7 +262,7 @@ const requireSecret = (
   label: string,
 ): Effect.Effect<string, never> =>
   Option.match(option, {
-    onNone: () => Effect.dieMessage(`${label} is required`),
+    onNone: () => Effect.die(new Error(`${label} is required`)),
     onSome: (value) => Effect.succeed(Redacted.value(value)),
   })
 
@@ -450,10 +458,8 @@ export const makeResolveMcpTenant = (
   authenticateClerkRequest = makeClerkAuthenticateRequest(env),
 ) => makeResolveTenant(env, authenticateClerkRequest, "api_key")
 
-export class AuthService extends Effect.Service<AuthService>()("AuthService", {
-  accessors: true,
-  dependencies: [Env.Default],
-  effect: Effect.gen(function* () {
+export class AuthService extends ServiceMap.Service<AuthService, AuthServiceShape>()("AuthService", {
+  make: Effect.gen(function* () {
     const env = yield* Env
     const resolveTenant = makeResolveTenant(env)
     const resolveMcpTenant = makeResolveMcpTenant(env)
@@ -465,4 +471,6 @@ export class AuthService extends Effect.Service<AuthService>()("AuthService", {
       loginSelfHosted,
     }
   }),
-}) {}
+}) {
+  static readonly layer = Layer.effect(this, this.make).pipe(Layer.provide(Env.layer))
+}

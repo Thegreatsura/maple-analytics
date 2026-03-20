@@ -1,6 +1,6 @@
 import {
   type QueryEngineExecuteRequest,
-  type QueryEngineExecuteResponse,
+  QueryEngineExecuteResponse,
   type QuerySpec,
   type TimeseriesPoint,
 } from "@maple/domain"
@@ -9,9 +9,9 @@ import {
   QueryEngineValidationError,
   TinybirdQueryError,
 } from "@maple/domain/http"
-import { Effect } from "effect"
+import { Effect, Layer, ServiceMap } from "effect"
 import type { TenantContext } from "./AuthService"
-import { TinybirdService } from "./TinybirdService"
+import { TinybirdService, type TinybirdServiceShape } from "./TinybirdService"
 
 interface TimeRangeBounds {
   readonly startMs: number
@@ -33,6 +33,13 @@ interface MetricTimeseriesRow {
   readonly maxValue: number
   readonly sumValue: number
   readonly dataPointCount: number
+}
+
+export interface QueryEngineServiceShape {
+  readonly execute: (
+    tenant: TenantContext,
+    request: QueryEngineExecuteRequest,
+  ) => Effect.Effect<QueryEngineExecuteResponse, QueryEngineValidationError | QueryEngineExecutionError>
 }
 
 const MAX_RANGE_SECONDS = 60 * 60 * 24 * 31
@@ -289,7 +296,7 @@ const mapTinybirdError = <A, R>(
   )
 
 type QueryEngineTinybird = Pick<
-  TinybirdService,
+  TinybirdServiceShape,
   | "customTracesTimeseriesQuery"
   | "customLogsTimeseriesQuery"
   | "metricTimeSeriesSumQuery"
@@ -358,13 +365,13 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
       } as const
       const field = fieldMap[request.query.metric]
 
-      return {
+      return new QueryEngineExecuteResponse({
         result: {
           kind: "timeseries",
           source: "traces",
           data: groupTimeSeriesRows(result, (row) => Number(row[field]), fillOptions),
         },
-      }
+      })
     }
 
     if (request.query.source === "logs" && request.query.kind === "timeseries") {
@@ -381,13 +388,13 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
         "Failed to execute logs timeseries query",
       )
 
-      return {
+      return new QueryEngineExecuteResponse({
         result: {
           kind: "timeseries",
           source: "logs",
           data: groupTimeSeriesRows(result, (row) => Number(row.count), fillOptions),
         },
-      }
+      })
     }
 
     if (request.query.source === "metrics" && request.query.kind === "timeseries") {
@@ -434,13 +441,13 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
             fillOptions,
           )
 
-      return {
+      return new QueryEngineExecuteResponse({
         result: {
           kind: "timeseries",
           source: "metrics",
           data,
         },
-      }
+      })
     }
 
     if (request.query.source === "traces" && request.query.kind === "breakdown") {
@@ -480,7 +487,7 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
       } as const
       const field = fieldMap[request.query.metric]
 
-      return {
+      return new QueryEngineExecuteResponse({
         result: {
           kind: "breakdown",
           source: "traces",
@@ -489,7 +496,7 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
             value: Number(row[field]),
           })),
         },
-      }
+      })
     }
 
     if (request.query.source === "logs" && request.query.kind === "breakdown") {
@@ -506,7 +513,7 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
         "Failed to execute logs breakdown query",
       )
 
-      return {
+      return new QueryEngineExecuteResponse({
         result: {
           kind: "breakdown",
           source: "logs",
@@ -515,7 +522,7 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
             value: Number(row.count),
           })),
         },
-      }
+      })
     }
 
     if (request.query.source === "metrics" && request.query.kind === "breakdown") {
@@ -537,7 +544,7 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
       } as const
       const valueField = valueFieldMap[request.query.metric]
 
-      return {
+      return new QueryEngineExecuteResponse({
         result: {
           kind: "breakdown",
           source: "metrics",
@@ -546,7 +553,7 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
             value: Number(row[valueField]),
           })),
         },
-      }
+      })
     }
 
     return yield* new QueryEngineValidationError({
@@ -555,10 +562,8 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
     })
   })
 
-export class QueryEngineService extends Effect.Service<QueryEngineService>()("QueryEngineService", {
-  accessors: true,
-  dependencies: [TinybirdService.Default],
-  effect: Effect.gen(function* () {
+export class QueryEngineService extends ServiceMap.Service<QueryEngineService, QueryEngineServiceShape>()("QueryEngineService", {
+  make: Effect.gen(function* () {
     const tinybird = yield* TinybirdService
     const execute = makeQueryEngineExecute(tinybird)
 
@@ -566,4 +571,6 @@ export class QueryEngineService extends Effect.Service<QueryEngineService>()("Qu
       execute,
     }
   }),
-}) {}
+}) {
+  static readonly layer = Layer.effect(this, this.make).pipe(Layer.provide(TinybirdService.layer))
+}

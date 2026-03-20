@@ -1,9 +1,5 @@
-import {
-  HttpApiScalar,
-  HttpLayerRouter,
-  HttpMiddleware,
-  HttpServerResponse,
-} from "@effect/platform";
+import { HttpApiScalar } from "effect/unstable/httpapi";
+import { HttpMiddleware, HttpRouter, HttpServerResponse } from "effect/unstable/http";
 import { BunHttpServer, BunRuntime } from "@effect/platform-bun";
 import { MapleApi } from "@maple/domain/http";
 import { Config, Layer } from "effect";
@@ -23,17 +19,16 @@ import { TinybirdService } from "./services/TinybirdService";
 import { AuthService } from "./services/AuthService";
 import { TracerLive } from "./services/Telemetry";
 
-const HealthRouter = HttpLayerRouter.use((router) =>
+const HealthRouter = HttpRouter.use((router) =>
   router.add("GET", "/health", HttpServerResponse.text("OK")),
 );
 
 // Return 405 for GET /mcp so MCP Streamable HTTP clients skip SSE gracefully
-const McpGetFallback = HttpLayerRouter.use((router) =>
+const McpGetFallback = HttpRouter.use((router) =>
   router.add("GET", "/mcp", HttpServerResponse.empty({ status: 405 })),
 );
 
-const DocsRoute = HttpApiScalar.layerHttpLayerRouter({
-  api: MapleApi,
+const DocsRoute = HttpApiScalar.layer(MapleApi, {
   path: "/docs",
 });
 
@@ -45,8 +40,8 @@ const AllRoutes = Layer.mergeAll(
   AutumnRouter,
   McpLive,
 ).pipe(
-  Layer.provideMerge(
-    HttpLayerRouter.cors({
+  Layer.provide(
+    HttpRouter.cors({
       allowedOrigins: ["*"],
       allowedMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: ["*"],
@@ -56,26 +51,30 @@ const AllRoutes = Layer.mergeAll(
 );
 
 const MainLive = Layer.mergeAll(
-  Env.Default,
-  TinybirdService.Default,
-  QueryEngineService.Default,
-  AuthService.Default,
-  ApiKeysService.Live,
-  CloudflareLogpushService.Live,
-  DashboardPersistenceService.Live,
-  OrgIngestKeysService.Live,
-  OrgTinybirdSettingsService.Live,
-  ScrapeTargetsService.Live,
+  Env.layer,
+  TinybirdService.layer,
+  QueryEngineService.layer,
+  AuthService.layer,
+  ApiKeysService.layer,
+  CloudflareLogpushService.layer,
+  DashboardPersistenceService.layer,
+  OrgIngestKeysService.layer,
+  OrgTinybirdSettingsService.layer,
+  ScrapeTargetsService.layer,
 );
 
-const app = HttpLayerRouter.serve(AllRoutes).pipe(
-  HttpMiddleware.withTracerDisabledWhen(
-    (request) => request.url === "/health" || request.method === "OPTIONS",
+const app = HttpRouter.serve(AllRoutes).pipe(
+  Layer.provide(
+    Layer.succeed(
+      HttpMiddleware.TracerDisabledWhen,
+      (request: { url: string; method: string }) =>
+        request.url === "/health" || request.method === "OPTIONS",
+    ),
   ),
-  Layer.provideMerge(MainLive),
+  Layer.provide(MainLive),
   Layer.provide(TracerLive),
-  Layer.provide(AuthorizationLive.pipe(Layer.provideMerge(Env.Default))),
-  Layer.provideMerge(
+  Layer.provide(AuthorizationLive),
+  Layer.provide(
     BunHttpServer.layerConfig(
       Config.all({
         port: Config.number("PORT").pipe(Config.withDefault(3472)),
@@ -85,4 +84,4 @@ const app = HttpLayerRouter.serve(AllRoutes).pipe(
   ),
 );
 
-BunRuntime.runMain(Layer.launch(app));
+BunRuntime.runMain(app.pipe(Layer.launch as never));

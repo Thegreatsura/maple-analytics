@@ -17,7 +17,7 @@ const SignInSearch = Schema.Struct({
 
 export const Route = createFileRoute("/sign-in")({
   component: SignInPage,
-  validateSearch: Schema.standardSchemaV1(SignInSearch),
+  validateSearch: Schema.toStandardSchemaV1(SignInSearch),
 })
 
 export const redirectToDashboard = () => {

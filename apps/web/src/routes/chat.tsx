@@ -8,7 +8,7 @@ const ChatSearch = Schema.Struct({
 
 export const Route = createFileRoute("/chat")({
   component: ChatRoute,
-  validateSearch: Schema.standardSchemaV1(ChatSearch),
+  validateSearch: Schema.toStandardSchemaV1(ChatSearch),
 })
 
 function ChatRoute() {

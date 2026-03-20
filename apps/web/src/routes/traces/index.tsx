@@ -1,9 +1,9 @@
 import * as React from "react"
-import { Result } from "@effect-atom/atom-react"
+import { Result } from "@/lib/effect-atom"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { Schema } from "effect"
 
-import { OptionalStringArrayParam } from "@/lib/search-params"
+import { BooleanFromStringParam, OptionalStringArrayParam } from "@/lib/search-params"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { TracesTable } from "@/components/traces/traces-table"
 import { TracesFilterSidebar } from "@/components/traces/traces-filter-sidebar"
@@ -11,7 +11,7 @@ import { AdvancedFilterDialog } from "@/components/traces/advanced-filter-dialog
 import { MagnifierIcon, XmarkIcon } from "@/components/icons"
 import { Button } from "@maple/ui/components/ui/button"
 import { useEffectiveTimeRange } from "@/hooks/use-effective-time-range"
-import { useAtomValue } from "@effect-atom/atom-react"
+import { useAtomValue } from "@/lib/effect-atom"
 import { applyWhereClause } from "@/lib/traces/advanced-filter-sync"
 import {
   getTracesFacetsResultAtom,
@@ -24,21 +24,21 @@ import { applyTimeRangeSearch } from "@/components/time-range-picker/search"
 import { PageRefreshProvider } from "@/components/time-range-picker/page-refresh-context"
 import { TimeRangeHeaderControls } from "@/components/time-range-picker/time-range-header-controls"
 
-const ContainsMatchMode = Schema.optional(Schema.Literal("contains"))
+const ContainsMatchMode = Schema.optional(Schema.Literals(["contains"]))
 
 const tracesSearchSchema = Schema.Struct({
   services: OptionalStringArrayParam,
   spanNames: OptionalStringArrayParam,
-  hasError: Schema.optional(Schema.Union(Schema.Boolean, Schema.BooleanFromString)),
-  minDurationMs: Schema.optional(Schema.Union(Schema.Number, Schema.NumberFromString)),
-  maxDurationMs: Schema.optional(Schema.Union(Schema.Number, Schema.NumberFromString)),
+  hasError: Schema.optional(Schema.Union([Schema.Boolean, BooleanFromStringParam])),
+  minDurationMs: Schema.optional(Schema.Union([Schema.Number, Schema.NumberFromString])),
+  maxDurationMs: Schema.optional(Schema.Union([Schema.Number, Schema.NumberFromString])),
   httpMethods: OptionalStringArrayParam,
   httpStatusCodes: OptionalStringArrayParam,
   deploymentEnvs: OptionalStringArrayParam,
   startTime: Schema.optional(Schema.String),
   endTime: Schema.optional(Schema.String),
   timePreset: Schema.optional(Schema.String),
-  rootOnly: Schema.optional(Schema.Union(Schema.Boolean, Schema.BooleanFromString)),
+  rootOnly: Schema.optional(Schema.Union([Schema.Boolean, BooleanFromStringParam])),
   whereClause: Schema.optional(Schema.String),
   attributeKey: Schema.optional(Schema.String),
   attributeValue: Schema.optional(Schema.String),
@@ -55,7 +55,7 @@ export type TracesSearchParams = Schema.Schema.Type<typeof tracesSearchSchema>
 
 export const Route = createFileRoute("/traces/")({
   component: TracesPage,
-  validateSearch: Schema.standardSchemaV1(tracesSearchSchema),
+  validateSearch: Schema.toStandardSchemaV1(tracesSearchSchema),
 })
 
 export function TracesPage() {

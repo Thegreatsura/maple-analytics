@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { Cause, Effect, Exit, Option, Schema } from "effect"
+import { Effect, Exit, Option, Schema } from "effect"
 import { OrgId, UserId, type QueryEngineExecuteRequest } from "@maple/domain"
 import { makeQueryEngineExecute } from "./QueryEngineService"
 import type { TenantContext } from "./AuthService"
@@ -37,7 +37,7 @@ function makeTinybirdStub(overrides: Partial<Parameters<typeof makeQueryEngineEx
 
 describe("makeQueryEngineExecute", () => {
   const getFailure = <A, E>(exit: Exit.Exit<A, E>): E | undefined =>
-    Exit.isFailure(exit) ? Option.getOrUndefined(Cause.failureOption(exit.cause)) : undefined
+    Option.getOrUndefined(Exit.findErrorOption(exit))
 
   it("fills missing buckets while preserving existing traces values", async () => {
     const execute = makeQueryEngineExecute(

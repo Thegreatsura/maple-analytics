@@ -1,12 +1,9 @@
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "@effect/platform"
+import { HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 import { Schema } from "effect"
 import { DashboardId, IsoDateTimeString } from "../primitives"
 import { Authorization } from "./current-tenant"
 
-
-
-
-const TimeRangeSchema = Schema.Union(
+const TimeRangeSchema = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("relative"),
     value: Schema.String,
@@ -16,11 +13,7 @@ const TimeRangeSchema = Schema.Union(
     startTime: IsoDateTimeString,
     endTime: IsoDateTimeString,
   }),
-)
-
-const DashboardPath = Schema.Struct({
-  dashboardId: DashboardId,
-})
+])
 
 export class DashboardDocument extends Schema.Class<DashboardDocument>("DashboardDocument")({
   id: DashboardId,
@@ -46,52 +39,57 @@ export class DashboardDeleteResponse extends Schema.Class<DashboardDeleteRespons
   id: DashboardId,
 }) {}
 
-export class DashboardPersistenceError extends Schema.TaggedError<DashboardPersistenceError>()(
+export class DashboardPersistenceError extends Schema.TaggedErrorClass<DashboardPersistenceError>()(
   "DashboardPersistenceError",
   {
     message: Schema.String,
   },
-  HttpApiSchema.annotations({ status: 503 }),
+  { httpApiStatus: 503 },
 ) {}
 
-export class DashboardNotFoundError extends Schema.TaggedError<DashboardNotFoundError>()(
+export class DashboardNotFoundError extends Schema.TaggedErrorClass<DashboardNotFoundError>()(
   "DashboardNotFoundError",
   {
     dashboardId: DashboardId,
     message: Schema.String,
   },
-  HttpApiSchema.annotations({ status: 404 }),
+  { httpApiStatus: 404 },
 ) {}
 
-export class DashboardValidationError extends Schema.TaggedError<DashboardValidationError>()(
+export class DashboardValidationError extends Schema.TaggedErrorClass<DashboardValidationError>()(
   "DashboardValidationError",
   {
     message: Schema.String,
     details: Schema.Array(Schema.String),
   },
-  HttpApiSchema.annotations({ status: 400 }),
+  { httpApiStatus: 400 },
 ) {}
 
 export class DashboardsApiGroup extends HttpApiGroup.make("dashboards")
   .add(
-    HttpApiEndpoint.get("list", "/")
-      .addSuccess(DashboardsListResponse)
-      .addError(DashboardPersistenceError),
+    HttpApiEndpoint.get("list", "/", {
+      success: DashboardsListResponse,
+      error: DashboardPersistenceError,
+    }),
   )
   .add(
-    HttpApiEndpoint.put("upsert", "/:dashboardId")
-      .setPath(DashboardPath)
-      .setPayload(DashboardUpsertRequest)
-      .addSuccess(DashboardDocument)
-      .addError(DashboardValidationError)
-      .addError(DashboardPersistenceError),
+    HttpApiEndpoint.put("upsert", "/:dashboardId", {
+      params: {
+        dashboardId: DashboardId,
+      },
+      payload: DashboardUpsertRequest,
+      success: DashboardDocument,
+      error: [DashboardValidationError, DashboardPersistenceError],
+    }),
   )
   .add(
-    HttpApiEndpoint.del("delete", "/:dashboardId")
-      .setPath(DashboardPath)
-      .addSuccess(DashboardDeleteResponse)
-      .addError(DashboardNotFoundError)
-      .addError(DashboardPersistenceError),
+    HttpApiEndpoint.delete("delete", "/:dashboardId", {
+      params: {
+        dashboardId: DashboardId,
+      },
+      success: DashboardDeleteResponse,
+      error: [DashboardNotFoundError, DashboardPersistenceError],
+    }),
   )
   .prefix("/api/dashboards")
   .middleware(Authorization) {}

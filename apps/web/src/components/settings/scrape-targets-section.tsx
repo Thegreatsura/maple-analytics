@@ -1,6 +1,8 @@
-import { Result, useAtomRefresh, useAtomSet, useAtomValue } from "@effect-atom/atom-react"
+import { Result, useAtomRefresh, useAtomSet, useAtomValue } from "@/lib/effect-atom"
 import {
+  CreateScrapeTargetRequest,
   ScrapeIntervalSeconds,
+  UpdateScrapeTargetRequest,
 } from "@maple/domain/http"
 import type {
   ScrapeAuthType,
@@ -112,7 +114,7 @@ export function ScrapeTargetsSection() {
 
   async function handleProbe(target: ScrapeTarget) {
     setProbingId(target.id)
-    const result = await probeMutation({ path: { targetId: target.id } })
+    const result = await probeMutation({ params: { targetId: target.id } })
     if (Exit.isSuccess(result)) {
       refreshTargets()
       if (result.value.success) {
@@ -191,15 +193,15 @@ export function ScrapeTargetsSection() {
 
     if (editingTarget) {
       const result = await updateMutation({
-        path: { targetId: editingTarget.id },
-        payload: {
+        params: { targetId: editingTarget.id },
+        payload: new UpdateScrapeTargetRequest({
           name: formName.trim(),
           url: formUrl.trim(),
           scrapeIntervalSeconds: parsedInterval,
           serviceName: formServiceName.trim() || null,
           authType: formAuthType,
           ...(authCredentials !== null ? { authCredentials } : {}),
-        },
+        }),
       })
       if (Exit.isSuccess(result)) {
         toast.success("Scrape target updated")
@@ -210,14 +212,14 @@ export function ScrapeTargetsSection() {
       }
     } else {
       const result = await createMutation({
-        payload: {
+        payload: new CreateScrapeTargetRequest({
           name: formName.trim(),
           url: formUrl.trim(),
           scrapeIntervalSeconds: parsedInterval,
           serviceName: formServiceName.trim() || null,
           authType: formAuthType,
           ...(authCredentials !== null ? { authCredentials } : {}),
-        },
+        }),
       })
       if (Exit.isSuccess(result)) {
         toast.success("Scrape target created")
@@ -232,7 +234,7 @@ export function ScrapeTargetsSection() {
 
   async function handleDelete(targetId: ScrapeTargetId) {
     setDeleteConfirmTarget(null)
-    const result = await deleteMutation({ path: { targetId } })
+    const result = await deleteMutation({ params: { targetId } })
     if (Exit.isSuccess(result)) {
       toast.success("Scrape target deleted")
       refreshTargets()
@@ -244,8 +246,10 @@ export function ScrapeTargetsSection() {
   async function handleToggleEnabled(target: ScrapeTarget) {
     setTogglingId(target.id)
     const result = await updateMutation({
-      path: { targetId: target.id },
-      payload: { enabled: !target.enabled },
+      params: { targetId: target.id },
+      payload: new UpdateScrapeTargetRequest({
+        enabled: !target.enabled,
+      }),
     })
     if (Exit.isSuccess(result)) {
       refreshTargets()

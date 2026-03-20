@@ -7,15 +7,12 @@ import { ApiKeysSection } from "@/components/settings/api-keys-section"
 import { IngestionSection } from "@/components/settings/ingestion-section"
 
 const DeveloperSearch = Schema.Struct({
-  tab: Schema.optionalWith(
-    Schema.Literal("ingestion", "api-keys"),
-    { default: () => "ingestion" as const },
-  ),
+  tab: Schema.optional(Schema.Literals(["ingestion", "api-keys"])),
 })
 
 export const Route = createFileRoute("/developer")({
   component: DeveloperPage,
-  validateSearch: Schema.standardSchemaV1(DeveloperSearch),
+  validateSearch: Schema.toStandardSchemaV1(DeveloperSearch),
 })
 
 function DeveloperPage() {
@@ -29,7 +26,7 @@ function DeveloperPage() {
       description="Manage API keys and ingestion credentials."
     >
       <Tabs
-        value={search.tab}
+        value={search.tab ?? "ingestion"}
         onValueChange={(tab) =>
           navigate({ search: { tab: tab as "ingestion" | "api-keys" } })
         }

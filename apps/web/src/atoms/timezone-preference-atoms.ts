@@ -1,4 +1,4 @@
-import { Atom } from "@effect-atom/atom-react"
+import { Atom } from "@/lib/effect-atom"
 import { Schema } from "effect"
 import { localStorageRuntime } from "@/lib/services/common/storage-runtime"
 

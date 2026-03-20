@@ -11,7 +11,7 @@ const OrgRequiredSearch = Schema.Struct({
 
 export const Route = createFileRoute("/org-required")({
   component: OrgRequiredPage,
-  validateSearch: Schema.standardSchemaV1(OrgRequiredSearch),
+  validateSearch: Schema.toStandardSchemaV1(OrgRequiredSearch),
 })
 
 function OrgRequiredPage() {

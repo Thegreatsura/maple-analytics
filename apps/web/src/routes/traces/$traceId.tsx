@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, useRouterState } from "@tanstack/react-router"
-import { Result, useAtomValue } from "@effect-atom/atom-react"
+import { Result, useAtomValue } from "@/lib/effect-atom"
 import { Schema } from "effect"
 import { toast } from "sonner"
 
@@ -34,7 +34,7 @@ function buildBackToTracesHref(searchStr: string): string {
 
 export const Route = createFileRoute("/traces/$traceId")({
   component: TraceDetailPage,
-  validateSearch: Schema.standardSchemaV1(TraceDetailSearchSchema),
+  validateSearch: Schema.toStandardSchemaV1(TraceDetailSearchSchema),
 })
 
 function TraceDetailPage() {

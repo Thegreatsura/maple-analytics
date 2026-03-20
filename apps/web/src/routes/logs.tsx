@@ -23,7 +23,7 @@ export type LogsSearchParams = Schema.Schema.Type<typeof logsSearchSchema>
 
 export const Route = createFileRoute("/logs")({
   component: LogsPage,
-  validateSearch: Schema.standardSchemaV1(logsSearchSchema),
+  validateSearch: Schema.toStandardSchemaV1(logsSearchSchema),
 })
 
 export function LogsPage() {

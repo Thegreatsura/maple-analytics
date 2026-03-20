@@ -1,4 +1,4 @@
-import { HttpServerRequest } from "@effect/platform"
+import { HttpServerRequest } from "effect/unstable/http"
 import { CurrentTenant } from "@maple/domain/http"
 import { Effect, Layer } from "effect"
 import { makeResolveTenant } from "./AuthService"
@@ -11,12 +11,16 @@ export const AuthorizationLive = Layer.effect(
     const resolveTenant = makeResolveTenant(env)
 
     return CurrentTenant.Authorization.of({
-      bearer: (_bearerToken) =>
+      bearer: (httpEffect) =>
         Effect.gen(function* () {
           const request = yield* HttpServerRequest.HttpServerRequest
           const tenant = yield* resolveTenant(request.headers)
-          return new CurrentTenant.TenantSchema(tenant)
+          return yield* Effect.provideService(
+            httpEffect,
+            CurrentTenant.Context,
+            new CurrentTenant.TenantSchema(tenant),
+          )
         }),
     })
   }),
-)
+).pipe(Layer.provide(Env.layer))

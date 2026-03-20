@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
-import type { ConfigError } from "effect/ConfigError"
 import {
   Cause,
   ConfigProvider,
@@ -36,10 +35,10 @@ afterEach(() => {
 const getError = <A, E>(exit: Exit.Exit<A, E>): unknown => {
   if (!Exit.isFailure(exit)) return undefined
 
-  const failure = Option.getOrUndefined(Cause.failureOption(exit.cause))
+  const failure = Option.getOrUndefined(Exit.findErrorOption(exit))
   if (failure !== undefined) return failure
 
-  return Option.getOrUndefined(Cause.dieOption(exit.cause))
+  return Cause.squash(exit.cause)
 }
 
 const createTempDbUrl = () => {
@@ -54,28 +53,26 @@ const createTempDbUrl = () => {
 }
 
 const testConfigProvider = (url: string) =>
-  Layer.setConfigProvider(
-    ConfigProvider.fromMap(
-      new Map([
-        ["PORT", "3472"],
-        ["MCP_PORT", "3473"],
-        ["TINYBIRD_HOST", "https://api.tinybird.co"],
-        ["TINYBIRD_TOKEN", "test-token"],
-        ["MAPLE_DB_URL", url],
-        ["MAPLE_DB_AUTH_TOKEN", ""],
-        ["MAPLE_AUTH_MODE", "self_hosted"],
-        ["MAPLE_ROOT_PASSWORD", "test-root-password"],
-        ["MAPLE_DEFAULT_ORG_ID", "default"],
-        ["MAPLE_INGEST_KEY_ENCRYPTION_KEY", Buffer.alloc(32, 1).toString("base64")],
-        ["MAPLE_INGEST_KEY_LOOKUP_HMAC_KEY", "maple-test-lookup-secret"],
-        ["CLERK_SECRET_KEY", ""],
-        ["CLERK_PUBLISHABLE_KEY", ""],
-        ["CLERK_JWT_KEY", ""],
-      ]),
-    ),
+  ConfigProvider.layer(
+    ConfigProvider.fromUnknown({
+      PORT: "3472",
+      MCP_PORT: "3473",
+      TINYBIRD_HOST: "https://api.tinybird.co",
+      TINYBIRD_TOKEN: "test-token",
+      MAPLE_DB_URL: url,
+      MAPLE_DB_AUTH_TOKEN: "",
+      MAPLE_AUTH_MODE: "self_hosted",
+      MAPLE_ROOT_PASSWORD: "test-root-password",
+      MAPLE_DEFAULT_ORG_ID: "default",
+      MAPLE_INGEST_KEY_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString("base64"),
+      MAPLE_INGEST_KEY_LOOKUP_HMAC_KEY: "maple-test-lookup-secret",
+      CLERK_SECRET_KEY: "",
+      CLERK_PUBLISHABLE_KEY: "",
+      CLERK_JWT_KEY: "",
+    }),
   )
 
-const makeLayer = (url: string): Layer.Layer<DashboardPersistenceService, ConfigError> =>
+const makeLayer = (url: string) =>
   DashboardPersistenceService.Live.pipe(
     Layer.provide(Env.Default),
     Layer.provide(testConfigProvider(url)),
@@ -122,9 +119,9 @@ describe("DashboardPersistenceService", () => {
 
     const dashboards = await Effect.runPromise(program)
 
-    expect(dashboards).toHaveLength(1)
-    expect(dashboards[0].id).toBe(asDashboardId("a-1"))
-    expect(dashboards[0].name).toBe("Org A")
+    expect(dashboards.dashboards).toHaveLength(1)
+    expect(dashboards.dashboards[0]!.id).toBe(asDashboardId("a-1"))
+    expect(dashboards.dashboards[0]!.name).toBe("Org A")
   })
 
   it("upserts by replacing existing dashboard rows for the same org/id", async () => {
@@ -150,9 +147,9 @@ describe("DashboardPersistenceService", () => {
 
     const dashboards = await Effect.runPromise(program)
 
-    expect(dashboards).toHaveLength(1)
-    expect(dashboards[0].name).toBe("Second Name")
-    expect(dashboards[0].updatedAt).toBe(updated.updatedAt)
+    expect(dashboards.dashboards).toHaveLength(1)
+    expect(dashboards.dashboards[0]!.name).toBe("Second Name")
+    expect(dashboards.dashboards[0]!.updatedAt).toBe(updated.updatedAt)
   })
 
   it("returns DashboardNotFoundError when deleting a missing dashboard", async () => {
@@ -187,6 +184,6 @@ describe("DashboardPersistenceService", () => {
       return
     }
 
-    expect(String(failure)).toContain("UnknownException")
+    expect(String(failure)).toContain("DatabaseError")
   })
 })

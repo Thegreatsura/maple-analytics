@@ -11,7 +11,7 @@ import {
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 
-import { Result } from "@effect-atom/atom-react"
+import { Result } from "@/lib/effect-atom"
 import { Link } from "@tanstack/react-router"
 
 import { cn } from "@maple/ui/utils"

@@ -1,4 +1,4 @@
-import { Atom } from "@effect-atom/atom-react"
+import { Atom } from "@/lib/effect-atom"
 import { Schema } from "effect"
 import { localStorageRuntime } from "@/lib/services/common/storage-runtime"
 
@@ -10,15 +10,19 @@ export const STEP_IDS = [
 ] as const
 
 export type StepId = (typeof STEP_IDS)[number]
+export interface QuickStartState {
+  completedSteps: Record<string, boolean>
+  dismissed: boolean
+  selectedFramework: string | null
+  activeStep: string
+}
 
 const QuickStartSchema = Schema.Struct({
-  completedSteps: Schema.Record({ key: Schema.String, value: Schema.Boolean }),
+  completedSteps: Schema.Record(Schema.String, Schema.Boolean),
   dismissed: Schema.Boolean,
   selectedFramework: Schema.NullOr(Schema.String),
   activeStep: Schema.String,
-})
-
-export type QuickStartState = typeof QuickStartSchema.Type
+}) as Schema.Codec<QuickStartState>
 
 const DEFAULT_STATE: QuickStartState = {
   completedSteps: {},

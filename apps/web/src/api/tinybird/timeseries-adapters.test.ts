@@ -8,12 +8,14 @@ import {
 import { getServiceApdexTimeSeries } from "@/api/tinybird/services"
 
 const customTracesTimeseriesMock = vi.fn()
+const metricTimeSeriesSumMock = vi.fn()
 const serviceApdexTimeseriesMock = vi.fn()
 
 vi.mock("@/lib/tinybird", () => ({
   getTinybird: () => ({
     query: {
       custom_traces_timeseries: customTracesTimeseriesMock,
+      metric_time_series_sum: metricTimeSeriesSumMock,
       service_apdex_time_series: serviceApdexTimeseriesMock,
     },
   }),
@@ -22,7 +24,9 @@ vi.mock("@/lib/tinybird", () => ({
 describe("timeseries adapters", () => {
   beforeEach(() => {
     customTracesTimeseriesMock.mockReset()
+    metricTimeSeriesSumMock.mockReset()
     serviceApdexTimeseriesMock.mockReset()
+    metricTimeSeriesSumMock.mockReturnValue(Effect.succeed({ data: [] }))
   })
 
   it("fills overview/detail buckets without flattening existing points", async () => {

@@ -1,6 +1,7 @@
-import { useAtomRefresh, useAtomSet } from "@effect-atom/atom-react"
+import { useAtomRefresh, useAtomSet } from "@/lib/effect-atom"
 import { useState } from "react"
 import { Exit } from "effect"
+import { CreateApiKeyRequest } from "@maple/domain/http"
 import { toast } from "sonner"
 
 import { Button } from "@maple/ui/components/ui/button"
@@ -51,10 +52,10 @@ export function CreateApiKeyDialog({
     if (!newName.trim()) return
     setIsCreating(true)
     const result = await createMutation({
-      payload: {
+      payload: new CreateApiKeyRequest({
         name: newName.trim(),
         description: newDescription.trim() || undefined,
-      },
+      }),
     })
     if (Exit.isSuccess(result)) {
       setNewSecret(result.value.secret)

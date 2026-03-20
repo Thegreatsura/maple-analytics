@@ -1,4 +1,4 @@
-import { HttpApiBuilder } from "@effect/platform"
+import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { CurrentTenant, MapleApi } from "@maple/domain/http"
 import { Effect } from "effect"
 import { ApiKeysService } from "../services/ApiKeysService"
@@ -27,10 +27,10 @@ export const HttpApiKeysLive = HttpApiBuilder.group(
             })
           }),
         )
-        .handle("revoke", ({ path }) =>
+        .handle("revoke", ({ params }) =>
           Effect.gen(function* () {
             const tenant = yield* CurrentTenant.Context
-            return yield* apiKeysService.revoke(tenant.orgId, path.keyId)
+            return yield* apiKeysService.revoke(tenant.orgId, params.keyId)
           }),
         )
     }),

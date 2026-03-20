@@ -1,4 +1,4 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient"
+import { FetchHttpClient } from "effect/unstable/http"
 import { Layer } from "effect"
 import { getMapleAuthHeaders } from "./auth-headers"
 

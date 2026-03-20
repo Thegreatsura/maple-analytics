@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
-import { Result } from "@effect-atom/atom-react"
+import { Result } from "@/lib/effect-atom"
 import { Schema } from "effect"
 
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
@@ -40,7 +40,7 @@ const dashboardSearchSchema = Schema.Struct({
 
 export const Route = createFileRoute("/")({
   component: DashboardPage,
-  validateSearch: Schema.standardSchemaV1(dashboardSearchSchema),
+  validateSearch: Schema.toStandardSchemaV1(dashboardSearchSchema),
 })
 
 interface OverviewChartConfig {

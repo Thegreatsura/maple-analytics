@@ -1,4 +1,4 @@
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "@effect/platform"
+import { HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 import { Schema } from "effect"
 import {
   IsoDateTimeString,
@@ -7,10 +7,6 @@ import {
   ScrapeTargetId,
 } from "../primitives"
 import { Authorization } from "./current-tenant"
-
-const ScrapeTargetPath = Schema.Struct({
-  targetId: ScrapeTargetId,
-})
 
 export class ScrapeTargetResponse extends Schema.Class<ScrapeTargetResponse>("ScrapeTargetResponse")({
   id: ScrapeTargetId,
@@ -74,77 +70,93 @@ export class ScrapeTargetProbeResponse extends Schema.Class<ScrapeTargetProbeRes
   lastScrapeError: Schema.NullOr(Schema.String),
 }) {}
 
-export class ScrapeTargetPersistenceError extends Schema.TaggedError<ScrapeTargetPersistenceError>()(
+export class ScrapeTargetPersistenceError extends Schema.TaggedErrorClass<ScrapeTargetPersistenceError>()(
   "ScrapeTargetPersistenceError",
   {
     message: Schema.String,
   },
-  HttpApiSchema.annotations({ status: 503 }),
+  { httpApiStatus: 503 },
 ) {}
 
-export class ScrapeTargetNotFoundError extends Schema.TaggedError<ScrapeTargetNotFoundError>()(
+export class ScrapeTargetNotFoundError extends Schema.TaggedErrorClass<ScrapeTargetNotFoundError>()(
   "ScrapeTargetNotFoundError",
   {
     targetId: ScrapeTargetId,
     message: Schema.String,
   },
-  HttpApiSchema.annotations({ status: 404 }),
+  { httpApiStatus: 404 },
 ) {}
 
-export class ScrapeTargetValidationError extends Schema.TaggedError<ScrapeTargetValidationError>()(
+export class ScrapeTargetValidationError extends Schema.TaggedErrorClass<ScrapeTargetValidationError>()(
   "ScrapeTargetValidationError",
   {
     message: Schema.String,
   },
-  HttpApiSchema.annotations({ status: 400 }),
+  { httpApiStatus: 400 },
 ) {}
 
-export class ScrapeTargetEncryptionError extends Schema.TaggedError<ScrapeTargetEncryptionError>()(
+export class ScrapeTargetEncryptionError extends Schema.TaggedErrorClass<ScrapeTargetEncryptionError>()(
   "ScrapeTargetEncryptionError",
   {
     message: Schema.String,
   },
-  HttpApiSchema.annotations({ status: 500 }),
+  { httpApiStatus: 500 },
 ) {}
 
 export class ScrapeTargetsApiGroup extends HttpApiGroup.make("scrapeTargets")
   .add(
-    HttpApiEndpoint.get("list", "/")
-      .addSuccess(ScrapeTargetsListResponse)
-      .addError(ScrapeTargetPersistenceError),
+    HttpApiEndpoint.get("list", "/", {
+      success: ScrapeTargetsListResponse,
+      error: ScrapeTargetPersistenceError,
+    }),
   )
   .add(
-    HttpApiEndpoint.post("create", "/")
-      .setPayload(CreateScrapeTargetRequest)
-      .addSuccess(ScrapeTargetResponse)
-      .addError(ScrapeTargetValidationError)
-      .addError(ScrapeTargetPersistenceError)
-      .addError(ScrapeTargetEncryptionError),
+    HttpApiEndpoint.post("create", "/", {
+      payload: CreateScrapeTargetRequest,
+      success: ScrapeTargetResponse,
+      error: [
+        ScrapeTargetValidationError,
+        ScrapeTargetPersistenceError,
+        ScrapeTargetEncryptionError,
+      ],
+    }),
   )
   .add(
-    HttpApiEndpoint.patch("update", "/:targetId")
-      .setPath(ScrapeTargetPath)
-      .setPayload(UpdateScrapeTargetRequest)
-      .addSuccess(ScrapeTargetResponse)
-      .addError(ScrapeTargetNotFoundError)
-      .addError(ScrapeTargetValidationError)
-      .addError(ScrapeTargetPersistenceError)
-      .addError(ScrapeTargetEncryptionError),
+    HttpApiEndpoint.patch("update", "/:targetId", {
+      params: {
+        targetId: ScrapeTargetId,
+      },
+      payload: UpdateScrapeTargetRequest,
+      success: ScrapeTargetResponse,
+      error: [
+        ScrapeTargetNotFoundError,
+        ScrapeTargetValidationError,
+        ScrapeTargetPersistenceError,
+        ScrapeTargetEncryptionError,
+      ],
+    }),
   )
   .add(
-    HttpApiEndpoint.del("delete", "/:targetId")
-      .setPath(ScrapeTargetPath)
-      .addSuccess(ScrapeTargetDeleteResponse)
-      .addError(ScrapeTargetNotFoundError)
-      .addError(ScrapeTargetPersistenceError),
+    HttpApiEndpoint.delete("delete", "/:targetId", {
+      params: {
+        targetId: ScrapeTargetId,
+      },
+      success: ScrapeTargetDeleteResponse,
+      error: [ScrapeTargetNotFoundError, ScrapeTargetPersistenceError],
+    }),
   )
   .add(
-    HttpApiEndpoint.post("probe", "/:targetId/probe")
-      .setPath(ScrapeTargetPath)
-      .addSuccess(ScrapeTargetProbeResponse)
-      .addError(ScrapeTargetNotFoundError)
-      .addError(ScrapeTargetPersistenceError)
-      .addError(ScrapeTargetEncryptionError),
+    HttpApiEndpoint.post("probe", "/:targetId/probe", {
+      params: {
+        targetId: ScrapeTargetId,
+      },
+      success: ScrapeTargetProbeResponse,
+      error: [
+        ScrapeTargetNotFoundError,
+        ScrapeTargetPersistenceError,
+        ScrapeTargetEncryptionError,
+      ],
+    }),
   )
   .prefix("/api/scrape-targets")
   .middleware(Authorization) {}

@@ -1,12 +1,12 @@
 import type { Effect } from "effect"
 import * as Schema from "effect/Schema"
 
-export class McpTenantError extends Schema.TaggedError<McpTenantError>()(
+export class McpTenantError extends Schema.TaggedErrorClass<McpTenantError>()(
   "McpTenantError",
   { message: Schema.String },
 ) {}
 
-export class McpQueryError extends Schema.TaggedError<McpQueryError>()(
+export class McpQueryError extends Schema.TaggedErrorClass<McpQueryError>()(
   "McpQueryError",
   { message: Schema.String, pipe: Schema.String },
 ) {}
@@ -19,7 +19,7 @@ export interface McpToolResult {
 }
 
 export interface McpToolRegistrar {
-  tool<TSchema extends Schema.Schema.AnyNoContext>(
+  tool<TSchema extends Schema.Top & { readonly DecodingServices: never }>(
     name: string,
     description: string,
     schema: TSchema,
@@ -28,13 +28,13 @@ export interface McpToolRegistrar {
 }
 
 export const requiredStringParam = (description: string) =>
-  Schema.String.annotations({ description })
+  Schema.String.annotate({ description })
 
 export const optionalStringParam = (description: string) =>
-  Schema.optional(Schema.String).annotations({ description })
+  Schema.optional(Schema.String).annotate({ description })
 
 export const optionalNumberParam = (description: string) =>
-  Schema.optional(Schema.Number).annotations({ description })
+  Schema.optional(Schema.Number).annotate({ description })
 
 export const optionalBooleanParam = (description: string) =>
-  Schema.optional(Schema.Boolean).annotations({ description })
+  Schema.optional(Schema.Boolean).annotate({ description })

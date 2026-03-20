@@ -1,4 +1,4 @@
-import { Result } from "@effect-atom/atom-react"
+import { Result } from "@/lib/effect-atom"
 import {
   FileIcon,
   PulseIcon,

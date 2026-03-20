@@ -1,15 +1,18 @@
 import { Schema } from "effect"
 
 const MapleId = (identifier: string, title: string) =>
-  Schema.NonEmptyTrimmedString.pipe(
+  Schema.String.check(
+    Schema.isMinLength(1),
+    Schema.isTrimmed(),
+  ).pipe(
     Schema.brand(identifier),
-    Schema.annotations({ identifier, title }),
+    Schema.annotate({ identifier, title }),
   )
 
 const MapleUuidId = (identifier: string, title: string) =>
-  Schema.UUID.pipe(
+  Schema.String.check(Schema.isUUID()).pipe(
     Schema.brand(identifier),
-    Schema.annotations({ identifier, title }),
+    Schema.annotate({ identifier, title }),
   )
 
 export const OrgId = MapleId("@maple/OrgId", "Org ID")
@@ -44,18 +47,20 @@ export type CloudflareLogpushConnectorId = Schema.Schema.Type<
   typeof CloudflareLogpushConnectorId
 >
 
-export const AuthMode = Schema.Literal("clerk", "self_hosted").annotations({
+export const AuthMode = Schema.Literals(["clerk", "self_hosted"]).annotate({
   identifier: "@maple/AuthMode",
   title: "Auth Mode",
 })
 export type AuthMode = Schema.Schema.Type<typeof AuthMode>
 
 export const IsoDateTimeString = Schema.String.pipe(
-  Schema.filter((value) => Number.isFinite(Date.parse(value)), {
-    message: () => "Expected an ISO date-time string",
-  }),
+  Schema.check(
+    Schema.makeFilter((value: string) => Number.isFinite(Date.parse(value)), {
+      description: "Expected an ISO date-time string",
+    }),
+  ),
   Schema.brand("@maple/IsoDateTimeString"),
-  Schema.annotations({
+  Schema.annotate({
     identifier: "@maple/IsoDateTimeString",
     title: "ISO Date-Time String",
   }),
@@ -63,11 +68,13 @@ export const IsoDateTimeString = Schema.String.pipe(
 export type IsoDateTimeString = Schema.Schema.Type<typeof IsoDateTimeString>
 
 export const ScrapeIntervalSeconds = Schema.Number.pipe(
-  Schema.int(),
-  Schema.greaterThanOrEqualTo(5),
-  Schema.lessThanOrEqualTo(300),
+  Schema.check(
+    Schema.isInt(),
+    Schema.isGreaterThanOrEqualTo(5),
+    Schema.isLessThanOrEqualTo(300),
+  ),
   Schema.brand("@maple/ScrapeIntervalSeconds"),
-  Schema.annotations({
+  Schema.annotate({
     identifier: "@maple/ScrapeIntervalSeconds",
     title: "Scrape Interval Seconds",
   }),
@@ -76,7 +83,7 @@ export type ScrapeIntervalSeconds = Schema.Schema.Type<
   typeof ScrapeIntervalSeconds
 >
 
-export const ScrapeAuthType = Schema.Literal("none", "bearer", "basic").annotations(
+export const ScrapeAuthType = Schema.Literals(["none", "bearer", "basic"]).annotate(
   {
     identifier: "@maple/ScrapeAuthType",
     title: "Scrape Auth Type",

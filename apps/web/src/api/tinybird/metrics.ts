@@ -12,18 +12,18 @@ import {
   runTinybirdQuery,
 } from "@/api/tinybird/effect-utils"
 
-const MetricTypeSchema = Schema.Literal(
+const MetricTypeSchema = Schema.Literals([
   "sum",
   "gauge",
   "histogram",
   "exponential_histogram",
-)
+])
 
 const ListMetricsInputSchema = Schema.Struct({
   limit: Schema.optional(
-    Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1), Schema.lessThanOrEqualTo(1000)),
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(1000)),
   ),
-  offset: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(0))),
+  offset: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   service: Schema.optional(Schema.String),
   metricType: Schema.optional(MetricTypeSchema),
   startTime: Schema.optional(TinybirdDateTimeString),
@@ -101,7 +101,7 @@ const GetMetricTimeSeriesInputSchema = Schema.Struct({
   startTime: Schema.optional(TinybirdDateTimeString),
   endTime: Schema.optional(TinybirdDateTimeString),
   bucketSeconds: Schema.optional(
-    Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1)),
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
   ),
 })
 

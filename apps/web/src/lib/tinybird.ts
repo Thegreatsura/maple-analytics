@@ -1,4 +1,4 @@
-import type { TinybirdPipe } from "@maple/domain"
+import { TinybirdQueryRequest, type TinybirdPipe } from "@maple/domain"
 import { Effect } from "effect"
 import { MapleApiAtomClient } from "./services/common/atom-client"
 import { setMapleAuthHeaders } from "./services/common/auth-headers"
@@ -111,18 +111,19 @@ type QueryResponse<T> = {
 
 export { setMapleAuthHeaders }
 
-const queryTinybirdEffect = Effect.fn("Tinybird.queryPipe")(function* <T>(
+const queryTinybirdEffect = <T>(
   pipe: TinybirdPipe,
   params?: Record<string, unknown>,
-) {
+) =>
+  Effect.gen(function* () {
     const client = yield* MapleApiAtomClient
     return (yield* client.tinybird.query({
-      payload: {
+      payload: new TinybirdQueryRequest({
         pipe,
         params,
-      },
+      }),
     })) as QueryResponse<T>
-})
+  })
 
 const queryTinybird = <T>(pipe: TinybirdPipe, params?: Record<string, unknown>) =>
   queryTinybirdEffect<T>(pipe, params)

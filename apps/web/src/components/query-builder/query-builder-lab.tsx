@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Result } from "@effect-atom/atom-react"
+import { Result } from "@/lib/effect-atom"
 import { PulseIcon, XmarkIcon, PlusIcon, MagnifierIcon } from "@/components/icons"
 
 import { Badge } from "@maple/ui/components/ui/badge"

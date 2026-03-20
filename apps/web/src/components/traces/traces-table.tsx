@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Result } from "@effect-atom/atom-react"
+import { Result } from "@/lib/effect-atom"
 import { Link, useNavigate } from "@tanstack/react-router"
 import {
   type ColumnDef,

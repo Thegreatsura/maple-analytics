@@ -1,9 +1,29 @@
 import * as Config from "effect/Config";
-import { Effect, Option, Redacted } from "effect";
+import { Effect, Layer, Option, Redacted, ServiceMap } from "effect";
 
-export class Env extends Effect.Service<Env>()("Env", {
-  accessors: true,
-  effect: Effect.gen(function* () {
+export interface EnvShape {
+  readonly PORT: number
+  readonly TINYBIRD_HOST: string
+  readonly TINYBIRD_TOKEN: Redacted.Redacted<string>
+  readonly MAPLE_DB_URL: string
+  readonly MAPLE_DB_AUTH_TOKEN: Option.Option<Redacted.Redacted<string>>
+  readonly MAPLE_AUTH_MODE: string
+  readonly MAPLE_ROOT_PASSWORD: Option.Option<Redacted.Redacted<string>>
+  readonly MAPLE_DEFAULT_ORG_ID: string
+  readonly MAPLE_INGEST_KEY_ENCRYPTION_KEY: Redacted.Redacted<string>
+  readonly MAPLE_INGEST_KEY_LOOKUP_HMAC_KEY: Redacted.Redacted<string>
+  readonly MAPLE_INGEST_PUBLIC_URL: string
+  readonly CLERK_SECRET_KEY: Option.Option<Redacted.Redacted<string>>
+  readonly CLERK_PUBLISHABLE_KEY: Option.Option<string>
+  readonly CLERK_JWT_KEY: Option.Option<Redacted.Redacted<string>>
+  readonly MAPLE_ORG_ID_OVERRIDE: Option.Option<string>
+  readonly AUTUMN_SECRET_KEY: Option.Option<Redacted.Redacted<string>>
+  readonly SD_INTERNAL_TOKEN: Option.Option<Redacted.Redacted<string>>
+  readonly INTERNAL_SERVICE_TOKEN: Option.Option<Redacted.Redacted<string>>
+}
+
+export class Env extends ServiceMap.Service<Env, EnvShape>()("Env", {
+  make: Effect.gen(function* () {
     const normalizeOptionalString = (value: Option.Option<string>) =>
       Option.filter(value, (entry) => entry.trim().length > 0)
 
@@ -73,19 +93,19 @@ export class Env extends Effect.Service<Env>()("Env", {
     if (
       normalizedEnv.MAPLE_DEFAULT_ORG_ID.trim().length === 0
     ) {
-      return yield* Effect.dieMessage("MAPLE_DEFAULT_ORG_ID cannot be empty")
+      return yield* Effect.die(new Error("MAPLE_DEFAULT_ORG_ID cannot be empty"))
     }
 
     if (authMode !== "clerk" && Option.isNone(normalizedEnv.MAPLE_ROOT_PASSWORD)) {
-      return yield* Effect.dieMessage(
-        "MAPLE_ROOT_PASSWORD is required when MAPLE_AUTH_MODE=self_hosted",
+      return yield* Effect.die(
+        new Error("MAPLE_ROOT_PASSWORD is required when MAPLE_AUTH_MODE=self_hosted"),
       );
     }
 
     if (authMode === "clerk") {
       if (Option.isNone(normalizedEnv.CLERK_SECRET_KEY)) {
-        return yield* Effect.dieMessage(
-          "CLERK_SECRET_KEY is required when MAPLE_AUTH_MODE=clerk",
+        return yield* Effect.die(
+          new Error("CLERK_SECRET_KEY is required when MAPLE_AUTH_MODE=clerk"),
         )
       }
 
@@ -95,9 +115,12 @@ export class Env extends Effect.Service<Env>()("Env", {
       Option.isSome(normalizedEnv.MAPLE_ROOT_PASSWORD) &&
       Redacted.value(normalizedEnv.MAPLE_ROOT_PASSWORD.value).trim().length === 0
     ) {
-      return yield* Effect.dieMessage("MAPLE_ROOT_PASSWORD cannot be empty")
+      return yield* Effect.die(new Error("MAPLE_ROOT_PASSWORD cannot be empty"))
     }
 
     return normalizedEnv;
   }),
-}) {}
+}) {
+  static readonly layer = Layer.effect(this, this.make)
+  static readonly Default = this.layer
+}

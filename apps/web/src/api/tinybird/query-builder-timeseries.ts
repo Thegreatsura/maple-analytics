@@ -17,8 +17,8 @@ import {
   TinybirdApiError as TinybirdApiErrorClass,
 } from "@/api/tinybird/effect-utils"
 
-const dateTimeString = Schema.String.pipe(
-  Schema.pattern(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/),
+const dateTimeString = Schema.String.check(
+  Schema.isPattern(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/),
 )
 
 const METRIC_TYPES_TUPLE = [
@@ -40,14 +40,14 @@ const QueryDraftSchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   enabled: Schema.Boolean,
-  dataSource: Schema.Literal("traces", "logs", "metrics"),
-  signalSource: Schema.Literal("default", "meter"),
+  dataSource: Schema.Literals(["traces", "logs", "metrics"]),
+  signalSource: Schema.Literals(["default", "meter"]),
   metricName: Schema.String,
-  metricType: Schema.Literal(...METRIC_TYPES_TUPLE),
+  metricType: Schema.Literals(METRIC_TYPES_TUPLE),
   whereClause: Schema.String,
   aggregation: Schema.String,
   stepInterval: Schema.String,
-  orderByDirection: Schema.Literal("desc", "asc"),
+  orderByDirection: Schema.Literals(["desc", "asc"]),
   addOns: Schema.Struct({
     groupBy: Schema.Boolean,
     having: Schema.Boolean,
@@ -70,16 +70,16 @@ const FormulaSchema = Schema.Struct({
 })
 
 const ComparisonSchema = Schema.Struct({
-  mode: Schema.optional(Schema.Literal(...COMPARISON_MODES)),
+  mode: Schema.optional(Schema.Literals(COMPARISON_MODES)),
   includePercentChange: Schema.optional(Schema.Boolean),
 })
 
 const StrategySchema = Schema.Struct({
   enableEmptyRangeFallback: Schema.optional(Schema.Boolean),
   fallbackWindowSeconds: Schema.optional(
-    Schema.mutable(Schema.Array(Schema.Number.pipe(Schema.int(), Schema.greaterThan(0)))),
+    Schema.mutable(Schema.Array(Schema.Int.check(Schema.isGreaterThan(0)))),
   ),
-  maxFallbackRangeSeconds: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.greaterThan(0))),
+  maxFallbackRangeSeconds: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
 })
 
 const QueryBuilderTimeseriesInputSchema = Schema.Struct({
@@ -322,7 +322,9 @@ async function executeTimeseriesQuery(
 const executeTimeseriesQueryEffect = Effect.fn("Tinybird.executeTimeseriesQuery")(
   function* (payload: QueryEngineExecuteRequest) {
     const client = yield* MapleApiAtomClient
-    return yield* client.queryEngine.execute({ payload })
+    return yield* client.queryEngine.execute({
+      payload: new QueryEngineExecuteRequest(payload),
+    })
   },
 )
 

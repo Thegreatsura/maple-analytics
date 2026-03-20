@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { Registry, RegistryContext } from "@effect-atom/atom-react"
+import { Registry, RegistryContext } from "@/lib/effect-atom"
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"

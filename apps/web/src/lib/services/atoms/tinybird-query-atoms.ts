@@ -1,4 +1,4 @@
-import { Atom } from "@effect-atom/atom-react"
+import { Atom } from "@/lib/effect-atom"
 import { Effect, Schema } from "effect"
 import {
   getCustomChartServiceDetail,
@@ -24,13 +24,13 @@ import {
 import { getResourceAttributeKeys, getResourceAttributeValues, getSpanAttributeKeys, getSpanAttributeValues, getSpanHierarchy, getTracesFacets, listTraces } from "@/api/tinybird/traces"
 import { getQueryBuilderTimeseries } from "@/api/tinybird/query-builder-timeseries"
 
-type QueryEffect<Input, Output> = (input: Input) => Effect.Effect<Output, unknown>
+type QueryEffect<Input, Output> = (input: Input) => Effect.Effect<Output, unknown, unknown>
 
 interface QueryAtomOptions {
   staleTime?: number
 }
 
-export class QueryAtomError extends Schema.TaggedError<QueryAtomError>()("QueryAtomError", {
+export class QueryAtomError extends Schema.TaggedErrorClass<QueryAtomError>()("QueryAtomError", {
   message: Schema.String,
   cause: Schema.optional(Schema.Unknown),
 }) {}
@@ -86,7 +86,7 @@ function makeQueryAtomFamily<Input, Output>(
         try: () => JSON.parse(key) as Input,
         catch: toQueryAtomError,
       }).pipe(
-        Effect.flatMap((input) => query(input)),
+        Effect.flatMap((input) => query(input) as Effect.Effect<Output, unknown, never>),
         Effect.mapError(toQueryAtomError),
       ),
     )

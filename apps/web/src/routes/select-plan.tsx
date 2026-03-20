@@ -14,7 +14,7 @@ const SelectPlanSearch = Schema.Struct({
 
 export const Route = createFileRoute("/select-plan")({
   component: SelectPlanPage,
-  validateSearch: Schema.standardSchemaV1(SelectPlanSearch),
+  validateSearch: Schema.toStandardSchemaV1(SelectPlanSearch),
 })
 
 function resolveRedirectTarget(target: string | undefined): string {

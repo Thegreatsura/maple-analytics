@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { Schema } from "effect"
 
-import { OptionalStringArrayParam } from "@/lib/search-params"
+import { BooleanFromStringParam, OptionalStringArrayParam } from "@/lib/search-params"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { ErrorsSummaryCards } from "@/components/errors/errors-summary-cards"
 import { ErrorsByTypeTable } from "@/components/errors/errors-by-type-table"
@@ -18,14 +18,14 @@ const errorsSearchSchema = Schema.Struct({
   startTime: Schema.optional(Schema.String),
   endTime: Schema.optional(Schema.String),
   timePreset: Schema.optional(Schema.String),
-  showSpam: Schema.optional(Schema.Union(Schema.Boolean, Schema.BooleanFromString)),
+  showSpam: Schema.optional(Schema.Union([Schema.Boolean, BooleanFromStringParam])),
 })
 
 export type ErrorsSearchParams = Schema.Schema.Type<typeof errorsSearchSchema>
 
 export const Route = createFileRoute("/errors")({
   component: ErrorsPage,
-  validateSearch: Schema.standardSchemaV1(errorsSearchSchema),
+  validateSearch: Schema.toStandardSchemaV1(errorsSearchSchema),
 })
 
 function ErrorsPage() {

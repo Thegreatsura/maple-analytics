@@ -1,8 +1,5 @@
-import { McpSchema, McpServer as EffectMcpServer } from "@effect/ai"
-import { Effect, Layer } from "effect"
-import * as JSONSchema from "effect/JSONSchema"
-import * as ParseResult from "effect/ParseResult"
-import * as Schema from "effect/Schema"
+import { McpSchema, McpServer as EffectMcpServer } from "effect/unstable/ai"
+import { Effect, Layer, Schema, ServiceMap } from "effect"
 import { registerSystemHealthTool } from "./tools/system-health"
 import { registerFindErrorsTool } from "./tools/find-errors"
 import { registerInspectTraceTool } from "./tools/inspect-trace"
@@ -19,7 +16,7 @@ import type { McpToolError, McpToolRegistrar, McpToolResult } from "./tools/type
 interface ToolDefinition {
   readonly name: string
   readonly description: string
-  readonly schema: Schema.Schema.AnyNoContext
+  readonly schema: Schema.Top & { readonly DecodingServices: never }
   readonly handler: (params: unknown) => Effect.Effect<McpToolResult, McpToolError, any>
 }
 
@@ -41,13 +38,15 @@ const toCallToolResult = (result: McpToolResult): typeof McpSchema.CallToolResul
     })),
   })
 
-const toInputSchema = (schema: Schema.Schema.AnyNoContext): Record<string, unknown> => {
-  const { $schema, ...jsonSchema } = JSONSchema.make(schema)
-  return jsonSchema
+const toInputSchema = (schema: Schema.Top): Record<string, unknown> => {
+  const document = Schema.toJsonSchemaDocument(schema)
+  return Object.keys(document.definitions).length > 0
+    ? { ...document.schema, $defs: document.definitions }
+    : document.schema
 }
 
-const toDecodeErrorMessage = (definition: ToolDefinition, error: ParseResult.ParseError): string => {
-  const base = ParseResult.TreeFormatter.formatErrorSync(error)
+const toDecodeErrorMessage = (definition: ToolDefinition, error: unknown): string => {
+  const base = Schema.isSchemaError(error) ? String(error) : String(error)
 
   if (definition.name !== "query_data") {
     return base
@@ -97,65 +96,78 @@ const collectToolDefinitions = (): ReadonlyArray<ToolDefinition> => {
 const toolDefinitions = collectToolDefinitions()
 
 export const McpToolsLive = Layer.effectDiscard(
-  Effect.gen(function* () {
-    const server = yield* EffectMcpServer.McpServer
-
-    for (const definition of toolDefinitions) {
-      const decode = Schema.validateEither(definition.schema)
-
-      yield* server.addTool({
+  EffectMcpServer.McpServer.use((server) =>
+    Effect.forEach(toolDefinitions, (definition) =>
+      server.addTool({
         tool: new McpSchema.Tool({
           name: definition.name,
           description: definition.description,
           inputSchema: toInputSchema(definition.schema),
         }),
-        handle: (payload) => {
-          const decoded = decode(payload)
+        annotations: ServiceMap.empty(),
+        handle: (payload) =>
+          Effect.suspend(() => {
+            let decoded: unknown
 
-          if (decoded._tag === "Left") {
-            const errorMessage = toDecodeErrorMessage(definition, decoded.left)
-            return Effect.logWarning("Invalid parameters").pipe(
-              Effect.annotateLogs({ error: errorMessage }),
-              Effect.as(
-                toCallToolResult({
-                  isError: true,
-                  content: [{ type: "text", text: `Invalid parameters: ${errorMessage}` }],
-                }),
+            try {
+              decoded = Schema.decodeUnknownSync(definition.schema)(payload)
+            } catch (error) {
+              const errorMessage = toDecodeErrorMessage(definition, error)
+              return Effect.logWarning("Invalid parameters").pipe(
+                Effect.annotateLogs({ error: errorMessage }),
+                Effect.as(
+                  toCallToolResult({
+                    isError: true,
+                    content: [{ type: "text", text: `Invalid parameters: ${errorMessage}` }],
+                  }),
+                ),
+              )
+            }
+
+            return definition.handler(decoded).pipe(
+              Effect.tap(() => Effect.logInfo("Tool completed")),
+              Effect.map(toCallToolResult),
+              Effect.catchTags({
+                McpQueryError: (error) =>
+                  Effect.logError(`Tool error: ${error.message}`).pipe(
+                    Effect.annotateLogs({
+                      errorTag: error._tag,
+                      pipe: error.pipe,
+                    }),
+                    Effect.as(
+                      toCallToolResult({
+                        isError: true,
+                        content: [{ type: "text", text: `${error._tag}: ${error.message}` }],
+                      }),
+                    ),
+                  ),
+                McpTenantError: (error) =>
+                  Effect.logError(`Tool error: ${error.message}`).pipe(
+                    Effect.annotateLogs({
+                      errorTag: error._tag,
+                    }),
+                    Effect.as(
+                      toCallToolResult({
+                        isError: true,
+                        content: [{ type: "text", text: `${error._tag}: ${error.message}` }],
+                      }),
+                    ),
+                  ),
+              }),
+              Effect.catchDefect((error) =>
+                Effect.logError(`Tool defect: ${toErrorMessage(error)}`).pipe(
+                  Effect.as(
+                    toCallToolResult({
+                      isError: true,
+                      content: [{ type: "text", text: `Error: ${toErrorMessage(error)}` }],
+                    }),
+                  ),
+                ),
               ),
+              Effect.annotateLogs({ tool: definition.name }),
             )
-          }
-
-          return definition.handler(decoded.right).pipe(
-            Effect.tap(() => Effect.logInfo("Tool completed")),
-            Effect.map(toCallToolResult),
-            Effect.catchAll((error) =>
-              Effect.logError(`Tool error: ${error.message}`).pipe(
-                Effect.annotateLogs({
-                  errorTag: error._tag,
-                  ...("pipe" in error ? { pipe: error.pipe } : {}),
-                }),
-                Effect.as(
-                  toCallToolResult({
-                    isError: true,
-                    content: [{ type: "text", text: `${error._tag}: ${error.message}` }],
-                  }),
-                ),
-              ),
-            ),
-            Effect.catchAllDefect((error) =>
-              Effect.logError(`Tool defect: ${toErrorMessage(error)}`).pipe(
-                Effect.as(
-                  toCallToolResult({
-                    isError: true,
-                    content: [{ type: "text", text: `Error: ${toErrorMessage(error)}` }],
-                  }),
-                ),
-              ),
-            ),
-            Effect.annotateLogs({ tool: definition.name }),
-          )
-        },
-      })
-    }
-  }),
+          }),
+      }),
+    ).pipe(Effect.asVoid),
+  ),
 )

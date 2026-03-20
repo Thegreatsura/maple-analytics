@@ -1,4 +1,4 @@
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "@effect/platform"
+import { HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 import { Schema } from "effect"
 import { OrgId, UserId } from "../primitives"
 import { Authorization, TenantSchema } from "./current-tenant"
@@ -13,36 +13,37 @@ export class SelfHostedLoginResponse extends Schema.Class<SelfHostedLoginRespons
   userId: UserId,
 }) {}
 
-export class SelfHostedAuthDisabledError extends Schema.TaggedError<SelfHostedAuthDisabledError>()(
+export class SelfHostedAuthDisabledError extends Schema.TaggedErrorClass<SelfHostedAuthDisabledError>()(
   "SelfHostedAuthDisabledError",
   {
     message: Schema.String,
   },
-  HttpApiSchema.annotations({ status: 400 }),
+  { httpApiStatus: 400 },
 ) {}
 
-export class SelfHostedInvalidPasswordError extends Schema.TaggedError<SelfHostedInvalidPasswordError>()(
+export class SelfHostedInvalidPasswordError extends Schema.TaggedErrorClass<SelfHostedInvalidPasswordError>()(
   "SelfHostedInvalidPasswordError",
   {
     message: Schema.String,
   },
-  HttpApiSchema.annotations({ status: 401 }),
+  { httpApiStatus: 401 },
 ) {}
 
 export class AuthPublicApiGroup extends HttpApiGroup.make("authPublic")
   .add(
-    HttpApiEndpoint.post("login", "/login")
-      .setPayload(SelfHostedLoginRequest)
-      .addSuccess(SelfHostedLoginResponse)
-      .addError(SelfHostedAuthDisabledError)
-      .addError(SelfHostedInvalidPasswordError),
+    HttpApiEndpoint.post("login", "/login", {
+      payload: SelfHostedLoginRequest,
+      success: SelfHostedLoginResponse,
+      error: [SelfHostedAuthDisabledError, SelfHostedInvalidPasswordError],
+    }),
   )
   .prefix("/api/auth") {}
 
 export class AuthApiGroup extends HttpApiGroup.make("auth")
   .add(
-    HttpApiEndpoint.get("session", "/session")
-      .addSuccess(TenantSchema),
+    HttpApiEndpoint.get("session", "/session", {
+      success: TenantSchema,
+    }),
   )
   .prefix("/api/auth")
   .middleware(Authorization) {}

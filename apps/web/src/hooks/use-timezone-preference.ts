@@ -1,4 +1,4 @@
-import { useAtom } from "@effect-atom/atom-react"
+import { useAtom } from "@/lib/effect-atom"
 import { useCallback, useEffect, useMemo } from "react"
 import {
   getBrowserTimeZone,

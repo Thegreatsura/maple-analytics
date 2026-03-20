@@ -1,4 +1,4 @@
-import { HttpApiBuilder } from "@effect/platform"
+import { HttpApiBuilder } from "effect/unstable/httpapi"
 import {
   CurrentTenant,
   DashboardValidationError,
@@ -18,16 +18,12 @@ export const HttpDashboardsLive = HttpApiBuilder.group(
         .handle("list", () =>
           Effect.gen(function* () {
             const tenant = yield* CurrentTenant.Context
-            const dashboards = yield* persistence.list(tenant.orgId)
-
-            return {
-              dashboards,
-            }
+            return yield* persistence.list(tenant.orgId)
           }),
         )
-        .handle("upsert", ({ path, payload }) =>
+        .handle("upsert", ({ params, payload }) =>
           Effect.gen(function* () {
-            if (path.dashboardId !== payload.dashboard.id) {
+            if (params.dashboardId !== payload.dashboard.id) {
               return yield* Effect.fail(
                 new DashboardValidationError({
                   message: "Dashboard ID mismatch",
@@ -46,10 +42,10 @@ export const HttpDashboardsLive = HttpApiBuilder.group(
             )
           }),
         )
-        .handle("delete", ({ path }) =>
+        .handle("delete", ({ params }) =>
           Effect.gen(function* () {
             const tenant = yield* CurrentTenant.Context
-            return yield* persistence.delete(tenant.orgId, path.dashboardId)
+            return yield* persistence.delete(tenant.orgId, params.dashboardId)
           }),
         )
     }),

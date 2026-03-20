@@ -25,7 +25,7 @@ import {
 import { getQueryBuilderTimeseries } from "@/api/tinybird/query-builder-timeseries"
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ServerFunction = (opts: { data: any }) => Effect.Effect<any, unknown>
+type ServerFunction = (opts: { data: any }) => Effect.Effect<any, unknown, unknown>
 
 export const serverFunctionMap: Record<DataSourceEndpoint, ServerFunction> = {
   service_usage: getServiceUsage,

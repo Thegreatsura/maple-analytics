@@ -8,12 +8,12 @@ import {
 
 const ListLogsInputSchema = Schema.Struct({
   limit: Schema.optional(
-    Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(1), Schema.lessThanOrEqualTo(1000)),
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(1000)),
   ),
   service: Schema.optional(Schema.String),
   severity: Schema.optional(Schema.String),
   minSeverity: Schema.optional(
-    Schema.Number.pipe(Schema.int(), Schema.greaterThanOrEqualTo(0), Schema.lessThanOrEqualTo(255)),
+    Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(255)),
   ),
   startTime: Schema.optional(TinybirdDateTimeString),
   endTime: Schema.optional(TinybirdDateTimeString),

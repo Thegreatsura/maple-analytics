@@ -3,12 +3,16 @@ import {
   useAtomRefresh,
   useAtomSet,
   useAtomValue,
-} from "@effect-atom/atom-react";
+} from "@/lib/effect-atom";
 import { Exit } from "effect";
 import type {
   CloudflareLogpushConnectorId,
   CloudflareLogpushConnectorResponse,
   CloudflareLogpushSetupResponse,
+} from "@maple/domain/http";
+import {
+  CreateCloudflareLogpushConnectorRequest,
+  UpdateCloudflareLogpushConnectorRequest,
 } from "@maple/domain/http";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -152,7 +156,7 @@ export function CloudflareLogpushSection() {
 
   const setupQueryAtom = setupConnectorId
     ? MapleApiAtomClient.query("cloudflareLogpush", "getSetup", {
-        path: { connectorId: setupConnectorId },
+        params: { connectorId: setupConnectorId },
       })
     : disabledResultAtom<CloudflareLogpushSetupResponse>();
   const setupResult = useAtomValue(setupQueryAtom);
@@ -248,13 +252,13 @@ export function CloudflareLogpushSection() {
 
     if (editingConnector) {
       const result = await updateMutation({
-        path: { connectorId: editingConnector.id },
-        payload: {
+        params: { connectorId: editingConnector.id },
+        payload: new UpdateCloudflareLogpushConnectorRequest({
           name: formName.trim(),
           zoneName: formZoneName.trim(),
           serviceName: formServiceName.trim() || null,
           enabled: formEnabled,
-        },
+        }),
       });
 
       if (Exit.isSuccess(result)) {
@@ -266,12 +270,12 @@ export function CloudflareLogpushSection() {
       }
     } else {
       const result = await createMutation({
-        payload: {
+        payload: new CreateCloudflareLogpushConnectorRequest({
           name: formName.trim(),
           zoneName: formZoneName.trim(),
           serviceName: formServiceName.trim() || null,
           enabled: formEnabled,
-        },
+        }),
       });
 
       if (Exit.isSuccess(result)) {
@@ -297,7 +301,7 @@ export function CloudflareLogpushSection() {
     setDeletingConnector(null);
 
     const result = await deleteMutation({
-      path: { connectorId: connector.id },
+      params: { connectorId: connector.id },
     });
 
     if (Exit.isSuccess(result)) {
@@ -316,8 +320,10 @@ export function CloudflareLogpushSection() {
   async function handleToggle(connector: CloudflareConnector) {
     setTogglingId(connector.id);
     const result = await updateMutation({
-      path: { connectorId: connector.id },
-      payload: { enabled: !connector.enabled },
+      params: { connectorId: connector.id },
+      payload: new UpdateCloudflareLogpushConnectorRequest({
+        enabled: !connector.enabled,
+      }),
     });
     if (Exit.isSuccess(result)) {
       refreshConnectors();
@@ -330,7 +336,7 @@ export function CloudflareLogpushSection() {
   async function handleRotateSecret(connector: CloudflareConnector) {
     setRotatingId(connector.id);
     const result = await rotateMutation({
-      path: { connectorId: connector.id },
+      params: { connectorId: connector.id },
     });
     if (Exit.isSuccess(result)) {
       toast.success("Cloudflare secret rotated");

@@ -11,11 +11,9 @@ const INTERNAL_SERVICE_PREFIX = "maple_svc_"
 const decodeOrgIdSync = Schema.decodeUnknownSync(OrgId)
 const decodeUserIdSync = Schema.decodeUnknownSync(UserId)
 
-const EnvRuntime = ManagedRuntime.make(Env.Default)
-const ApiKeyResolutionRuntime = ManagedRuntime.make(
-  ApiKeysService.Live.pipe(Layer.provide(Env.Default)),
-)
-const AuthRuntime = ManagedRuntime.make(AuthService.Default)
+const EnvRuntime = ManagedRuntime.make(Env.layer)
+const ApiKeyResolutionRuntime = ManagedRuntime.make(ApiKeysService.layer)
+const AuthRuntime = ManagedRuntime.make(AuthService.layer)
 
 const toHeaderRecord = (headers: Headers): Record<string, string> => {
   const record: Record<string, string> = {}
@@ -41,10 +39,10 @@ export async function resolveMcpTenantContext(request: Request): Promise<McpTena
   // Internal service auth (e.g. chat agent)
   if (token && token.startsWith(INTERNAL_SERVICE_PREFIX)) {
     const provided = token.slice(INTERNAL_SERVICE_PREFIX.length)
-    const env = await EnvRuntime.runPromise(Env)
+    const env = await EnvRuntime.runPromise(Env.use((env) => Effect.succeed(env)))
     const expected = Option.match(env.INTERNAL_SERVICE_TOKEN, {
       onNone: () => undefined,
-      onSome: Redacted.value,
+      onSome: (value) => Redacted.value(value),
     })
 
     if (!expected) {
@@ -78,13 +76,13 @@ export async function resolveMcpTenantContext(request: Request): Promise<McpTena
 
   if (token && token.startsWith(API_KEY_PREFIX)) {
     const resolved = await ApiKeyResolutionRuntime.runPromise(
-      ApiKeysService.resolveByKey(token),
+      ApiKeysService.use((service) => service.resolveByKey(token)),
     )
 
     if (Option.isSome(resolved)) {
       // Touch lastUsedAt in the background — fire and forget
       void ApiKeyResolutionRuntime.runPromise(
-        ApiKeysService.touchLastUsed(resolved.value.keyId).pipe(Effect.ignore),
+        ApiKeysService.use((service) => service.touchLastUsed(resolved.value.keyId)).pipe(Effect.ignore),
       )
 
       return {
@@ -98,7 +96,7 @@ export async function resolveMcpTenantContext(request: Request): Promise<McpTena
 
   // Fall back to existing Clerk / self-hosted session auth
   const tenant = await AuthRuntime.runPromise(
-    AuthService.resolveMcpTenant(toHeaderRecord(request.headers)),
+    AuthService.use((service) => service.resolveMcpTenant(toHeaderRecord(request.headers))),
   )
 
   return {

@@ -1,10 +1,10 @@
 import { ClerkProvider, useAuth } from "@clerk/clerk-react"
 import { AutumnProvider } from "autumn-js/react"
-import { RegistryContext } from "@effect-atom/atom-react"
 import { StrictMode, useCallback, useEffect, useRef, useState } from "react"
 import ReactDOM from "react-dom/client"
 import { RouterProvider } from "@tanstack/react-router"
 
+import { RegistryContext } from "@/lib/effect-atom"
 import { apiBaseUrl } from "./lib/services/common/api-base-url"
 import { ClerkAuthBridge } from "./lib/services/common/clerk-auth-bridge"
 import { isClerkAuthEnabled } from "./lib/services/common/auth-mode"

@@ -27,8 +27,8 @@ vi.mock("@/lib/services/common/atom-client", () => ({
   },
 }))
 
-vi.mock("@effect-atom/atom-react", async () => ({
-  Atom: (await vi.importActual<typeof import("@effect-atom/atom-react")>("@effect-atom/atom-react")).Atom,
+vi.mock("@/lib/effect-atom", async () => ({
+  Atom: (await vi.importActual<typeof import("@/lib/effect-atom")>("@/lib/effect-atom")).Atom,
   Result: {
     builder: (result: MockResult) => ({
       onSuccess: (onSuccess: (value: unknown) => unknown) => ({

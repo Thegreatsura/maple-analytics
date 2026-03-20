@@ -1,9 +1,10 @@
-import { Result, useAtomSet, useAtomValue } from "@effect-atom/atom-react"
+import { Result, useAtomSet, useAtomValue } from "@/lib/effect-atom"
 import { useCallback, useEffect, useState } from "react"
 import { Exit, Schema } from "effect"
 import {
   DashboardDocument,
   DashboardId,
+  DashboardUpsertRequest,
   IsoDateTimeString,
 } from "@maple/domain/http"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
@@ -113,8 +114,10 @@ export function useDashboardStore() {
   const persistUpsert = useCallback(
     (rollback: Dashboard[], dashboard: Dashboard) => {
       void upsertMutation({
-        path: { dashboardId: asDashboardId(dashboard.id) },
-        payload: { dashboard: toDashboardDocument(dashboard) },
+        params: { dashboardId: asDashboardId(dashboard.id) },
+        payload: new DashboardUpsertRequest({
+          dashboard: toDashboardDocument(dashboard),
+        }),
       }).then((result) => {
         if (Exit.isFailure(result)) {
           setDashboards(rollback)
@@ -127,7 +130,7 @@ export function useDashboardStore() {
 
   const persistDelete = useCallback(
     (rollback: Dashboard[], dashboardId: string) => {
-      void deleteMutation({ path: { dashboardId: asDashboardId(dashboardId) } }).then((result) => {
+      void deleteMutation({ params: { dashboardId: asDashboardId(dashboardId) } }).then((result) => {
         if (Exit.isFailure(result)) {
           setDashboards(rollback)
           setPersistenceFailure(result)

@@ -1,4 +1,4 @@
-import { Atom, useAtomRefresh, useAtomValue } from "@effect-atom/atom-react"
+import { Atom, useAtomRefresh, useAtomValue } from "@/lib/effect-atom"
 import * as React from "react"
 
 import { useOptionalPageRefreshContext } from "@/components/time-range-picker/page-refresh-context"
