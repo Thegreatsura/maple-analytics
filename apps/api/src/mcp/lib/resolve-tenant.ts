@@ -1,19 +1,16 @@
 import { timingSafeEqual } from "node:crypto"
-import { ManagedRuntime, Effect, Layer, Option, Redacted, Schema } from "effect"
+import { Effect, Option, Redacted, Schema } from "effect"
 import type { TenantContext as McpTenantContext } from "@/lib/tenant-context"
 import { AuthService } from "@/services/AuthService"
 import { ApiKeysService } from "@/services/ApiKeysService"
 import { Env } from "@/services/Env"
 import { OrgId, UserId } from "@maple/domain/http"
 import { API_KEY_PREFIX } from "@maple/db"
+import { McpTenantError } from "../tools/types"
 
 const INTERNAL_SERVICE_PREFIX = "maple_svc_"
 const decodeOrgIdSync = Schema.decodeUnknownSync(OrgId)
 const decodeUserIdSync = Schema.decodeUnknownSync(UserId)
-
-const EnvRuntime = ManagedRuntime.make(Env.layer)
-const ApiKeyResolutionRuntime = ManagedRuntime.make(ApiKeysService.layer)
-const AuthRuntime = ManagedRuntime.make(AuthService.layer)
 
 const toHeaderRecord = (headers: Headers): Record<string, string> => {
   const record: Record<string, string> = {}
@@ -33,20 +30,27 @@ const getBearerToken = (headers: Headers): string | undefined => {
   return token
 }
 
-export async function resolveMcpTenantContext(request: Request): Promise<McpTenantContext> {
+export const resolveMcpTenantContext = (
+  request: Request,
+): Effect.Effect<McpTenantContext, McpTenantError, Env | ApiKeysService | AuthService> =>
+  Effect.gen(function* () {
   const token = getBearerToken(request.headers)
 
   // Internal service auth (e.g. chat agent)
   if (token && token.startsWith(INTERNAL_SERVICE_PREFIX)) {
     const provided = token.slice(INTERNAL_SERVICE_PREFIX.length)
-    const env = await EnvRuntime.runPromise(Env.use((env) => Effect.succeed(env)))
+    const env = yield* Env
     const expected = Option.match(env.INTERNAL_SERVICE_TOKEN, {
       onNone: () => undefined,
       onSome: (value) => Redacted.value(value),
     })
 
     if (!expected) {
-      throw new Error("INTERNAL_SERVICE_TOKEN is not configured on the server")
+      return yield* Effect.fail(
+        new McpTenantError({
+          message: "INTERNAL_SERVICE_TOKEN is not configured on the server",
+        }),
+      )
     }
 
     if (
@@ -58,31 +62,52 @@ export async function resolveMcpTenantContext(request: Request): Promise<McpTena
         onSome: (value) => value,
       })
       if (!orgId) {
-        throw new Error("X-Org-Id header is required for internal service auth")
+        return yield* Effect.fail(
+          new McpTenantError({
+            message: "X-Org-Id header is required for internal service auth",
+          }),
+        )
       }
 
-      return {
-        orgId: decodeOrgIdSync(orgId),
-        userId: decodeUserIdSync("internal-service"),
-        roles: [],
-        authMode: "self_hosted",
+      try {
+        return {
+          orgId: decodeOrgIdSync(orgId),
+          userId: decodeUserIdSync("internal-service"),
+          roles: [],
+          authMode: "self_hosted",
+        }
+      } catch (error) {
+        return yield* Effect.fail(
+          new McpTenantError({
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        )
       }
     }
 
-    throw new Error(
-      `Internal service token mismatch (provided length: ${provided.length}, expected length: ${expected.length})`,
+    return yield* Effect.fail(
+      new McpTenantError({
+        message: `Internal service token mismatch (provided length: ${provided.length}, expected length: ${expected.length})`,
+      }),
     )
   }
 
   if (token && token.startsWith(API_KEY_PREFIX)) {
-    const resolved = await ApiKeyResolutionRuntime.runPromise(
-      ApiKeysService.use((service) => service.resolveByKey(token)),
+    const apiKeys = yield* ApiKeysService
+    const resolved = yield* apiKeys.resolveByKey(token).pipe(
+      Effect.mapError(
+        (error) =>
+          new McpTenantError({
+            message: error.message,
+          }),
+      ),
     )
 
     if (Option.isSome(resolved)) {
       // Touch lastUsedAt in the background — fire and forget
-      void ApiKeyResolutionRuntime.runPromise(
-        ApiKeysService.use((service) => service.touchLastUsed(resolved.value.keyId)).pipe(Effect.ignore),
+      yield* apiKeys.touchLastUsed(resolved.value.keyId).pipe(
+        Effect.ignore,
+        Effect.forkDetach,
       )
 
       return {
@@ -95,8 +120,14 @@ export async function resolveMcpTenantContext(request: Request): Promise<McpTena
   }
 
   // Fall back to existing Clerk / self-hosted session auth
-  const tenant = await AuthRuntime.runPromise(
-    AuthService.use((service) => service.resolveMcpTenant(toHeaderRecord(request.headers))),
+  const auth = yield* AuthService
+  const tenant = yield* auth.resolveMcpTenant(toHeaderRecord(request.headers)).pipe(
+    Effect.mapError(
+      (error) =>
+        new McpTenantError({
+          message: error.message,
+        }),
+    ),
   )
 
   return {
@@ -105,4 +136,4 @@ export async function resolveMcpTenantContext(request: Request): Promise<McpTena
     roles: [...tenant.roles],
     authMode: tenant.authMode,
   }
-}
+})

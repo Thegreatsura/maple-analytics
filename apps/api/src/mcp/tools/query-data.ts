@@ -10,7 +10,7 @@ import {
 import { defaultTimeRange } from "../lib/time"
 import { formatDurationFromMs, formatNumber, formatPercent, formatTable } from "../lib/format"
 import { HttpServerRequest } from "effect/unstable/http"
-import { Cause, Effect, Exit, ManagedRuntime, Option, Schema } from "effect"
+import { Cause, Effect, Exit, Option, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
 import { resolveMcpTenantContext } from "@/mcp/lib/resolve-tenant"
 import { QueryEngineService } from "@/services/QueryEngineService"
@@ -23,8 +23,6 @@ import {
   type TracesFilters,
 } from "@maple/domain"
 import type { TenantContext } from "@/services/AuthService"
-
-const QueryEngineRuntime = ManagedRuntime.make(QueryEngineService.layer)
 
 const commonTimeRangeFields = {
   start_time: optionalStringParam("Start time (YYYY-MM-DD HH:mm:ss). Defaults to 1 hour ago"),
@@ -81,23 +79,22 @@ const decodeQuerySpecSync = Schema.decodeUnknownSync(QuerySpec)
 const splitCsv = (value: string): Array<string> =>
   value.split(",").map((entry) => entry.trim()).filter((entry) => entry.length > 0)
 
-const resolveTenant: Effect.Effect<
-  TenantContext,
-  McpTenantError,
-  HttpServerRequest.HttpServerRequest
-> = Effect.gen(function* () {
+const resolveTenant = Effect.gen(function* () {
   const req = yield* HttpServerRequest.HttpServerRequest
   const nativeReq = yield* HttpServerRequest.toWeb(req)
-  return yield* Effect.tryPromise({
-    try: () => resolveMcpTenantContext(nativeReq),
-    catch: (error) =>
-      new McpTenantError({
-        message: error instanceof Error ? error.message : String(error),
-      }),
-  })
+  return yield* resolveMcpTenantContext(nativeReq)
 }).pipe(
-  Effect.catchTag("RequestParseError", (error) =>
-    Effect.fail(new McpTenantError({ message: error.message })),
+  Effect.catchIf(() => true, (error) =>
+    Effect.fail(
+      new McpTenantError({
+        message:
+          error instanceof Error
+            ? error.message
+            : typeof error === "object" && error !== null && "message" in error
+              ? String(error.message)
+              : String(error),
+      }),
+    ),
   ),
 )
 
@@ -355,21 +352,12 @@ export function registerQueryDataTool(server: McpToolRegistrar) {
         }
 
         const tenant = yield* resolveTenant
-        const exit = yield* Effect.tryPromise({
-          try: () =>
-            QueryEngineRuntime.runPromiseExit(
-              QueryEngineService.use((service) => service.execute(tenant, {
-                startTime: st,
-                endTime: et,
-                query: decodedQuery,
-              })),
-            ),
-          catch: (error) =>
-            new McpQueryError({
-              message: error instanceof Error ? error.message : String(error),
-              pipe: "query_data",
-            }),
-        })
+        const queryEngine = yield* QueryEngineService
+        const exit = yield* queryEngine.execute(tenant, {
+          startTime: st,
+          endTime: et,
+          query: decodedQuery,
+        }).pipe(Effect.exit)
 
         if (Exit.isFailure(exit)) {
           const failure = Option.getOrUndefined(Exit.findErrorOption(exit))
