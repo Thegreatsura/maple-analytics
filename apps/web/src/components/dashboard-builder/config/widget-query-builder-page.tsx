@@ -12,6 +12,7 @@ import { WidgetSettingsBar } from "@/components/dashboard-builder/config/widget-
 import type {
   DashboardWidget,
   ValueUnit,
+  VisualizationType,
   WidgetDataSource,
   WidgetDisplayConfig,
 } from "@/components/dashboard-builder/types"
@@ -47,6 +48,7 @@ type StatAggregate = "sum" | "first" | "count" | "avg" | "max" | "min"
 interface WidgetQueryBuilderPageProps {
   widget: DashboardWidget
   onApply: (updates: {
+    visualization: VisualizationType
     dataSource: WidgetDataSource
     display: WidgetDisplayConfig
   }) => void
@@ -54,8 +56,11 @@ interface WidgetQueryBuilderPageProps {
 }
 
 interface QueryBuilderWidgetState {
+  visualization: VisualizationType
   title: string
   chartId: string
+  stacked: boolean
+  curveType: "linear" | "monotone"
   queries: QueryBuilderQueryDraft[]
   formulas: QueryBuilderFormulaDraft[]
   comparisonMode: "none" | "previous_period"
@@ -151,8 +156,11 @@ function toInitialState(widget: DashboardWidget): QueryBuilderWidgetState {
       : {}
 
   const baseFromWidget = {
+    visualization: widget.visualization,
     title: widget.display.title ?? "",
     chartId: widget.display.chartId ?? "query-builder-line",
+    stacked: widget.display.stacked ?? false,
+    curveType: widget.display.curveType ?? "linear",
     comparisonMode: rawComparison.mode === "previous_period" ? "previous_period" : "none",
     includePercentChange:
       typeof rawComparison.includePercentChange === "boolean"
@@ -233,7 +241,7 @@ function toInitialState(widget: DashboardWidget): QueryBuilderWidgetState {
 }
 
 function buildWidgetDataSource(
-  widget: DashboardWidget,
+  _widget: DashboardWidget,
   state: QueryBuilderWidgetState,
   seriesFieldOptions: string[],
 ): WidgetDataSource {
@@ -250,7 +258,7 @@ function buildWidgetDataSource(
     },
   }
 
-  if (widget.visualization === "stat") {
+  if (state.visualization === "stat") {
     return {
       ...base,
       transform: {
@@ -262,7 +270,7 @@ function buildWidgetDataSource(
     }
   }
 
-  if (widget.visualization === "table") {
+  if (state.visualization === "table") {
     const limit = parsePositiveNumber(state.tableLimit)
     if (!limit) return base
     return { ...base, transform: { limit } }
@@ -283,9 +291,13 @@ function buildWidgetDisplay(
       legend: "visible",
     },
   }
-  if (widget.visualization === "chart") display.chartId = state.chartId
-  if (widget.visualization === "stat") display.unit = state.unit
-  if (widget.visualization === "table") display.columns = undefined
+  if (state.visualization === "chart") {
+    display.chartId = state.chartId
+    display.stacked = state.stacked
+    display.curveType = state.curveType
+  }
+  if (state.visualization === "stat") display.unit = state.unit
+  if (state.visualization === "table") display.columns = undefined
   return display
 }
 
@@ -522,7 +534,7 @@ export function WidgetQueryBuilderPage({
   const seriesFieldOptions = React.useMemo(() => toSeriesFieldOptions(state), [state])
 
   React.useEffect(() => {
-    if (widget.visualization !== "stat" || seriesFieldOptions.length === 0) return
+    if (state.visualization !== "stat" || seriesFieldOptions.length === 0) return
     if (state.statValueField && seriesFieldOptions.includes(state.statValueField)) return
     setState((current) => {
       if (current.statValueField && seriesFieldOptions.includes(current.statValueField)) return current
@@ -535,6 +547,7 @@ export function WidgetQueryBuilderPage({
     const previewSeriesOptions = toSeriesFieldOptions(previewState)
     return {
       ...widget,
+      visualization: previewState.visualization,
       dataSource: buildWidgetDataSource(widget, previewState, previewSeriesOptions),
       display: buildWidgetDisplay(widget, previewState),
     }
@@ -552,6 +565,7 @@ export function WidgetQueryBuilderPage({
     if (error) { setValidationError(error); return }
     setValidationError(null)
     onApply({
+      visualization: state.visualization,
       dataSource: buildWidgetDataSource(widget, state, seriesFieldOptions),
       display: buildWidgetDisplay(widget, state),
     })
@@ -690,8 +704,13 @@ export function WidgetQueryBuilderPage({
         <div className="px-6 py-6 space-y-6">
           {/* Widget settings */}
           <WidgetSettingsBar
-            visualization={widget.visualization}
+            visualization={state.visualization}
+            onVisualizationChange={(visualization) =>
+              setState((current) => ({ ...current, visualization }))
+            }
             chartId={state.chartId}
+            stacked={state.stacked}
+            curveType={state.curveType}
             comparisonMode={state.comparisonMode}
             includePercentChange={state.includePercentChange}
             debug={state.debug}

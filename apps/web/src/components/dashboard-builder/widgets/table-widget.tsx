@@ -21,8 +21,8 @@ interface TableWidgetProps {
   display: WidgetDisplayConfig
   mode: WidgetMode
   onRemove: () => void
+  onClone?: () => void
   onConfigure?: () => void
-  editPanel?: React.ReactNode
 }
 
 export function formatCellValue(value: unknown, unit?: string): string {
@@ -51,8 +51,8 @@ export const TableWidget = memo(function TableWidget({
   display,
   mode,
   onRemove,
+  onClone,
   onConfigure,
-  editPanel,
 }: TableWidgetProps) {
   const displayName = display.title || "Table"
   const rows =
@@ -85,9 +85,9 @@ export const TableWidget = memo(function TableWidget({
       title={displayName}
       mode={mode}
       onRemove={onRemove}
+      onClone={onClone}
       onConfigure={onConfigure}
       contentClassName="flex-1 min-h-0 overflow-auto p-0"
-      editPanel={editPanel}
     >
       {dataState.status === "loading" ? (
         <div className="p-3 flex flex-col gap-2">

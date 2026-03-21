@@ -34,7 +34,7 @@ function formatBucketTime(value: unknown): string {
   return typeof value === "string" ? value : ""
 }
 
-export function QueryBuilderLineChart({ data, className, legend, tooltip }: BaseChartProps) {
+export function QueryBuilderLineChart({ data, className, legend, tooltip, curveType }: BaseChartProps) {
   const { chartData, seriesDefinitions } = React.useMemo(() => {
     const source = Array.isArray(data) && data.length > 0 ? data : fallbackData
     const rawSeriesKeys: string[] = []
@@ -163,7 +163,7 @@ export function QueryBuilderLineChart({ data, className, legend, tooltip }: Base
         {seriesDefinitions.map((definition) => (
           <Line
             key={definition.chartKey}
-            type="linear"
+            type={curveType ?? "linear"}
             dataKey={definition.chartKey}
             stroke={`var(--color-${definition.chartKey})`}
             strokeWidth={2}
@@ -174,7 +174,7 @@ export function QueryBuilderLineChart({ data, className, legend, tooltip }: Base
         {hasIncomplete && seriesDefinitions.map((definition) => (
           <Line
             key={`${definition.chartKey}_incomplete`}
-            type="linear"
+            type={curveType ?? "linear"}
             dataKey={`${definition.chartKey}_incomplete`}
             stroke={`var(--color-${definition.chartKey})`}
             strokeWidth={2}

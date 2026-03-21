@@ -7,8 +7,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@maple/ui/components/ui/select"
+import { cn } from "@maple/ui/utils"
 import { chartRegistry } from "@maple/ui/components/charts/registry"
-import type { ValueUnit } from "@/components/dashboard-builder/types"
+import type { ValueUnit, VisualizationType } from "@/components/dashboard-builder/types"
 
 type StatAggregate = "sum" | "first" | "count" | "avg" | "max" | "min"
 
@@ -23,9 +24,18 @@ const UNIT_OPTIONS: Array<{ value: ValueUnit; label: string }> = [
   { value: "short", label: "Short" },
 ]
 
+const VISUALIZATION_OPTIONS: Array<{ value: VisualizationType; label: string }> = [
+  { value: "chart", label: "Chart" },
+  { value: "stat", label: "Stat" },
+  { value: "table", label: "Table" },
+]
+
 interface WidgetSettingsBarProps {
-  visualization: string
+  visualization: VisualizationType
+  onVisualizationChange: (visualization: VisualizationType) => void
   chartId: string
+  stacked: boolean
+  curveType: "linear" | "monotone"
   comparisonMode: "none" | "previous_period"
   includePercentChange: boolean
   debug: boolean
@@ -39,7 +49,10 @@ interface WidgetSettingsBarProps {
 
 export function WidgetSettingsBar({
   visualization,
+  onVisualizationChange,
   chartId,
+  stacked,
+  curveType,
   comparisonMode,
   includePercentChange,
   debug,
@@ -55,13 +68,43 @@ export function WidgetSettingsBar({
   const isTable = visualization === "table"
 
   const chartStyleOptions = isChart
-    ? chartRegistry.filter(
-        (chart) => chart.id === "query-builder-line" || chart.id === chartId,
-      )
+    ? chartRegistry
+        .filter((chart) => chart.tags?.includes("query-builder"))
+        .map((chart) => ({
+          ...chart,
+          name: chart.category === "line" ? "Line" : chart.category === "bar" ? "Bar" : chart.category === "area" ? "Area" : chart.name,
+        }))
     : []
+
+  const chartCategory = isChart ? chartRegistry.find((c) => c.id === chartId)?.category : undefined
+  const showStackedToggle = isChart && (chartCategory === "bar" || chartCategory === "area")
+  const showCurveToggle = isChart && (chartCategory === "line" || chartCategory === "area")
 
   return (
     <div className="flex flex-wrap items-end gap-4">
+      <div className="space-y-1">
+        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+          Type
+        </p>
+        <div className="flex h-9 rounded-md border bg-muted/40 p-0.5">
+          {VISUALIZATION_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onVisualizationChange(opt.value)}
+              className={cn(
+                "px-3 text-xs rounded-sm transition-colors",
+                visualization === opt.value
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {isChart && (
         <div className="space-y-1 w-48">
           <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -82,6 +125,74 @@ export function WidgetSettingsBar({
               ))}
             </SelectContent>
           </Select>
+        </div>
+      )}
+
+      {showStackedToggle && (
+        <div className="space-y-1">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            Layout
+          </p>
+          <div className="flex h-9 rounded-md border bg-muted/40 p-0.5">
+            <button
+              type="button"
+              onClick={() => onChange({ stacked: false })}
+              className={cn(
+                "px-3 text-xs rounded-sm transition-colors",
+                !stacked
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {chartCategory === "bar" ? "Grouped" : "Overlapping"}
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange({ stacked: true })}
+              className={cn(
+                "px-3 text-xs rounded-sm transition-colors",
+                stacked
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Stacked
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showCurveToggle && (
+        <div className="space-y-1">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            Curve
+          </p>
+          <div className="flex h-9 rounded-md border bg-muted/40 p-0.5">
+            <button
+              type="button"
+              onClick={() => onChange({ curveType: "linear" })}
+              className={cn(
+                "px-3 text-xs rounded-sm transition-colors",
+                curveType === "linear"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Linear
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange({ curveType: "monotone" })}
+              className={cn(
+                "px-3 text-xs rounded-sm transition-colors",
+                curveType === "monotone"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Smooth
+            </button>
+          </div>
         </div>
       )}
 

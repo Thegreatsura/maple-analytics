@@ -422,6 +422,7 @@ function toSeriesDescriptor(
   result: QueryRunResult,
   displayName: string,
   rawGroupName: string,
+  singleQuery: boolean,
 ): {
   stableGroupKey: string
   seriesLabel: string
@@ -440,7 +441,7 @@ function toSeriesDescriptor(
 
   return {
     stableGroupKey: normalizedGroupName,
-    seriesLabel: `${displayName}: ${normalizedGroupName}`,
+    seriesLabel: singleQuery ? normalizedGroupName : `${displayName}: ${normalizedGroupName}`,
   }
 }
 
@@ -478,6 +479,11 @@ function mergeQueryRunResults(
     return next
   }
 
+  const successfulResultCount = results.filter(
+    (r) => r.status === "success" && r.data.length > 0 && hasAnySeriesData(r.data),
+  ).length
+  const singleQuery = successfulResultCount <= 1
+
   for (const result of results) {
     if (result.status !== "success") {
       continue
@@ -503,6 +509,7 @@ function mergeQueryRunResults(
             result,
             preferredName,
             groupName,
+            singleQuery,
           )
           const stableKey = `${result.queryId}::${descriptor.stableGroupKey}`
           let seriesName = seriesNameByStableKey.get(stableKey)

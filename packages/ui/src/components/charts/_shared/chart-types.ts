@@ -9,6 +9,8 @@ export interface BaseChartProps {
   legend?: ChartLegendMode
   tooltip?: ChartTooltipMode
   rateMode?: "per_second"
+  stacked?: boolean
+  curveType?: "linear" | "monotone"
 }
 
 export type ChartCategory = "bar" | "area" | "line" | "radar"

@@ -13,8 +13,8 @@ interface StatWidgetProps {
   display: WidgetDisplayConfig
   mode: WidgetMode
   onRemove: () => void
+  onClone?: () => void
   onConfigure?: () => void
-  editPanel?: React.ReactNode
 }
 
 export function formatValue(value: unknown, unit?: string, prefix?: string, suffix?: string): string {
@@ -71,8 +71,8 @@ export const StatWidget = memo(function StatWidget({
   display,
   mode,
   onRemove,
+  onClone,
   onConfigure,
-  editPanel,
 }: StatWidgetProps) {
   const displayName = display.title || "Stat"
   const value = dataState.status === "ready" ? dataState.data : undefined
@@ -84,9 +84,9 @@ export const StatWidget = memo(function StatWidget({
       title={displayName}
       mode={mode}
       onRemove={onRemove}
+      onClone={onClone}
       onConfigure={onConfigure}
       contentClassName="flex-1 min-h-0 flex items-center justify-center p-4"
-      editPanel={editPanel}
     >
       {dataState.status === "loading" ? (
         <Skeleton className="h-8 w-24" />

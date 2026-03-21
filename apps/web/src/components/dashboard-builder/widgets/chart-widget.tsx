@@ -14,8 +14,8 @@ interface ChartWidgetProps {
   display: WidgetDisplayConfig
   mode: WidgetMode
   onRemove: () => void
+  onClone?: () => void
   onConfigure?: () => void
-  editPanel?: React.ReactNode
 }
 
 export const ChartWidget = memo(function ChartWidget({
@@ -23,8 +23,8 @@ export const ChartWidget = memo(function ChartWidget({
   display,
   mode,
   onRemove,
+  onClone,
   onConfigure,
-  editPanel,
 }: ChartWidgetProps) {
   const chartId = display.chartId ?? "gradient-area"
   const entry = getChartById(chartId)
@@ -43,8 +43,8 @@ export const ChartWidget = memo(function ChartWidget({
       title={display.title || entry.name}
       mode={mode}
       onRemove={onRemove}
+      onClone={onClone}
       onConfigure={onConfigure}
-      editPanel={editPanel}
     >
       {dataState.status === "loading" ? (
         <Skeleton className="h-full w-full" />
@@ -59,6 +59,8 @@ export const ChartWidget = memo(function ChartWidget({
             className="h-full w-full aspect-auto"
             legend={legend}
             tooltip={tooltip}
+            stacked={display.stacked}
+            curveType={display.curveType}
           />
         </Suspense>
       )}

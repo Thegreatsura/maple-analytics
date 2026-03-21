@@ -29,7 +29,7 @@ function formatBucketTime(value: unknown): string {
   return typeof value === "string" ? value : ""
 }
 
-export function QueryBuilderBarChart({ data, className, legend, tooltip }: BaseChartProps) {
+export function QueryBuilderBarChart({ data, className, legend, tooltip, stacked }: BaseChartProps) {
   const { chartData, seriesDefinitions } = React.useMemo(() => {
     const source = Array.isArray(data) && data.length > 0 ? data : fallbackData
     const rawSeriesKeys: string[] = []
@@ -131,13 +131,14 @@ export function QueryBuilderBarChart({ data, className, legend, tooltip }: BaseC
 
         {legend === "visible" && <ChartLegend content={<ChartLegendContent />} />}
 
-        {seriesDefinitions.map((definition) => (
+        {seriesDefinitions.map((definition, index) => (
           <Bar
             key={definition.chartKey}
             dataKey={definition.chartKey}
             fill={`var(--color-${definition.chartKey})`}
-            radius={[4, 4, 0, 0]}
+            radius={stacked && index < seriesDefinitions.length - 1 ? [0, 0, 0, 0] : [4, 4, 0, 0]}
             isAnimationActive={false}
+            {...(stacked ? { stackId: "a" } : {})}
           />
         ))}
       </BarChart>

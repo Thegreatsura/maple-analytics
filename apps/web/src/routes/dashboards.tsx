@@ -46,6 +46,7 @@ function DashboardsPage() {
     deleteDashboard,
     updateDashboardTimeRange,
     addWidget,
+    cloneWidget,
     removeWidget,
     updateWidgetDisplay,
     updateWidgetLayouts,
@@ -101,6 +102,12 @@ function DashboardsPage() {
     removeWidget(activeDashboardId, widgetId)
   }
 
+  const handleCloneWidget = (widgetId: string) => {
+    if (readOnly) return
+    if (!activeDashboardId) return
+    cloneWidget(activeDashboardId, widgetId)
+  }
+
   const handleUpdateWidgetDisplay = (
     widgetId: string,
     display: Partial<WidgetDisplayConfig>
@@ -125,6 +132,7 @@ function DashboardsPage() {
   const handleApplyWidgetConfig = (
     widgetId: string,
     updates: {
+      visualization: VisualizationType
       dataSource: WidgetDataSource
       display: WidgetDisplayConfig
     }
@@ -260,6 +268,7 @@ function DashboardsPage() {
               mode={effectiveMode}
               onLayoutChange={handleLayoutChange}
               onRemoveWidget={handleRemoveWidget}
+              onCloneWidget={readOnly ? undefined : handleCloneWidget}
               onUpdateWidgetDisplay={handleUpdateWidgetDisplay}
               onConfigureWidget={readOnly ? undefined : handleConfigureWidget}
             />

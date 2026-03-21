@@ -30,7 +30,7 @@ function formatBucketTime(value: unknown): string {
   return typeof value === "string" ? value : ""
 }
 
-export function QueryBuilderAreaChart({ data, className, legend, tooltip }: BaseChartProps) {
+export function QueryBuilderAreaChart({ data, className, legend, tooltip, stacked, curveType }: BaseChartProps) {
   const { chartData, seriesDefinitions } = React.useMemo(() => {
     const source = Array.isArray(data) && data.length > 0 ? data : fallbackData
     const rawSeriesKeys: string[] = []
@@ -162,18 +162,19 @@ export function QueryBuilderAreaChart({ data, className, legend, tooltip }: Base
         {seriesDefinitions.map((definition) => (
           <Area
             key={definition.chartKey}
-            type="linear"
+            type={curveType ?? "linear"}
             dataKey={definition.chartKey}
             stroke={`var(--color-${definition.chartKey})`}
             fill={`url(#fill-${definition.chartKey})`}
             strokeWidth={2}
             isAnimationActive={false}
+            {...(stacked ? { stackId: "a" } : {})}
           />
         ))}
         {hasIncomplete && seriesDefinitions.map((definition) => (
           <Area
             key={`${definition.chartKey}_incomplete`}
-            type="linear"
+            type={curveType ?? "linear"}
             dataKey={`${definition.chartKey}_incomplete`}
             stroke={`var(--color-${definition.chartKey})`}
             fill={`url(#fill-${definition.chartKey}_incomplete)`}
@@ -183,6 +184,7 @@ export function QueryBuilderAreaChart({ data, className, legend, tooltip }: Base
             connectNulls
             legendType="none"
             isAnimationActive={false}
+            {...(stacked ? { stackId: "a" } : {})}
           />
         ))}
       </AreaChart>

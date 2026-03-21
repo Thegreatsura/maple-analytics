@@ -299,6 +299,39 @@ export function useDashboardStore() {
     [mutateDashboard, readOnly],
   )
 
+  const cloneWidget = useCallback(
+    (dashboardId: string, widgetId: string) => {
+      if (readOnly) return
+      mutateDashboard(dashboardId, (dashboard) => {
+        const source = dashboard.widgets.find((w) => w.id === widgetId)
+        if (!source) return dashboard
+
+        const layoutDefaults = {
+          w: source.layout.w,
+          h: source.layout.h,
+          minW: source.layout.minW ?? 2,
+          minH: source.layout.minH ?? 2,
+        }
+
+        const position = findNextPosition(dashboard.widgets, layoutDefaults.w)
+        const clone: DashboardWidget = {
+          id: generateId(),
+          visualization: source.visualization,
+          dataSource: structuredClone(source.dataSource),
+          display: structuredClone(source.display),
+          layout: { ...position, ...layoutDefaults },
+        }
+
+        return {
+          ...dashboard,
+          widgets: [...dashboard.widgets, clone],
+          updatedAt: new Date().toISOString(),
+        }
+      })
+    },
+    [mutateDashboard, readOnly],
+  )
+
   const removeWidget = useCallback(
     (dashboardId: string, widgetId: string) => {
       mutateDashboard(dashboardId, (dashboard) => ({
@@ -430,6 +463,7 @@ export function useDashboardStore() {
     deleteDashboard,
     updateDashboardTimeRange,
     addWidget,
+    cloneWidget,
     removeWidget,
     updateWidgetDisplay,
     updateWidgetLayouts,

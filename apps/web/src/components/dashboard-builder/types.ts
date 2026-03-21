@@ -94,6 +94,7 @@ export interface WidgetDisplayConfig {
   seriesMapping?: Record<string, string>
   colorOverrides?: Record<string, string>
   stacked?: boolean
+  curveType?: "linear" | "monotone"
 
   // Stat-specific
   unit?: ValueUnit

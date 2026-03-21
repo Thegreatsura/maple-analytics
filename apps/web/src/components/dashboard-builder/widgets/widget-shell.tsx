@@ -1,17 +1,23 @@
 import type { ReactNode } from "react"
-import { GripDotsIcon, TrashIcon, GearIcon, PencilIcon } from "@/components/icons"
+import { GripDotsIcon, TrashIcon, PencilIcon, CopyIcon, DotsVerticalIcon } from "@/components/icons"
 
 import { Card, CardContent, CardHeader, CardTitle, CardAction } from "@maple/ui/components/ui/card"
 import { Button } from "@maple/ui/components/ui/button"
-import { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverTitle } from "@maple/ui/components/ui/popover"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@maple/ui/components/ui/dropdown-menu"
 import type { WidgetMode } from "@/components/dashboard-builder/types"
 
 interface WidgetShellProps {
   title: string
   mode: WidgetMode
   onRemove?: () => void
+  onClone?: () => void
   onConfigure?: () => void
-  editPanel?: ReactNode
   contentClassName?: string
   children: ReactNode
 }
@@ -20,13 +26,12 @@ export function WidgetShell({
   title,
   mode,
   onRemove,
+  onClone,
   onConfigure,
-  editPanel,
   contentClassName,
   children,
 }: WidgetShellProps) {
   const isEditable = mode === "edit"
-  const showActions = !!onConfigure || isEditable
 
   return (
     <Card className="h-full flex flex-col">
@@ -41,40 +46,40 @@ export function WidgetShell({
             {title}
           </CardTitle>
         </div>
-        {showActions && (
+        {isEditable && (
           <CardAction>
-            <div className="flex items-center gap-0.5">
-              {onConfigure && (
-                <Button variant="ghost" size="xs" onClick={onConfigure}>
-                  <GearIcon size={14} />
-                  Configure
-                </Button>
-              )}
-              {isEditable && editPanel && (
-                <Popover>
-                  <PopoverTrigger
-                    render={
-                      <Button variant="ghost" size="icon-xs">
-                        <PencilIcon size={14} />
-                      </Button>
-                    }
-                  />
-                  <PopoverContent align="end" className="w-64">
-                    <div className="flex flex-col gap-3">
-                      <PopoverHeader>
-                        <PopoverTitle>Edit Widget</PopoverTitle>
-                      </PopoverHeader>
-                      {editPanel}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              )}
-              {isEditable && onRemove && (
-                <Button variant="ghost" size="icon-xs" onClick={onRemove}>
-                  <TrashIcon size={14} />
-                </Button>
-              )}
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button variant="ghost" size="icon-xs">
+                    <DotsVerticalIcon size={14} />
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="end">
+                {onConfigure && (
+                  <DropdownMenuItem onClick={onConfigure}>
+                    <PencilIcon size={14} />
+                    Edit
+                  </DropdownMenuItem>
+                )}
+                {onClone && (
+                  <DropdownMenuItem onClick={onClone}>
+                    <CopyIcon size={14} />
+                    Clone
+                  </DropdownMenuItem>
+                )}
+                {onRemove && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem variant="destructive" onClick={onRemove}>
+                      <TrashIcon size={14} />
+                      Delete
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </CardAction>
         )}
       </CardHeader>
