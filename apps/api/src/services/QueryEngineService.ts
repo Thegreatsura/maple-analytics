@@ -150,8 +150,8 @@ const validateTraceAttributeFilters = Effect.fn("QueryEngineService.validateTrac
   if (query.source !== "traces") return
 
   const details: string[] = []
-  if (query.groupBy?.includes("attribute") && !query.filters?.groupByAttributeKey) {
-    details.push("groupBy=attribute requires filters.groupByAttributeKey")
+  if (query.groupBy?.includes("attribute") && !query.filters?.groupByAttributeKeys?.length) {
+    details.push("groupBy=attribute requires filters.groupByAttributeKeys")
   }
   if (!query.filters?.attributeKey && query.filters?.attributeValue) {
     details.push("filters.attributeValue requires filters.attributeKey")
@@ -343,9 +343,9 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
           group_by_span_name: request.query.groupBy?.includes("span_name") ? "1" : undefined,
           group_by_status_code: request.query.groupBy?.includes("status_code") ? "1" : undefined,
           group_by_http_method: request.query.groupBy?.includes("http_method") ? "1" : undefined,
-          group_by_attribute:
-            request.query.groupBy?.includes("attribute")
-              ? request.query.filters?.groupByAttributeKey
+          group_by_attributes:
+            request.query.groupBy?.includes("attribute") && request.query.filters?.groupByAttributeKeys?.length
+              ? request.query.filters.groupByAttributeKeys.join(",")
               : undefined,
           attribute_filter_key: request.query.filters?.attributeKey,
           attribute_filter_value: request.query.filters?.attributeFilterMode === "exists" ? undefined : request.query.filters?.attributeValue,
@@ -469,7 +469,7 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
           group_by_http_method: request.query.groupBy === "http_method" ? "1" : undefined,
           group_by_attribute:
             request.query.groupBy === "attribute"
-              ? request.query.filters?.groupByAttributeKey
+              ? request.query.filters?.groupByAttributeKeys?.[0]
               : undefined,
           attribute_filter_key: request.query.filters?.attributeKey,
           attribute_filter_value: request.query.filters?.attributeFilterMode === "exists" ? undefined : request.query.filters?.attributeValue,

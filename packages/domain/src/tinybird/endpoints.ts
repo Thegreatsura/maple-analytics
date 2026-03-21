@@ -2139,7 +2139,7 @@ export const customTracesTimeseries = defineEndpoint("custom_traces_timeseries",
     root_only: p.string().optional().describe("Filter to root spans only"),
     environments: p.string().optional().describe("Comma-separated environments filter"),
     commit_shas: p.string().optional().describe("Comma-separated commit SHA filter"),
-    group_by_attribute: p.string().optional().describe("Group by SpanAttributes[key]"),
+    group_by_attributes: p.string().optional().describe("Comma-separated SpanAttributes keys to group by"),
     attribute_filter_key: p.string().optional().describe("Filter where SpanAttributes[key] = value"),
     attribute_filter_value: p.string().optional().describe("Value for attribute filter"),
     attribute_filter_exists: p.string().optional().describe("If '1', check key existence instead of equality"),
@@ -2158,7 +2158,12 @@ export const customTracesTimeseries = defineEndpoint("custom_traces_timeseries",
             {% if defined(group_by_span_name) %} toString(SpanName) {% else %} '' {% end %},
             {% if defined(group_by_status_code) %} toString(StatusCode) {% else %} '' {% end %},
             {% if defined(group_by_http_method) %} toString(SpanAttributes['http.method']) {% else %} '' {% end %},
-            {% if defined(group_by_attribute) %} toString(SpanAttributes[{{String(group_by_attribute)}}]) {% else %} '' {% end %}
+            {% if defined(group_by_attributes) %}
+              arrayStringConcat(
+                arrayMap(k -> toString(SpanAttributes[k]),
+                  splitByChar(',', {{String(group_by_attributes)}})),
+                ' · ')
+            {% else %} '' {% end %}
           ]), ' · '), ''), 'all') AS groupName,
           count() AS count,
           avg(Duration) / 1000000 AS avgDuration,

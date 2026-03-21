@@ -310,7 +310,7 @@ export function buildTimeseriesQuerySpec(
       attributeKey?: string
       attributeValue?: string
       attributeFilterMode?: "equals" | "exists"
-      groupByAttributeKey?: string
+      groupByAttributeKeys?: string[]
       resourceAttributeKey?: string
       resourceAttributeValue?: string
       resourceAttributeFilterMode?: "equals" | "exists"
@@ -414,7 +414,8 @@ export function buildTimeseriesQuerySpec(
             warnings.push("Invalid attr.* group by ignored")
           } else {
             groupByKeys.push("attribute")
-            filters.groupByAttributeKey = attributeKey
+            if (!filters.groupByAttributeKeys) filters.groupByAttributeKeys = []
+            filters.groupByAttributeKeys.push(attributeKey)
           }
         } else {
           warnings.push(`Unsupported traces group by ignored: ${raw}`)
@@ -424,7 +425,7 @@ export function buildTimeseriesQuerySpec(
 
     const groupBy = groupByKeys.length > 0 ? groupByKeys : undefined
 
-    if (groupByKeys.includes("attribute") && !filters.groupByAttributeKey) {
+    if (groupByKeys.includes("attribute") && !filters.groupByAttributeKeys?.length) {
       return {
         query: null,
         warnings,
@@ -586,6 +587,48 @@ export function buildTimeseriesQuerySpec(
       bucketSeconds,
     } as QuerySpec,
     warnings,
+    error: null,
+  }
+}
+
+export function buildBreakdownQuerySpec(
+  query: QueryBuilderQueryDraft
+): BuildSpecResult {
+  const timeseriesResult = buildTimeseriesQuerySpec(query)
+  if (!timeseriesResult.query) return timeseriesResult
+
+  const spec = timeseriesResult.query
+  if (spec.kind !== "timeseries") return timeseriesResult
+
+  const groupByArray = (spec as { groupBy?: string[] }).groupBy ?? []
+  const breakdownGroupBy = groupByArray.find((g) => g !== "none")
+  if (!breakdownGroupBy) {
+    return {
+      query: null,
+      warnings: timeseriesResult.warnings,
+      error: "Breakdown requires a non-none group-by field",
+    }
+  }
+
+  const limitRaw = query.addOns.limit ? query.limit.trim() : ""
+  const parsedLimit = limitRaw
+    ? Number.parseInt(limitRaw, 10)
+    : undefined
+  const limit =
+    parsedLimit && Number.isFinite(parsedLimit) && parsedLimit > 0 && parsedLimit <= 100
+      ? parsedLimit
+      : undefined
+
+  return {
+    query: {
+      kind: "breakdown" as const,
+      source: spec.source,
+      metric: (spec as { metric: string }).metric,
+      groupBy: breakdownGroupBy,
+      filters: (spec as { filters?: unknown }).filters,
+      limit,
+    } as QuerySpec,
+    warnings: timeseriesResult.warnings,
     error: null,
   }
 }

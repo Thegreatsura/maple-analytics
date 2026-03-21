@@ -268,6 +268,23 @@ function buildWidgetDataSource(
 
   if (state.visualization === "table") {
     const limit = parsePositiveNumber(state.tableLimit)
+    const hasGroupBy = state.queries.some(
+      (q) =>
+        q.enabled &&
+        q.addOns.groupBy &&
+        q.groupBy.some(
+          (g) => g.trim() !== "" && g.trim().toLowerCase() !== "none",
+        ),
+    )
+
+    if (hasGroupBy) {
+      return {
+        endpoint: "custom_query_builder_breakdown",
+        params: { queries: state.queries },
+        transform: limit ? { limit } : undefined,
+      }
+    }
+
     if (!limit) return base
     return { ...base, transform: { limit } }
   }
@@ -293,7 +310,33 @@ function buildWidgetDisplay(
     display.curveType = state.curveType
   }
   if (state.visualization === "stat") display.unit = state.unit
-  if (state.visualization === "table") display.columns = undefined
+  if (state.visualization === "table") {
+    const groupByQuery = state.queries.find(
+      (q) =>
+        q.enabled &&
+        q.addOns.groupBy &&
+        q.groupBy.some(
+          (g) => g.trim() !== "" && g.trim().toLowerCase() !== "none",
+        ),
+    )
+    if (groupByQuery) {
+      const groupLabel =
+        groupByQuery.groupBy.find(
+          (g) => g.trim() && g.trim().toLowerCase() !== "none",
+        ) ?? "name"
+      display.columns = [
+        { field: "name", header: groupLabel, align: "left" as const },
+        {
+          field: "value",
+          header: groupByQuery.aggregation ?? "value",
+          unit: "number",
+          align: "right" as const,
+        },
+      ]
+    } else {
+      display.columns = undefined
+    }
+  }
   return display
 }
 
