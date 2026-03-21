@@ -33,13 +33,43 @@ const DocsRoute = HttpApiScalar.layer(MapleApi, {
   path: "/docs",
 });
 
+const InfraLive = Database.layer.pipe(
+  Layer.provideMerge(Env.layer),
+)
+
+const CoreServicesLive = Layer.mergeAll(
+  AuthService.layer,
+  ApiKeysService.layer,
+  CloudflareLogpushService.layer,
+  DashboardPersistenceService.layer,
+  OrgIngestKeysService.layer,
+  OrgTinybirdSettingsService.layer,
+  ScrapeTargetsService.layer,
+).pipe(
+  Layer.provideMerge(InfraLive),
+)
+
+const TinybirdServiceLive = TinybirdService.layer.pipe(
+  Layer.provideMerge(CoreServicesLive),
+)
+
+const QueryEngineServiceLive = QueryEngineService.layer.pipe(
+  Layer.provideMerge(TinybirdServiceLive),
+)
+
+const MainLive = Layer.mergeAll(
+  CoreServicesLive,
+  TinybirdServiceLive,
+  QueryEngineServiceLive,
+)
+
 const AllRoutes = Layer.mergeAll(
   HttpApiRoutes,
+  AutumnRouter,
+  McpLive,
   HealthRouter,
   McpGetFallback,
   DocsRoute,
-  AutumnRouter,
-  McpLive,
 ).pipe(
   Layer.provideMerge(
     HttpRouter.cors({
@@ -51,24 +81,8 @@ const AllRoutes = Layer.mergeAll(
   ),
 );
 
-const MainLive = Layer.mergeAll(
-  Env.layer,
-  Database.layer,
-  TinybirdService.layer,
-  QueryEngineService.layer,
-  AuthService.layer,
-  ApiKeysService.layer,
-  CloudflareLogpushService.layer,
-  DashboardPersistenceService.layer,
-  OrgIngestKeysService.layer,
-  OrgTinybirdSettingsService.layer,
-  ScrapeTargetsService.layer,
-);
-
 const RuntimeLive = Layer.mergeAll(
-  MainLive,
   TracerLive,
-  AuthorizationLive,
   Layer.succeed(
     HttpMiddleware.TracerDisabledWhen,
     (request: { url: string; method: string }) =>
@@ -82,6 +96,10 @@ const RuntimeLive = Layer.mergeAll(
   ).pipe(Layer.orDie),
 )
 
-const app = HttpRouter.serve(AllRoutes).pipe(Layer.provide(RuntimeLive));
+const app = HttpRouter.serve(AllRoutes).pipe(
+  Layer.provide(RuntimeLive),
+  Layer.provide(MainLive),
+  Layer.provide(AuthorizationLive.pipe(Layer.provideMerge(Env.layer))),
+);
 
 BunRuntime.runMain(app.pipe(Layer.launch as never));
