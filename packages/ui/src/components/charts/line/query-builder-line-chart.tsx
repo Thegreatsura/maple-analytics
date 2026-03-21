@@ -1,6 +1,7 @@
 import * as React from "react"
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
+import { getSemanticSeriesColor } from "../../../lib/semantic-series-colors"
 import type { BaseChartProps } from "../_shared/chart-types"
 import { useIncompleteSegments, extendConfigWithIncomplete } from "../_shared/use-incomplete-segments"
 import {
@@ -94,7 +95,7 @@ export function QueryBuilderLineChart({ data, className, legend, tooltip, curveT
     const base = seriesDefinitions.reduce((config, definition, index) => {
       config[definition.chartKey] = {
         label: definition.rawKey,
-        color: `var(--chart-${(index % 5) + 1})`,
+        color: getSemanticSeriesColor(definition.rawKey) ?? `var(--chart-${(index % 5) + 1})`,
       }
       return config
     }, {} as ChartConfig)

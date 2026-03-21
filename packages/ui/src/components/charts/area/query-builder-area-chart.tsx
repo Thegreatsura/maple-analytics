@@ -1,6 +1,7 @@
 import * as React from "react"
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
+import { getSemanticSeriesColor } from "../../../lib/semantic-series-colors"
 import type { BaseChartProps } from "../_shared/chart-types"
 import { useIncompleteSegments, extendConfigWithIncomplete } from "../_shared/use-incomplete-segments"
 import {
@@ -83,7 +84,7 @@ export function QueryBuilderAreaChart({ data, className, legend, tooltip, stacke
     const base = seriesDefinitions.reduce((config, definition, index) => {
       config[definition.chartKey] = {
         label: definition.rawKey,
-        color: `var(--chart-${(index % 5) + 1})`,
+        color: getSemanticSeriesColor(definition.rawKey) ?? `var(--chart-${(index % 5) + 1})`,
       }
       return config
     }, {} as ChartConfig)

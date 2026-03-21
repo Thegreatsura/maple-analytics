@@ -1,6 +1,7 @@
 import * as React from "react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
+import { getSemanticSeriesColor } from "../../../lib/semantic-series-colors"
 import type { BaseChartProps } from "../_shared/chart-types"
 import {
   type ChartConfig,
@@ -75,7 +76,7 @@ export function QueryBuilderBarChart({ data, className, legend, tooltip, stacked
     return seriesDefinitions.reduce((config, definition, index) => {
       config[definition.chartKey] = {
         label: definition.rawKey,
-        color: `var(--chart-${(index % 5) + 1})`,
+        color: getSemanticSeriesColor(definition.rawKey) ?? `var(--chart-${(index % 5) + 1})`,
       }
       return config
     }, {} as ChartConfig)
