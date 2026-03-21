@@ -48,22 +48,27 @@ function isExplicitInvalidMetricType(value: unknown): boolean {
   return value !== undefined && !QUERY_BUILDER_METRIC_TYPES.includes(value as QueryBuilderMetricType)
 }
 
-function toQueryGroupByToken(value: unknown): string {
-  if (typeof value !== "string" || !value.trim()) return "service.name"
-  switch (value) {
-    case "service":
-      return "service.name"
-    case "span_name":
-      return "span.name"
-    case "status_code":
-      return "status.code"
-    case "http_method":
-      return "http.method"
-    case "none":
-      return "none"
-    default:
-      return value
+function normalizeGroupByToken(token: string): string {
+  switch (token) {
+    case "service": return "service.name"
+    case "span_name": return "span.name"
+    case "status_code": return "status.code"
+    case "http_method": return "http.method"
+    case "none": return "none"
+    default: return token
   }
+}
+
+function toQueryGroupByArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      .map(normalizeGroupByToken)
+  }
+  if (typeof value === "string" && value.trim()) {
+    return [normalizeGroupByToken(value)]
+  }
+  return ["service.name"]
 }
 
 function hasAnyKnownQueryFields(raw: Record<string, unknown>): boolean {
@@ -225,7 +230,7 @@ function normalizeQueryEntry(
   const hasInvalidMetricType =
     dataSource === "metrics" && isExplicitInvalidMetricType(metricTypeInput)
   const defaultWhereClause = formatFiltersAsWhereClause({ filters: fallbackFilters })
-  const groupBy = toQueryGroupByToken(queryRecord.groupBy)
+  const groupBy = toQueryGroupByArray(queryRecord.groupBy)
   const addOns = asRecord(queryRecord.addOns)
   const rawAggregation =
     typeof queryRecord.aggregation === "string" && queryRecord.aggregation.trim().length > 0
@@ -268,7 +273,7 @@ function normalizeQueryEntry(
       groupBy:
         typeof addOns?.groupBy === "boolean"
           ? addOns.groupBy
-          : groupBy !== "none",
+          : groupBy.length > 0 && !(groupBy.length === 1 && groupBy[0] === "none"),
       having: typeof addOns?.having === "boolean" ? addOns.having : queryBase.addOns.having,
       orderBy: typeof addOns?.orderBy === "boolean" ? addOns.orderBy : queryBase.addOns.orderBy,
       limit: typeof addOns?.limit === "boolean" ? addOns.limit : queryBase.addOns.limit,

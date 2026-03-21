@@ -2153,19 +2153,13 @@ export const customTracesTimeseries = defineEndpoint("custom_traces_timeseries",
       sql: `
         SELECT
           toStartOfInterval(Timestamp, INTERVAL {{Int32(bucket_seconds, 60)}} SECOND) AS bucket,
-          {% if defined(group_by_service) %}
-            ServiceName
-          {% elif defined(group_by_span_name) %}
-            SpanName
-          {% elif defined(group_by_status_code) %}
-            StatusCode
-          {% elif defined(group_by_http_method) %}
-            SpanAttributes['http.method']
-          {% elif defined(group_by_attribute) %}
-            SpanAttributes[{{String(group_by_attribute)}}]
-          {% else %}
-            'all'
-          {% end %} AS groupName,
+          coalesce(nullIf(arrayStringConcat(arrayFilter(x -> x != '', [
+            {% if defined(group_by_service) %} toString(ServiceName) {% else %} '' {% end %},
+            {% if defined(group_by_span_name) %} toString(SpanName) {% else %} '' {% end %},
+            {% if defined(group_by_status_code) %} toString(StatusCode) {% else %} '' {% end %},
+            {% if defined(group_by_http_method) %} toString(SpanAttributes['http.method']) {% else %} '' {% end %},
+            {% if defined(group_by_attribute) %} toString(SpanAttributes[{{String(group_by_attribute)}}]) {% else %} '' {% end %}
+          ]), ' · '), ''), 'all') AS groupName,
           count() AS count,
           avg(Duration) / 1000000 AS avgDuration,
           quantile(0.5)(Duration) / 1000000 AS p50Duration,
@@ -2344,13 +2338,10 @@ export const customLogsTimeseries = defineEndpoint("custom_logs_timeseries", {
       sql: `
         SELECT
           toStartOfInterval(Timestamp, INTERVAL {{Int32(bucket_seconds, 60)}} SECOND) AS bucket,
-          {% if defined(group_by_service) %}
-            ServiceName
-          {% elif defined(group_by_severity) %}
-            SeverityText
-          {% else %}
-            'all'
-          {% end %} AS groupName,
+          coalesce(nullIf(arrayStringConcat(arrayFilter(x -> x != '', [
+            {% if defined(group_by_service) %} toString(ServiceName) {% else %} '' {% end %},
+            {% if defined(group_by_severity) %} toString(SeverityText) {% else %} '' {% end %}
+          ]), ' · '), ''), 'all') AS groupName,
           count() AS count
         FROM logs
         WHERE Timestamp >= {{DateTime(start_time)}}

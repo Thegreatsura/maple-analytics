@@ -41,7 +41,7 @@ describe("query_data", () => {
           kind: "timeseries",
           source: "traces",
           metric: "count",
-          groupBy: "http_method",
+          groupBy: ["http_method"],
           bucketSeconds: 300,
         },
       },
@@ -71,7 +71,7 @@ describe("query_data", () => {
           kind: "timeseries",
           source: "logs",
           metric: "count",
-          groupBy: "severity",
+          groupBy: ["severity"],
         },
       },
       {
@@ -104,7 +104,7 @@ describe("query_data", () => {
           kind: "timeseries",
           source: "metrics",
           metric: "max",
-          groupBy: "none",
+          groupBy: ["none"],
           filters: {
             metricName: "request.duration",
             metricType: "histogram",

@@ -150,7 +150,7 @@ const validateTraceAttributeFilters = Effect.fn("QueryEngineService.validateTrac
   if (query.source !== "traces") return
 
   const details: string[] = []
-  if (query.groupBy === "attribute" && !query.filters?.groupByAttributeKey) {
+  if (query.groupBy?.includes("attribute") && !query.filters?.groupByAttributeKey) {
     details.push("groupBy=attribute requires filters.groupByAttributeKey")
   }
   if (!query.filters?.attributeKey && query.filters?.attributeValue) {
@@ -339,12 +339,12 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
           root_only: request.query.filters?.rootSpansOnly ? "1" : undefined,
           environments: request.query.filters?.environments?.join(","),
           commit_shas: request.query.filters?.commitShas?.join(","),
-          group_by_service: request.query.groupBy === "service" ? "1" : undefined,
-          group_by_span_name: request.query.groupBy === "span_name" ? "1" : undefined,
-          group_by_status_code: request.query.groupBy === "status_code" ? "1" : undefined,
-          group_by_http_method: request.query.groupBy === "http_method" ? "1" : undefined,
+          group_by_service: request.query.groupBy?.includes("service") ? "1" : undefined,
+          group_by_span_name: request.query.groupBy?.includes("span_name") ? "1" : undefined,
+          group_by_status_code: request.query.groupBy?.includes("status_code") ? "1" : undefined,
+          group_by_http_method: request.query.groupBy?.includes("http_method") ? "1" : undefined,
           group_by_attribute:
-            request.query.groupBy === "attribute"
+            request.query.groupBy?.includes("attribute")
               ? request.query.filters?.groupByAttributeKey
               : undefined,
           attribute_filter_key: request.query.filters?.attributeKey,
@@ -384,8 +384,8 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
           bucket_seconds: bucketSeconds,
           service_name: request.query.filters?.serviceName,
           severity: request.query.filters?.severity,
-          group_by_service: request.query.groupBy === "service" ? "1" : undefined,
-          group_by_severity: request.query.groupBy === "severity" ? "1" : undefined,
+          group_by_service: request.query.groupBy?.includes("service") ? "1" : undefined,
+          group_by_severity: request.query.groupBy?.includes("severity") ? "1" : undefined,
         }),
         "Failed to execute logs timeseries query",
       )
@@ -427,7 +427,7 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
         count: "dataPointCount",
       } as const
       const valueField = metricValueField[request.query.metric]
-      const data = request.query.groupBy === "none"
+      const data = (request.query.groupBy?.includes("none") || !request.query.groupBy?.length)
         ? groupTimeSeriesRows(
             collapseMetricTimeseriesRows(result as Array<MetricTimeseriesRow>, request.query.metric),
             (row) => row.value,

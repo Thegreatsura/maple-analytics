@@ -1089,11 +1089,11 @@ export function QueryBuilderLab({
                               Group By
                             </Label>
                             <GroupByAutocomplete
-                              value={query.groupBy}
+                              value={query.groupBy[0] ?? ""}
                               onChange={(nextGroupBy) =>
                                 updateQuery(query.id, (current) => ({
                                   ...current,
-                                  groupBy: nextGroupBy,
+                                  groupBy: nextGroupBy ? [nextGroupBy] : [],
                                 }))
                               }
                               dataSource={query.dataSource}

@@ -17,7 +17,7 @@ export interface QueryBuilderQueryDraft {
   stepInterval: string
   orderByDirection: "desc" | "asc"
   addOns: Record<QueryBuilderAddOnKey, boolean>
-  groupBy: string
+  groupBy: string[]
   having: string
   orderBy: string
   limit: string
@@ -136,7 +136,7 @@ export function createQueryDraft(index: number): QueryBuilderQueryDraft {
       limit: false,
       legend: false,
     },
-    groupBy: "service.name",
+    groupBy: ["service.name"],
     having: "",
     orderBy: "",
     limit: "",
@@ -391,41 +391,40 @@ export function buildTimeseriesQuerySpec(
       warnings.push(`Unsupported traces filter ignored: ${clause.key}`)
     }
 
-    let groupBy:
-      | "service"
-      | "span_name"
-      | "status_code"
-      | "http_method"
-      | "attribute"
-      | "none"
-      | undefined
+    type TracesGroupByKey = "service" | "span_name" | "status_code" | "http_method" | "attribute" | "none"
+    const groupByKeys: TracesGroupByKey[] = []
 
-    if (query.addOns.groupBy && query.groupBy.trim()) {
-      const token = query.groupBy.trim().toLowerCase()
-      if (token === "service" || token === "service.name") {
-        groupBy = "service"
-      } else if (token === "span" || token === "span.name") {
-        groupBy = "span_name"
-      } else if (token === "status" || token === "status.code") {
-        groupBy = "status_code"
-      } else if (token === "http.method") {
-        groupBy = "http_method"
-      } else if (token === "none" || token === "all") {
-        groupBy = "none"
-      } else if (token.startsWith("attr.")) {
-        const attributeKey = token.slice(5)
-        if (!attributeKey) {
-          warnings.push("Invalid attr.* group by ignored")
+    if (query.addOns.groupBy && query.groupBy.length > 0) {
+      for (const raw of query.groupBy) {
+        const token = raw.trim().toLowerCase()
+        if (!token) continue
+        if (token === "service" || token === "service.name") {
+          groupByKeys.push("service")
+        } else if (token === "span" || token === "span.name") {
+          groupByKeys.push("span_name")
+        } else if (token === "status" || token === "status.code") {
+          groupByKeys.push("status_code")
+        } else if (token === "http.method") {
+          groupByKeys.push("http_method")
+        } else if (token === "none" || token === "all") {
+          groupByKeys.push("none")
+        } else if (token.startsWith("attr.")) {
+          const attributeKey = token.slice(5)
+          if (!attributeKey) {
+            warnings.push("Invalid attr.* group by ignored")
+          } else {
+            groupByKeys.push("attribute")
+            filters.groupByAttributeKey = attributeKey
+          }
         } else {
-          groupBy = "attribute"
-          filters.groupByAttributeKey = attributeKey
+          warnings.push(`Unsupported traces group by ignored: ${raw}`)
         }
-      } else {
-        warnings.push(`Unsupported traces group by ignored: ${query.groupBy}`)
       }
     }
 
-    if (groupBy === "attribute" && !filters.groupByAttributeKey) {
+    const groupBy = groupByKeys.length > 0 ? groupByKeys : undefined
+
+    if (groupByKeys.includes("attribute") && !filters.groupByAttributeKey) {
       return {
         query: null,
         warnings,
@@ -481,20 +480,26 @@ export function buildTimeseriesQuerySpec(
       warnings.push(`Unsupported logs filter ignored: ${clause.key}`)
     }
 
-    let groupBy: "service" | "severity" | "none" | undefined
+    type LogsGroupByKey = "service" | "severity" | "none"
+    const logsGroupByKeys: LogsGroupByKey[] = []
 
-    if (query.addOns.groupBy && query.groupBy.trim()) {
-      const token = query.groupBy.trim().toLowerCase()
-      if (token === "service" || token === "service.name") {
-        groupBy = "service"
-      } else if (token === "severity") {
-        groupBy = "severity"
-      } else if (token === "none" || token === "all") {
-        groupBy = "none"
-      } else {
-        warnings.push(`Unsupported logs group by ignored: ${query.groupBy}`)
+    if (query.addOns.groupBy && query.groupBy.length > 0) {
+      for (const raw of query.groupBy) {
+        const token = raw.trim().toLowerCase()
+        if (!token) continue
+        if (token === "service" || token === "service.name") {
+          logsGroupByKeys.push("service")
+        } else if (token === "severity") {
+          logsGroupByKeys.push("severity")
+        } else if (token === "none" || token === "all") {
+          logsGroupByKeys.push("none")
+        } else {
+          warnings.push(`Unsupported logs group by ignored: ${raw}`)
+        }
       }
     }
+
+    const groupBy = logsGroupByKeys.length > 0 ? logsGroupByKeys : undefined
 
     return {
       query: {
@@ -554,17 +559,22 @@ export function buildTimeseriesQuerySpec(
     warnings.push(`Unsupported metrics filter ignored: ${clause.key}`)
   }
 
-  let groupBy: "service" | "none" | undefined
-  if (query.addOns.groupBy && query.groupBy.trim()) {
-    const token = query.groupBy.trim().toLowerCase()
-    if (token === "service" || token === "service.name") {
-      groupBy = "service"
-    } else if (token === "none" || token === "all") {
-      groupBy = "none"
-    } else {
-      warnings.push(`Unsupported metrics group by ignored: ${query.groupBy}`)
+  type MetricsGroupByKey = "service" | "none"
+  const metricsGroupByKeys: MetricsGroupByKey[] = []
+  if (query.addOns.groupBy && query.groupBy.length > 0) {
+    for (const raw of query.groupBy) {
+      const token = raw.trim().toLowerCase()
+      if (!token) continue
+      if (token === "service" || token === "service.name") {
+        metricsGroupByKeys.push("service")
+      } else if (token === "none" || token === "all") {
+        metricsGroupByKeys.push("none")
+      } else {
+        warnings.push(`Unsupported metrics group by ignored: ${raw}`)
+      }
     }
   }
+  const groupBy = metricsGroupByKeys.length > 0 ? metricsGroupByKeys : undefined
 
   return {
     query: {

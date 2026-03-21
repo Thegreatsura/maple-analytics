@@ -81,7 +81,7 @@ describe("makeQueryEngineExecute", () => {
         kind: "timeseries",
         source: "traces",
         metric: "count",
-        groupBy: "service",
+        groupBy: ["service"],
         bucketSeconds: 300,
       },
     }
@@ -151,7 +151,7 @@ describe("makeQueryEngineExecute", () => {
         kind: "timeseries",
         source: "traces",
         metric: "count",
-        groupBy: "service",
+        groupBy: ["service"],
         bucketSeconds: 300,
       },
     }
@@ -211,7 +211,7 @@ describe("makeQueryEngineExecute", () => {
         kind: "timeseries",
         source: "traces",
         metric: "count",
-        groupBy: "attribute",
+        groupBy: ["attribute"],
       },
     }
 
@@ -258,7 +258,7 @@ describe("makeQueryEngineExecute", () => {
         kind: "timeseries",
         source: "traces",
         metric: "count",
-        groupBy: "http_method",
+        groupBy: ["http_method"],
         bucketSeconds: 300,
       },
     }
@@ -318,7 +318,7 @@ describe("makeQueryEngineExecute", () => {
         kind: "timeseries",
         source: "metrics",
         metric: "avg",
-        groupBy: "none",
+        groupBy: ["none"],
         bucketSeconds: 300,
         filters: {
           metricName: "request.duration",
@@ -379,7 +379,7 @@ describe("makeQueryEngineExecute", () => {
         kind: "timeseries",
         source: "metrics",
         metric: "avg",
-        groupBy: "service",
+        groupBy: ["service"],
         bucketSeconds: 300,
         filters: {
           metricName: "cpu.usage",

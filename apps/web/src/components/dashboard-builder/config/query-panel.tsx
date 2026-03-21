@@ -82,106 +82,157 @@ const ADD_ON_KEYS: { key: QueryBuilderAddOnKey; label: string }[] = [
 ]
 
 // ---------------------------------------------------------------------------
-// GroupByAutocomplete (inline)
+// GroupByMultiSelect (inline)
 // ---------------------------------------------------------------------------
 
-function GroupByAutocomplete({
+function GroupByMultiSelect({
   value,
   onChange,
   dataSource,
   attributeKeys,
 }: {
-  value: string
-  onChange: (value: string) => void
+  value: string[]
+  onChange: (value: string[]) => void
   dataSource: QueryBuilderDataSource
   attributeKeys?: string[]
 }) {
   const inputRef = React.useRef<HTMLInputElement | null>(null)
   const [isFocused, setIsFocused] = React.useState(false)
   const [isDismissed, setIsDismissed] = React.useState(false)
+  const [inputValue, setInputValue] = React.useState("")
   const [activeIndex, setActiveIndex] = React.useState(0)
 
+  const selectedSet = React.useMemo(() => new Set(value), [value])
+
   const suggestions = React.useMemo(() => {
-    const query = value.toLowerCase()
-    const staticOptions = GROUP_BY_OPTIONS[dataSource].map((opt) => ({
-      label: opt.label,
-      value: opt.value,
-    }))
+    const query = inputValue.toLowerCase()
+    const staticOptions = GROUP_BY_OPTIONS[dataSource]
+      .filter((opt) => opt.value !== "none")
+      .map((opt) => ({ label: opt.label, value: opt.value }))
     const attrOptions = (attributeKeys ?? []).map((key) => ({
       label: `attr.${key}`,
       value: `attr.${key}`,
     }))
-    const options = [...staticOptions, ...attrOptions]
+    const options = [...staticOptions, ...attrOptions].filter(
+      (opt) => !selectedSet.has(opt.value),
+    )
     if (!query) return options
     return options.filter(
       (opt) =>
         opt.label.toLowerCase().includes(query) ||
         opt.value.toLowerCase().includes(query),
     )
-  }, [value, dataSource, attributeKeys])
+  }, [inputValue, dataSource, attributeKeys, selectedSet])
 
   const isOpen = isFocused && !isDismissed && suggestions.length > 0
 
   React.useEffect(() => {
     setActiveIndex(0)
-  }, [suggestions.length, value])
+  }, [suggestions.length, inputValue])
+
+  const addKey = React.useCallback(
+    (key: string) => {
+      if (!selectedSet.has(key)) {
+        onChange([...value, key])
+      }
+      setInputValue("")
+      setIsDismissed(false)
+    },
+    [value, onChange, selectedSet],
+  )
+
+  const removeKey = React.useCallback(
+    (key: string) => {
+      onChange(value.filter((k) => k !== key))
+    },
+    [value, onChange],
+  )
 
   const applySuggestion = React.useCallback(
     (index: number) => {
       const suggestion = suggestions[index]
       if (!suggestion) return
-      onChange(suggestion.value)
-      setIsDismissed(true)
+      addKey(suggestion.value)
     },
-    [suggestions, onChange],
+    [suggestions, addKey],
   )
 
   return (
     <div className="relative flex-1 min-w-[140px]">
-      <Input
-        ref={inputRef}
-        value={value}
-        placeholder="service.name"
-        className="h-8 text-xs"
-        onFocus={() => {
-          setIsFocused(true)
-          setIsDismissed(false)
-        }}
-        onBlur={() => setIsFocused(false)}
-        onChange={(event) => {
-          onChange(event.target.value)
-          setIsDismissed(false)
-        }}
-        onKeyDown={(event) => {
-          if (!isOpen || suggestions.length === 0) return
-          if (event.key === "ArrowDown") {
-            event.preventDefault()
-            setActiveIndex((c) => (c + 1) % suggestions.length)
-            return
-          }
-          if (event.key === "ArrowUp") {
-            event.preventDefault()
-            setActiveIndex(
-              (c) => (c - 1 + suggestions.length) % suggestions.length,
-            )
-            return
-          }
-          if (event.key === "Enter" || event.key === "Tab") {
-            event.preventDefault()
-            applySuggestion(activeIndex)
-            return
-          }
-          if (event.key === "Escape") {
-            event.preventDefault()
-            setIsDismissed(true)
-          }
-        }}
-      />
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-1 min-h-8 px-2 py-1 border rounded-md bg-transparent text-xs",
+          isFocused && "ring-1 ring-ring",
+        )}
+        onClick={() => inputRef.current?.focus()}
+      >
+        {value.map((key) => (
+          <span
+            key={key}
+            className="inline-flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-xs font-mono text-foreground"
+          >
+            {key}
+            <button
+              type="button"
+              className="ml-0.5 text-muted-foreground hover:text-foreground"
+              onClick={(event) => {
+                event.stopPropagation()
+                removeKey(key)
+              }}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        <input
+          ref={inputRef}
+          value={inputValue}
+          placeholder={value.length === 0 ? "service.name" : ""}
+          className="flex-1 min-w-[80px] bg-transparent outline-none text-xs placeholder:text-muted-foreground"
+          onFocus={() => {
+            setIsFocused(true)
+            setIsDismissed(false)
+          }}
+          onBlur={() => setIsFocused(false)}
+          onChange={(event) => {
+            setInputValue(event.target.value)
+            setIsDismissed(false)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Backspace" && !inputValue && value.length > 0) {
+              removeKey(value[value.length - 1])
+              return
+            }
+            if (!isOpen || suggestions.length === 0) return
+            if (event.key === "ArrowDown") {
+              event.preventDefault()
+              setActiveIndex((c) => (c + 1) % suggestions.length)
+              return
+            }
+            if (event.key === "ArrowUp") {
+              event.preventDefault()
+              setActiveIndex(
+                (c) => (c - 1 + suggestions.length) % suggestions.length,
+              )
+              return
+            }
+            if (event.key === "Enter" || event.key === "Tab") {
+              event.preventDefault()
+              applySuggestion(activeIndex)
+              return
+            }
+            if (event.key === "Escape") {
+              event.preventDefault()
+              setIsDismissed(true)
+            }
+          }}
+        />
+      </div>
       {isOpen && (
         <div
           role="listbox"
           aria-label="Group by suggestions"
-          className="absolute z-50 mt-1 max-h-52 w-full overflow-auto border bg-popover text-popover-foreground shadow-md"
+          className="absolute z-50 mt-1 max-h-52 w-full overflow-auto border bg-popover text-popover-foreground shadow-md rounded-md"
         >
           {suggestions.map((suggestion, index) => (
             <button
@@ -190,7 +241,7 @@ function GroupByAutocomplete({
               role="option"
               aria-selected={index === activeIndex}
               className={cn(
-                "flex w-full items-center px-2 py-1 text-left text-xs font-mono",
+                "flex w-full items-center px-2 py-1.5 text-left text-xs font-mono",
                 index === activeIndex
                   ? "bg-accent text-accent-foreground"
                   : "hover:bg-accent/60",
@@ -509,9 +560,9 @@ function MetricsBody({
   ) => void
 }) {
   const groupByDisplay =
-    !query.addOns.groupBy || !query.groupBy.trim() || query.groupBy === "none"
+    !query.addOns.groupBy || query.groupBy.length === 0 || (query.groupBy.length === 1 && query.groupBy[0] === "none")
       ? "Everything (no breakdown)"
-      : query.groupBy
+      : query.groupBy.join(", ")
 
   return (
     <>
@@ -643,16 +694,16 @@ function MetricsBody({
         <Select
           value={
             !query.addOns.groupBy ||
-            !query.groupBy.trim() ||
-            query.groupBy === "none"
+            query.groupBy.length === 0 ||
+            (query.groupBy.length === 1 && query.groupBy[0] === "none")
               ? "__none__"
-              : query.groupBy
+              : query.groupBy[0] ?? "__none__"
           }
           onValueChange={(value) => {
             if (!value) return
             onUpdate((current) => ({
               ...current,
-              groupBy: value === "__none__" ? "none" : value,
+              groupBy: value === "__none__" ? [] : [value],
               addOns: { ...current.addOns, groupBy: value !== "__none__" },
             }))
           }}
@@ -695,7 +746,7 @@ function AddOnSections({
           <span className="text-[11px] text-muted-foreground w-16 shrink-0">
             Group By
           </span>
-          <GroupByAutocomplete
+          <GroupByMultiSelect
             value={query.groupBy}
             onChange={(value) =>
               onUpdate((current) => ({ ...current, groupBy: value }))

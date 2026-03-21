@@ -225,14 +225,7 @@ function buildTimeseriesQuerySpec(data: CustomChartTimeSeriesInput): QuerySpec |
       kind: "timeseries",
       source: "traces",
       metric: data.metric as TracesMetric,
-      groupBy: data.groupBy as
-        | "service"
-        | "span_name"
-        | "status_code"
-        | "http_method"
-        | "attribute"
-        | "none"
-        | undefined,
+      groupBy: data.groupBy ? [data.groupBy] as any : undefined,
       filters: {
         serviceName: data.filters?.serviceName,
         spanName: data.filters?.spanName,
@@ -260,7 +253,7 @@ function buildTimeseriesQuerySpec(data: CustomChartTimeSeriesInput): QuerySpec |
       kind: "timeseries",
       source: "logs",
       metric: "count",
-      groupBy: data.groupBy as "service" | "severity" | "none" | undefined,
+      groupBy: data.groupBy ? [data.groupBy] as any : undefined,
       filters: {
         serviceName: data.filters?.serviceName,
         severity: data.filters?.severity,
@@ -285,7 +278,7 @@ function buildTimeseriesQuerySpec(data: CustomChartTimeSeriesInput): QuerySpec |
     kind: "timeseries",
     source: "metrics",
     metric: data.metric as MetricsMetric,
-    groupBy: metricsGroupBy === "none" ? "none" : "service",
+    groupBy: metricsGroupBy === "none" ? ["none"] : ["service"],
     filters: {
       metricName: data.filters.metricName,
       metricType: data.filters.metricType,

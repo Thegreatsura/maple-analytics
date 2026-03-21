@@ -56,7 +56,7 @@ const QueryDraftSchema = Schema.Struct({
     limit: Schema.Boolean,
     legend: Schema.Boolean,
   }),
-  groupBy: Schema.String,
+  groupBy: Schema.mutable(Schema.Array(Schema.String)),
   having: Schema.String,
   orderBy: Schema.String,
   limit: Schema.String,

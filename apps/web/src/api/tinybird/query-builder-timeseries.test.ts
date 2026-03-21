@@ -22,7 +22,7 @@ describe("query-builder timeseries strategy", () => {
       kind: "timeseries",
       source: "traces",
       metric: "count",
-      groupBy: "service",
+      groupBy: ["service"],
     }
 
     const resolved = __testables.resolveTimeseriesBucketSpec(

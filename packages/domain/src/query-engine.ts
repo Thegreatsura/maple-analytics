@@ -65,14 +65,14 @@ export const TracesTimeseriesQuery = Schema.Struct({
   source: Schema.Literal("traces"),
   metric: TracesMetric,
   groupBy: Schema.optional(
-    Schema.Literals([
+    Schema.Array(Schema.Literals([
       "service",
       "span_name",
       "status_code",
       "http_method",
       "attribute",
       "none",
-    ]),
+    ])),
   ),
   filters: Schema.optional(TracesFilters),
   bucketSeconds: Schema.optional(
@@ -85,7 +85,7 @@ export const LogsTimeseriesQuery = Schema.Struct({
   kind: Schema.Literal("timeseries"),
   source: Schema.Literal("logs"),
   metric: Schema.Literal("count"),
-  groupBy: Schema.optional(Schema.Literals(["service", "severity", "none"])),
+  groupBy: Schema.optional(Schema.Array(Schema.Literals(["service", "severity", "none"]))),
   filters: Schema.optional(LogsFilters),
   bucketSeconds: Schema.optional(
     Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
@@ -97,7 +97,7 @@ export const MetricsTimeseriesQuery = Schema.Struct({
   kind: Schema.Literal("timeseries"),
   source: Schema.Literal("metrics"),
   metric: MetricsMetric,
-  groupBy: Schema.optional(Schema.Literals(["service", "none"])),
+  groupBy: Schema.optional(Schema.Array(Schema.Literals(["service", "none"]))),
   filters: MetricsFilters,
   bucketSeconds: Schema.optional(
     Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),

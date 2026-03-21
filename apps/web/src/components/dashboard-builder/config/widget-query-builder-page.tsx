@@ -78,16 +78,11 @@ function parsePositiveNumber(raw: string): number | undefined {
   return parsed
 }
 
-function toQueryGroupByToken(groupBy: unknown): string {
-  if (typeof groupBy !== "string" || !groupBy.trim()) return "service.name"
-  switch (groupBy) {
-    case "service": return "service.name"
-    case "span_name": return "span.name"
-    case "status_code": return "status.code"
-    case "http_method": return "http.method"
-    case "none": return "none"
-    default: return groupBy
+function toQueryGroupByArray(groupBy: unknown): string[] {
+  if (Array.isArray(groupBy)) {
+    return groupBy.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
   }
+  return ["service.name"]
 }
 
 function toMetricType(input: unknown, fallback: QueryBuilderMetricType): QueryBuilderMetricType {
@@ -110,6 +105,7 @@ function normalizeLoadedQuery(raw: QueryBuilderQueryDraft, index: number): Query
         ? raw.signalSource
         : base.signalSource,
     metricType: toMetricType(raw.metricType, base.metricType),
+    groupBy: toQueryGroupByArray(raw.groupBy),
     addOns: {
       groupBy: raw.addOns?.groupBy ?? base.addOns.groupBy,
       having: raw.addOns?.having ?? base.addOns.having,
@@ -222,7 +218,7 @@ function toInitialState(widget: DashboardWidget): QueryBuilderWidgetState {
         ? String(params.bucketSeconds)
         : fallbackQuery.stepInterval,
     whereClause: formatFiltersAsWhereClause(params),
-    groupBy: toQueryGroupByToken(params.groupBy),
+    groupBy: toQueryGroupByArray(params.groupBy),
     metricName:
       typeof ((params.filters as Record<string, unknown> | undefined)?.metricName) === "string"
         ? ((params.filters as Record<string, unknown>).metricName as string)
@@ -233,7 +229,7 @@ function toInitialState(widget: DashboardWidget): QueryBuilderWidgetState {
     ),
     addOns: {
       ...fallbackQuery.addOns,
-      groupBy: typeof params.groupBy === "string" && params.groupBy.trim().length > 0,
+      groupBy: Array.isArray(params.groupBy) ? params.groupBy.length > 0 : false,
     },
   }
 
