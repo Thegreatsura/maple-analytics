@@ -2142,8 +2142,10 @@ export const customTracesTimeseries = defineEndpoint("custom_traces_timeseries",
     group_by_attribute: p.string().optional().describe("Group by SpanAttributes[key]"),
     attribute_filter_key: p.string().optional().describe("Filter where SpanAttributes[key] = value"),
     attribute_filter_value: p.string().optional().describe("Value for attribute filter"),
+    attribute_filter_exists: p.string().optional().describe("If '1', check key existence instead of equality"),
     resource_filter_key: p.string().optional().describe("Filter where ResourceAttributes[key] = value"),
     resource_filter_value: p.string().optional().describe("Value for resource attribute filter"),
+    resource_filter_exists: p.string().optional().describe("If '1', check key existence instead of equality"),
   },
   nodes: [
     node({
@@ -2187,10 +2189,18 @@ export const customTracesTimeseries = defineEndpoint("custom_traces_timeseries",
             AND ResourceAttributes['deployment.commit_sha'] IN splitByChar(',', {{String(commit_shas, "")}})
           {% end %}
           {% if defined(attribute_filter_key) %}
-            AND SpanAttributes[{{String(attribute_filter_key)}}] = {{String(attribute_filter_value, '')}}
+            {% if defined(attribute_filter_exists) %}
+              AND mapContains(SpanAttributes, {{String(attribute_filter_key)}})
+            {% else %}
+              AND SpanAttributes[{{String(attribute_filter_key)}}] = {{String(attribute_filter_value, '')}}
+            {% end %}
           {% end %}
           {% if defined(resource_filter_key) %}
-            AND ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, '')}}
+            {% if defined(resource_filter_exists) %}
+              AND mapContains(ResourceAttributes, {{String(resource_filter_key)}})
+            {% else %}
+              AND ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, '')}}
+            {% end %}
           {% end %}
         GROUP BY bucket, groupName
         ORDER BY bucket ASC, groupName ASC
@@ -2237,8 +2247,10 @@ export const customTracesBreakdown = defineEndpoint("custom_traces_breakdown", {
     group_by_attribute: p.string().optional().describe("Group by SpanAttributes[key]"),
     attribute_filter_key: p.string().optional().describe("Filter where SpanAttributes[key] = value"),
     attribute_filter_value: p.string().optional().describe("Value for attribute filter"),
+    attribute_filter_exists: p.string().optional().describe("If '1', check key existence instead of equality"),
     resource_filter_key: p.string().optional().describe("Filter where ResourceAttributes[key] = value"),
     resource_filter_value: p.string().optional().describe("Value for resource attribute filter"),
+    resource_filter_exists: p.string().optional().describe("If '1', check key existence instead of equality"),
   },
   nodes: [
     node({
@@ -2278,10 +2290,18 @@ export const customTracesBreakdown = defineEndpoint("custom_traces_breakdown", {
             AND ResourceAttributes['deployment.commit_sha'] IN splitByChar(',', {{String(commit_shas, "")}})
           {% end %}
           {% if defined(attribute_filter_key) %}
-            AND SpanAttributes[{{String(attribute_filter_key)}}] = {{String(attribute_filter_value, '')}}
+            {% if defined(attribute_filter_exists) %}
+              AND mapContains(SpanAttributes, {{String(attribute_filter_key)}})
+            {% else %}
+              AND SpanAttributes[{{String(attribute_filter_key)}}] = {{String(attribute_filter_value, '')}}
+            {% end %}
           {% end %}
           {% if defined(resource_filter_key) %}
-            AND ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, '')}}
+            {% if defined(resource_filter_exists) %}
+              AND mapContains(ResourceAttributes, {{String(resource_filter_key)}})
+            {% else %}
+              AND ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, '')}}
+            {% end %}
           {% end %}
         GROUP BY name
         ORDER BY count DESC

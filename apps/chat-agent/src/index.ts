@@ -105,37 +105,307 @@ const dashboardWidgetDataSourceSchema = z.object({
   }
 })
 
-const dashboardBuilderTools = {
-  add_dashboard_widget: tool({
-    description: "Add a widget to the user's dashboard. The widget will be previewed and the user can confirm adding it.",
-    inputSchema: z.object({
-      visualization: z.enum(["stat", "chart", "table"]),
-      dataSource: dashboardWidgetDataSourceSchema,
-      display: z.object({
-        title: z.string(),
-        unit: z.enum(["none", "number", "percent", "duration_ms", "duration_us", "bytes", "requests_per_sec", "short"]).optional(),
-        chartId: z.string().optional(),
-        columns: z.array(z.object({
-          field: z.string(),
-          header: z.string(),
-          unit: z.string().optional(),
-          align: z.enum(["left", "center", "right"]).optional(),
-        })).optional(),
+// ---------------------------------------------------------------------------
+// Endpoint → MCP tool mapping for test_widget_query
+// ---------------------------------------------------------------------------
+
+const GROUP_BY_TOKEN_MAP: Record<string, string> = {
+  "service.name": "service",
+  "span.name": "span_name",
+  "status.code": "status_code",
+  "http.method": "http_method",
+}
+
+interface EndpointMapping {
+  mcpTool: string
+  mapParams: (params: Record<string, unknown>) => Record<string, unknown>
+}
+
+const ENDPOINT_MCP_MAP: Record<string, EndpointMapping> = {
+  service_usage: {
+    mcpTool: "service_overview",
+    mapParams: (p) => ({
+      start_time: p.startTime ?? p.start_time,
+      end_time: p.endTime ?? p.end_time,
+    }),
+  },
+  service_overview: {
+    mcpTool: "service_overview",
+    mapParams: (p) => ({
+      start_time: p.startTime ?? p.start_time,
+      end_time: p.endTime ?? p.end_time,
+    }),
+  },
+  errors_summary: {
+    mcpTool: "find_errors",
+    mapParams: (p) => ({
+      start_time: p.startTime ?? p.start_time,
+      end_time: p.endTime ?? p.end_time,
+      service: (Array.isArray(p.services) ? p.services[0] : undefined) ?? p.service,
+    }),
+  },
+  errors_by_type: {
+    mcpTool: "find_errors",
+    mapParams: (p) => ({
+      start_time: p.startTime ?? p.start_time,
+      end_time: p.endTime ?? p.end_time,
+      service: (Array.isArray(p.services) ? p.services[0] : undefined) ?? p.service,
+      limit: p.limit,
+    }),
+  },
+  list_traces: {
+    mcpTool: "search_traces",
+    mapParams: (p) => ({
+      start_time: p.startTime ?? p.start_time,
+      end_time: p.endTime ?? p.end_time,
+      service: p.service,
+      limit: p.limit ?? 5,
+    }),
+  },
+  list_logs: {
+    mcpTool: "search_logs",
+    mapParams: (p) => ({
+      start_time: p.startTime ?? p.start_time,
+      end_time: p.endTime ?? p.end_time,
+      service: p.service,
+      severity: p.severity ?? p.minSeverity,
+      limit: p.limit ?? 5,
+    }),
+  },
+  list_metrics: {
+    mcpTool: "list_metrics",
+    mapParams: (p) => ({
+      start_time: p.startTime ?? p.start_time,
+      end_time: p.endTime ?? p.end_time,
+      service: p.service,
+    }),
+  },
+  metrics_summary: {
+    mcpTool: "list_metrics",
+    mapParams: (p) => ({
+      start_time: p.startTime ?? p.start_time,
+      end_time: p.endTime ?? p.end_time,
+      service: p.service,
+    }),
+  },
+  error_rate_by_service: {
+    mcpTool: "find_errors",
+    mapParams: (p) => ({
+      start_time: p.startTime ?? p.start_time,
+      end_time: p.endTime ?? p.end_time,
+    }),
+  },
+}
+
+function mapQueryDraftToQueryDataParams(
+  query: Record<string, unknown>,
+): Record<string, unknown> {
+  const source = (query.dataSource ?? query.source) as string
+  const rawGroupBy = (query.groupBy ?? "none") as string
+  const groupBy = GROUP_BY_TOKEN_MAP[rawGroupBy] ?? rawGroupBy
+
+  const params: Record<string, unknown> = {
+    source,
+    kind: "timeseries",
+    group_by: groupBy === "none" ? "none" : groupBy,
+  }
+
+  if (source === "traces") {
+    params.metric = query.aggregation ?? "count"
+  } else if (source === "logs") {
+    params.metric = "count"
+  } else if (source === "metrics") {
+    params.metric = query.aggregation ?? "avg"
+    params.metric_name = query.metricName
+    params.metric_type = query.metricType
+  }
+
+  // Parse simple whereClause filters
+  const whereClause = query.whereClause as string | undefined
+  if (whereClause) {
+    for (const match of whereClause.matchAll(/(\w[\w.]*)\s*=\s*['"]([^'"]+)['"]/g)) {
+      const key = match[1]!.toLowerCase()
+      const value = match[2]!
+      if (key === "service" || key === "service.name") params.service_name = value
+      else if (key === "span" || key === "span.name") params.span_name = value
+      else if (key === "severity") params.severity = value
+    }
+  }
+
+  return params
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type McpToolSet = Record<string, { execute: (...args: any[]) => Promise<unknown> }>
+
+function callMcpTool(mcpTools: McpToolSet, toolName: string, params: Record<string, unknown>): Promise<unknown> {
+  const mcpTool = mcpTools[toolName]
+  if (!mcpTool) return Promise.resolve({ error: `MCP tool "${toolName}" not available` })
+  // Strip undefined values from params
+  const cleanParams: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null) cleanParams[k] = v
+  }
+  return mcpTool.execute(cleanParams)
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard builder tools factory
+// ---------------------------------------------------------------------------
+
+function createDashboardBuilderTools(mcpTools: McpToolSet) {
+  return {
+    test_widget_query: tool({
+      description:
+        "Test a dashboard widget query before adding it. Runs the query the widget would use via MCP tools and returns the results so you can verify data exists and makes sense. ALWAYS call this before add_dashboard_widget.",
+      inputSchema: z.object({
+        endpoint: z.string().describe(
+          "Widget data source endpoint (e.g., 'service_usage', 'errors_summary', 'custom_query_builder_timeseries')",
+        ),
+        params: z.record(z.string(), z.unknown()).optional().describe(
+          "Parameters for the query (startTime, endTime, limit, queries[], etc.)",
+        ),
+        transform: z.object({
+          reduceToValue: z.object({
+            field: z.string(),
+            aggregate: z.enum(["sum", "first", "count", "avg", "max", "min"]),
+          }).optional(),
+          limit: z.number().optional(),
+        }).optional().describe(
+          "Transform config to preview what the widget would display",
+        ),
+      }),
+      execute: async ({ endpoint, params: rawParams, transform }) => {
+        const p = rawParams ?? {}
+
+        // --- custom_query_builder_timeseries: test each query via query_data ---
+        if (endpoint === "custom_query_builder_timeseries") {
+          const queries = p.queries as Record<string, unknown>[] | undefined
+          if (!Array.isArray(queries) || queries.length === 0) {
+            return { error: "custom_query_builder_timeseries requires params.queries[]" }
+          }
+
+          const enabledQueries = queries.filter((q) => q.enabled !== false)
+          const results: string[] = [`Testing ${enabledQueries.length} query builder queries...`, ""]
+
+          let anyData = false
+          for (const query of enabledQueries) {
+            const label = (query.name ?? "?") as string
+            const queryDataParams = {
+              ...mapQueryDraftToQueryDataParams(query),
+              start_time: p.startTime ?? p.start_time,
+              end_time: p.endTime ?? p.end_time,
+            }
+
+            try {
+              const result = await callMcpTool(mcpTools, "query_data", queryDataParams)
+              const resultStr = typeof result === "string" ? result : JSON.stringify(result)
+
+              if (resultStr.includes("No data") || resultStr.includes("no data")) {
+                results.push(`Query "${label}": EMPTY — no data returned`)
+              } else {
+                anyData = true
+                results.push(`Query "${label}": OK — data found`)
+                // Include a truncated preview of the result
+                const preview = resultStr.length > 500 ? resultStr.slice(0, 500) + "..." : resultStr
+                results.push(preview)
+              }
+            } catch (error) {
+              results.push(`Query "${label}": ERROR — ${error instanceof Error ? error.message : String(error)}`)
+            }
+            results.push("")
+          }
+
+          results.push(anyData
+            ? "Widget query validated — data exists."
+            : "WARNING: No data for any query. The widget would show empty.")
+
+          return { status: "tested", summary: results.join("\n") }
+        }
+
+        // --- Pipe-backed endpoints: map to MCP tool ---
+        const mapping = ENDPOINT_MCP_MAP[endpoint]
+        if (!mapping) {
+          return {
+            error: `Unknown endpoint "${endpoint}". Known endpoints: ${Object.keys(ENDPOINT_MCP_MAP).join(", ")}, custom_query_builder_timeseries`,
+          }
+        }
+
+        try {
+          const mappedParams = mapping.mapParams(p)
+          const result = await callMcpTool(mcpTools, mapping.mcpTool, mappedParams)
+          const resultStr = typeof result === "string" ? result : JSON.stringify(result)
+          const isEmpty = resultStr.includes("No ") && (resultStr.includes("found") || resultStr.includes("data"))
+
+          const lines: string[] = [
+            `Testing endpoint="${endpoint}" via MCP tool "${mapping.mcpTool}"...`,
+            "",
+          ]
+
+          // Include truncated result
+          const preview = resultStr.length > 800 ? resultStr.slice(0, 800) + "..." : resultStr
+          lines.push(preview)
+
+          // Apply transform preview
+          if (transform?.reduceToValue) {
+            lines.push("", `Transform: reduceToValue(field="${transform.reduceToValue.field}", aggregate="${transform.reduceToValue.aggregate}")`)
+            lines.push("Note: The actual value will be computed from the widget's data. Check that the field name appears in the results above.")
+          }
+
+          lines.push(
+            "",
+            isEmpty
+              ? "WARNING: Query returned no data. The widget would show empty."
+              : "Widget query validated — data exists.",
+          )
+
+          return { status: "tested", summary: lines.join("\n") }
+        } catch (error) {
+          return {
+            status: "error",
+            summary: `Failed to test endpoint="${endpoint}": ${error instanceof Error ? error.message : String(error)}`,
+          }
+        }
+      },
+    }),
+    add_dashboard_widget: tool({
+      description:
+        "Add a widget to the user's dashboard. IMPORTANT: You must first call test_widget_query with the same endpoint/params/transform to verify the data exists BEFORE calling this tool. The widget will be previewed and the user can confirm adding it.",
+      inputSchema: z.object({
+        visualization: z.enum(["stat", "chart", "table"]),
+        dataSource: dashboardWidgetDataSourceSchema,
+        display: z.object({
+          title: z.string(),
+          unit: z
+            .enum(["none", "number", "percent", "duration_ms", "duration_us", "bytes", "requests_per_sec", "short"])
+            .optional(),
+          chartId: z.string().optional(),
+          columns: z
+            .array(
+              z.object({
+                field: z.string(),
+                header: z.string(),
+                unit: z.string().optional(),
+                align: z.enum(["left", "center", "right"]).optional(),
+              }),
+            )
+            .optional(),
+        }),
+      }),
+      execute: async () => ({
+        status: "proposed",
       }),
     }),
-    execute: async () => ({
-      status: "proposed",
+    remove_dashboard_widget: tool({
+      description: "Remove a widget from the dashboard by its title.",
+      inputSchema: z.object({
+        widgetTitle: z.string().describe("The title of the widget to remove"),
+      }),
+      execute: async () => ({
+        status: "proposed",
+      }),
     }),
-  }),
-  remove_dashboard_widget: tool({
-    description: "Remove a widget from the dashboard by its title.",
-    inputSchema: z.object({
-      widgetTitle: z.string().describe("The title of the widget to remove"),
-    }),
-    execute: async () => ({
-      status: "proposed",
-    }),
-  }),
+  }
 }
 
 export { ChatAgent }
@@ -192,7 +462,7 @@ class ChatAgent extends AIChatAgent<Env> {
     }
 
     const allTools = isDashboardMode
-      ? { ...mcpTools, ...dashboardBuilderTools }
+      ? { ...mcpTools, ...createDashboardBuilderTools(mcpTools as unknown as McpToolSet) }
       : mcpTools
 
     const openrouter = createOpenAICompatible({
@@ -206,7 +476,7 @@ class ChatAgent extends AIChatAgent<Env> {
       system: systemPrompt,
       messages: await convertToModelMessages(this.messages),
       tools: allTools,
-      stopWhen: stepCountIs(10),
+      stopWhen: stepCountIs(20),
       onFinish: async (event) => {
         await mcpClient.close()
         ;(onFinish as unknown as StreamTextOnFinishCallback<typeof allTools>)(event)

@@ -250,7 +250,7 @@ function findLastConjunctionBoundary(expression: string, cursor: number): number
 interface OperatorMatch {
   position: number
   length: number
-  operator: "=" | "contains"
+  operator: "=" | "contains" | "exists"
 }
 
 function findFirstOperator(segment: string): OperatorMatch | null {
@@ -280,6 +280,14 @@ function findFirstOperator(segment: string): OperatorMatch | null {
       const after = segment[index + 8]
       if (isSpace(before) && (isSpace(after) || after === undefined)) {
         return { position: index, length: 8, operator: "contains" }
+      }
+    }
+
+    if (segment.slice(index, index + 6).toLowerCase() === "exists") {
+      const before = index === 0 ? undefined : segment[index - 1]
+      const after = segment[index + 6]
+      if (isSpace(before) && (isSpace(after) || after === undefined)) {
+        return { position: index, length: 6, operator: "exists" }
       }
     }
   }
@@ -370,6 +378,19 @@ function parseWhereClauseContext(
       query: "",
       key: null,
       replaceStart: cursorPosition,
+      replaceEnd: cursorPosition,
+    }
+  }
+
+  // EXISTS takes no value — go straight to conjunction context
+  if (operatorMatch.operator === "exists") {
+    const tail = trimmedSegment.slice(operatorMatch.position + operatorMatch.length)
+    const tailTrimmed = tail.trimStart()
+    return {
+      context: "conjunction",
+      query: tailTrimmed,
+      key: keyToken,
+      replaceStart: cursorPosition - tailTrimmed.length,
       replaceEnd: cursorPosition,
     }
   }
@@ -832,6 +853,13 @@ function buildSuggestions(
         label: "contains",
         insertText: "contains",
         description: "Substring match",
+      },
+      {
+        id: "operator:exists",
+        kind: "operator",
+        label: "exists",
+        insertText: "exists",
+        description: "Key exists",
       },
     ]
 

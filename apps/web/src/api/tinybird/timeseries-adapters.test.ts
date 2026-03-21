@@ -47,14 +47,14 @@ describe("timeseries adapters", () => {
     const overview = await Effect.runPromise(getOverviewTimeSeries({
       data: {
         startTime: "2026-01-01 00:00:00",
-        endTime: "2026-01-01 00:05:00",
+        endTime: "2026-01-01 00:25:00",
       },
     }))
     const detail = await Effect.runPromise(getCustomChartServiceDetail({
       data: {
         serviceName: "checkout",
         startTime: "2026-01-01 00:00:00",
-        endTime: "2026-01-01 00:05:00",
+        endTime: "2026-01-01 00:25:00",
       },
     }))
 
@@ -66,7 +66,7 @@ describe("timeseries adapters", () => {
       errorRate: 2,
     })
     expect(overview.data[1]).toMatchObject({
-      bucket: "2026-01-01T00:01:00.000Z",
+      bucket: "2026-01-01T00:05:00.000Z",
       throughput: 0,
       errorRate: 0,
     })
@@ -87,7 +87,7 @@ describe("timeseries adapters", () => {
           errorRate: 1,
         },
         {
-          bucket: "2026-01-01 00:02:00",
+          bucket: "2026-01-01 00:10:00",
           groupName: "checkout",
           count: 5,
           errorRate: 0,
@@ -98,7 +98,7 @@ describe("timeseries adapters", () => {
     const response = await Effect.runPromise(getCustomChartServiceSparklines({
       data: {
         startTime: "2026-01-01 00:00:00",
-        endTime: "2026-01-01 00:02:00",
+        endTime: "2026-01-01 00:10:00",
       },
     }))
 
@@ -109,12 +109,12 @@ describe("timeseries adapters", () => {
       errorRate: 1,
     })
     expect(response.data.checkout[1]).toMatchObject({
-      bucket: "2026-01-01T00:01:00.000Z",
+      bucket: "2026-01-01T00:05:00.000Z",
       throughput: 0,
       errorRate: 0,
     })
     expect(response.data.checkout[2]).toMatchObject({
-      bucket: "2026-01-01T00:02:00.000Z",
+      bucket: "2026-01-01T00:10:00.000Z",
       throughput: 5,
       errorRate: 0,
     })
@@ -135,7 +135,7 @@ describe("timeseries adapters", () => {
       data: {
         serviceName: "checkout",
         startTime: "2026-01-01 00:00:00",
-        endTime: "2026-01-01 00:05:00",
+        endTime: "2026-01-01 00:25:00",
       },
     }))
 
@@ -146,7 +146,7 @@ describe("timeseries adapters", () => {
       totalCount: 100,
     })
     expect(response.data[5]).toMatchObject({
-      bucket: "2026-01-01T00:05:00.000Z",
+      bucket: "2026-01-01T00:25:00.000Z",
       apdexScore: 0,
       totalCount: 0,
     })

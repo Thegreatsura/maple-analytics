@@ -150,8 +150,8 @@ const validateTraceAttributeFilters = Effect.fn("QueryEngineService.validateTrac
   if (query.source !== "traces") return
 
   const details: string[] = []
-  if (query.groupBy === "attribute" && !query.filters?.attributeKey) {
-    details.push("groupBy=attribute requires filters.attributeKey")
+  if (query.groupBy === "attribute" && !query.filters?.groupByAttributeKey) {
+    details.push("groupBy=attribute requires filters.groupByAttributeKey")
   }
   if (!query.filters?.attributeKey && query.filters?.attributeValue) {
     details.push("filters.attributeValue requires filters.attributeKey")
@@ -345,12 +345,14 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
           group_by_http_method: request.query.groupBy === "http_method" ? "1" : undefined,
           group_by_attribute:
             request.query.groupBy === "attribute"
-              ? request.query.filters?.attributeKey
+              ? request.query.filters?.groupByAttributeKey
               : undefined,
           attribute_filter_key: request.query.filters?.attributeKey,
-          attribute_filter_value: request.query.filters?.attributeValue,
+          attribute_filter_value: request.query.filters?.attributeFilterMode === "exists" ? undefined : request.query.filters?.attributeValue,
+          attribute_filter_exists: request.query.filters?.attributeFilterMode === "exists" ? "1" : undefined,
           resource_filter_key: request.query.filters?.resourceAttributeKey,
-          resource_filter_value: request.query.filters?.resourceAttributeValue,
+          resource_filter_value: request.query.filters?.resourceAttributeFilterMode === "exists" ? undefined : request.query.filters?.resourceAttributeValue,
+          resource_filter_exists: request.query.filters?.resourceAttributeFilterMode === "exists" ? "1" : undefined,
         }),
         "Failed to execute traces timeseries query",
       )
@@ -467,12 +469,14 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
           group_by_http_method: request.query.groupBy === "http_method" ? "1" : undefined,
           group_by_attribute:
             request.query.groupBy === "attribute"
-              ? request.query.filters?.attributeKey
+              ? request.query.filters?.groupByAttributeKey
               : undefined,
           attribute_filter_key: request.query.filters?.attributeKey,
-          attribute_filter_value: request.query.filters?.attributeValue,
+          attribute_filter_value: request.query.filters?.attributeFilterMode === "exists" ? undefined : request.query.filters?.attributeValue,
+          attribute_filter_exists: request.query.filters?.attributeFilterMode === "exists" ? "1" : undefined,
           resource_filter_key: request.query.filters?.resourceAttributeKey,
-          resource_filter_value: request.query.filters?.resourceAttributeValue,
+          resource_filter_value: request.query.filters?.resourceAttributeFilterMode === "exists" ? undefined : request.query.filters?.resourceAttributeValue,
+          resource_filter_exists: request.query.filters?.resourceAttributeFilterMode === "exists" ? "1" : undefined,
         }),
         "Failed to execute traces breakdown query",
       )

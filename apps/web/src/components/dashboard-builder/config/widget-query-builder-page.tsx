@@ -15,6 +15,8 @@ import type {
   WidgetDataSource,
   WidgetDisplayConfig,
 } from "@/components/dashboard-builder/types"
+import { useDashboardTimeRange } from "@/components/dashboard-builder/dashboard-providers"
+import { relativeToAbsolute } from "@/lib/time-utils"
 import { useWidgetData } from "@/hooks/use-widget-data"
 import {
   buildTimeseriesQuerySpec,
@@ -32,6 +34,10 @@ import {
 } from "@/lib/query-builder/model"
 import {
   getLogsFacetsResultAtom,
+  getResourceAttributeKeysResultAtom,
+  getResourceAttributeValuesResultAtom,
+  getSpanAttributeKeysResultAtom,
+  getSpanAttributeValuesResultAtom,
   getTracesFacetsResultAtom,
   listMetricsResultAtom,
 } from "@/lib/services/atoms/tinybird-query-atoms"
@@ -316,6 +322,16 @@ export function WidgetQueryBuilderPage({
   )
   const [validationError, setValidationError] = React.useState<string | null>(null)
   const [collapsedQueries, setCollapsedQueries] = React.useState<Set<string>>(new Set())
+  const [activeAttributeKey, setActiveAttributeKey] = React.useState<string | null>(null)
+  const [activeResourceAttributeKey, setActiveResourceAttributeKey] = React.useState<string | null>(null)
+
+  const { state: { timeRange } } = useDashboardTimeRange()
+  const resolvedTime = React.useMemo(() => {
+    if (timeRange.type === "absolute") {
+      return { startTime: timeRange.startTime, endTime: timeRange.endTime }
+    }
+    return relativeToAbsolute(timeRange.value)
+  }, [timeRange])
 
   const metricsResult = useAtomValue(
     listMetricsResultAtom({ data: { limit: 300 } }),
@@ -327,6 +343,80 @@ export function WidgetQueryBuilderPage({
 
   const logsFacetsResult = useAtomValue(
     getLogsFacetsResultAtom({ data: {} }),
+  )
+
+  const spanAttributeKeysResult = useAtomValue(
+    getSpanAttributeKeysResultAtom({
+      data: {
+        startTime: resolvedTime?.startTime,
+        endTime: resolvedTime?.endTime,
+      },
+    }),
+  )
+
+  const spanAttributeValuesResult = useAtomValue(
+    getSpanAttributeValuesResultAtom({
+      data: {
+        startTime: resolvedTime?.startTime,
+        endTime: resolvedTime?.endTime,
+        attributeKey: activeAttributeKey ?? "",
+      },
+    }),
+  )
+
+  const resourceAttributeKeysResult = useAtomValue(
+    getResourceAttributeKeysResultAtom({
+      data: {
+        startTime: resolvedTime?.startTime,
+        endTime: resolvedTime?.endTime,
+      },
+    }),
+  )
+
+  const resourceAttributeValuesResult = useAtomValue(
+    getResourceAttributeValuesResultAtom({
+      data: {
+        startTime: resolvedTime?.startTime,
+        endTime: resolvedTime?.endTime,
+        attributeKey: activeResourceAttributeKey ?? "",
+      },
+    }),
+  )
+
+  const attributeKeys = React.useMemo(
+    () =>
+      Result.builder(spanAttributeKeysResult)
+        .onSuccess((response) => response.data.map((row) => row.attributeKey))
+        .orElse(() => []),
+    [spanAttributeKeysResult],
+  )
+
+  const attributeValues = React.useMemo(
+    () =>
+      activeAttributeKey
+        ? Result.builder(spanAttributeValuesResult)
+            .onSuccess((response) => response.data.map((row) => row.attributeValue))
+            .orElse(() => [])
+        : [],
+    [activeAttributeKey, spanAttributeValuesResult],
+  )
+
+  const resourceAttributeKeys = React.useMemo(
+    () =>
+      Result.builder(resourceAttributeKeysResult)
+        .onSuccess((response) => response.data.map((row) => row.attributeKey))
+        .orElse(() => []),
+    [resourceAttributeKeysResult],
+  )
+
+  const resourceAttributeValues = React.useMemo(
+    () =>
+      activeResourceAttributeKey
+        ? Result.builder(resourceAttributeValuesResult)
+            .onSuccess((response) => response.data.map((row) => row.attributeValue))
+            .orElse(() => [])
+        : [],
+    [activeResourceAttributeKey, resourceAttributeValuesResult],
   )
 
   const metricRows = React.useMemo(
@@ -394,17 +484,25 @@ export function WidgetQueryBuilderPage({
         services: toNames(tracesFacets.services),
         spanNames: toNames(tracesFacets.spanNames),
         environments: toNames(tracesFacets.deploymentEnvs),
+        attributeKeys,
+        attributeValues,
+        resourceAttributeKeys,
+        resourceAttributeValues,
       },
       logs: {
         services: toNames(logsFacets.services),
         severities: toNames(logsFacets.severities),
+        attributeKeys,
+        attributeValues,
+        resourceAttributeKeys,
+        resourceAttributeValues,
       },
       metrics: {
         services: metricServices,
         metricTypes: [...QUERY_BUILDER_METRIC_TYPES],
       },
     }
-  }, [logsFacetsResult, metricRows, tracesFacetsResult])
+  }, [logsFacetsResult, metricRows, tracesFacetsResult, attributeKeys, attributeValues, resourceAttributeKeys, resourceAttributeValues])
 
   React.useEffect(() => {
     if (metricSelectionOptions.length === 0) return
@@ -622,6 +720,8 @@ export function WidgetQueryBuilderPage({
                 canRemove={state.queries.length > 1}
                 metricSelectionOptions={metricSelectionOptions}
                 autocompleteValues={autocompleteValuesBySource}
+                onActiveAttributeKey={setActiveAttributeKey}
+                onActiveResourceAttributeKey={setActiveResourceAttributeKey}
                 onUpdate={(updater) => updateQuery(query.id, updater)}
                 onClone={() => cloneQuery(query.id)}
                 onRemove={() => removeQuery(query.id)}

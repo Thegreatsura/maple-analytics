@@ -27,6 +27,7 @@ export interface QueryBuilderQueryDraft {
 interface ParsedClause {
   key: string
   value: string
+  operator?: "=" | "contains" | "exists"
 }
 
 export interface BuildSpecResult {
@@ -208,6 +209,16 @@ function parseWhereClause(expression: string): {
   const warnings: string[] = []
 
   for (const part of parts) {
+    const existsMatch = part.match(/^([a-zA-Z0-9_.-]+)\s+exists$/i)
+    if (existsMatch) {
+      clauses.push({
+        key: existsMatch[1].trim().toLowerCase(),
+        value: "",
+        operator: "exists",
+      })
+      continue
+    }
+
     const match = part.match(
       /^([a-zA-Z0-9_.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s]+))$/
     )
@@ -298,8 +309,11 @@ export function buildTimeseriesQuerySpec(
       commitShas?: string[]
       attributeKey?: string
       attributeValue?: string
+      attributeFilterMode?: "equals" | "exists"
+      groupByAttributeKey?: string
       resourceAttributeKey?: string
       resourceAttributeValue?: string
+      resourceAttributeFilterMode?: "equals" | "exists"
     } = {}
 
     for (const clause of clauses) {
@@ -344,7 +358,11 @@ export function buildTimeseriesQuerySpec(
         const attributeKey = clause.key.slice(5)
         if (!filters.attributeKey) {
           filters.attributeKey = attributeKey
-          filters.attributeValue = clause.value
+          if (clause.operator === "exists") {
+            filters.attributeFilterMode = "exists"
+          } else {
+            filters.attributeValue = clause.value
+          }
         } else {
           warnings.push(
             `Multiple attr.* filters found; only ${filters.attributeKey} is used`
@@ -357,7 +375,11 @@ export function buildTimeseriesQuerySpec(
         const resourceKey = clause.key.slice(9)
         if (!filters.resourceAttributeKey) {
           filters.resourceAttributeKey = resourceKey
-          filters.resourceAttributeValue = clause.value
+          if (clause.operator === "exists") {
+            filters.resourceAttributeFilterMode = "exists"
+          } else {
+            filters.resourceAttributeValue = clause.value
+          }
         } else {
           warnings.push(
             `Multiple resource.* filters found; only ${filters.resourceAttributeKey} is used`
@@ -396,14 +418,14 @@ export function buildTimeseriesQuerySpec(
           warnings.push("Invalid attr.* group by ignored")
         } else {
           groupBy = "attribute"
-          filters.attributeKey = filters.attributeKey ?? attributeKey
+          filters.groupByAttributeKey = attributeKey
         }
       } else {
         warnings.push(`Unsupported traces group by ignored: ${query.groupBy}`)
       }
     }
 
-    if (groupBy === "attribute" && !filters.attributeKey) {
+    if (groupBy === "attribute" && !filters.groupByAttributeKey) {
       return {
         query: null,
         warnings,

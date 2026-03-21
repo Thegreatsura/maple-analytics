@@ -47,6 +47,8 @@ interface QueryPanelProps {
   canRemove: boolean
   metricSelectionOptions: MetricSelectionOption[]
   autocompleteValues: AutocompleteValues
+  onActiveAttributeKey?: (key: string | null) => void
+  onActiveResourceAttributeKey?: (key: string | null) => void
   onUpdate: (updater: (q: QueryBuilderQueryDraft) => QueryBuilderQueryDraft) => void
   onClone: () => void
   onRemove: () => void
@@ -87,10 +89,12 @@ function GroupByAutocomplete({
   value,
   onChange,
   dataSource,
+  attributeKeys,
 }: {
   value: string
   onChange: (value: string) => void
   dataSource: QueryBuilderDataSource
+  attributeKeys?: string[]
 }) {
   const inputRef = React.useRef<HTMLInputElement | null>(null)
   const [isFocused, setIsFocused] = React.useState(false)
@@ -99,17 +103,22 @@ function GroupByAutocomplete({
 
   const suggestions = React.useMemo(() => {
     const query = value.toLowerCase()
-    const options = GROUP_BY_OPTIONS[dataSource].map((opt) => ({
+    const staticOptions = GROUP_BY_OPTIONS[dataSource].map((opt) => ({
       label: opt.label,
       value: opt.value,
     }))
+    const attrOptions = (attributeKeys ?? []).map((key) => ({
+      label: `attr.${key}`,
+      value: `attr.${key}`,
+    }))
+    const options = [...staticOptions, ...attrOptions]
     if (!query) return options
     return options.filter(
       (opt) =>
         opt.label.toLowerCase().includes(query) ||
         opt.value.toLowerCase().includes(query),
     )
-  }, [value, dataSource])
+  }, [value, dataSource, attributeKeys])
 
   const isOpen = isFocused && !isDismissed && suggestions.length > 0
 
@@ -209,6 +218,8 @@ export function QueryPanel({
   canRemove,
   metricSelectionOptions,
   autocompleteValues,
+  onActiveAttributeKey,
+  onActiveResourceAttributeKey,
   onUpdate,
   onClone,
   onRemove,
@@ -226,7 +237,7 @@ export function QueryPanel({
   const isMetrics = query.dataSource === "metrics"
 
   return (
-    <div className="border rounded-md overflow-hidden">
+    <div className="border rounded-md">
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2 bg-muted/30">
         <button
@@ -301,6 +312,8 @@ export function QueryPanel({
               metricValue={metricValue}
               metricSelectionOptions={metricSelectionOptions}
               autocompleteValues={autocompleteValues}
+              onActiveAttributeKey={onActiveAttributeKey}
+              onActiveResourceAttributeKey={onActiveResourceAttributeKey}
               onUpdate={onUpdate}
             />
           ) : (
@@ -308,6 +321,8 @@ export function QueryPanel({
               query={query}
               aggregateOptions={aggregateOptions}
               autocompleteValues={autocompleteValues}
+              onActiveAttributeKey={onActiveAttributeKey}
+              onActiveResourceAttributeKey={onActiveResourceAttributeKey}
               onUpdate={onUpdate}
             />
           )}
@@ -340,7 +355,7 @@ export function QueryPanel({
           </div>
 
           {/* Expanded add-on sections */}
-          <AddOnSections query={query} onUpdate={onUpdate} />
+          <AddOnSections query={query} autocompleteValues={autocompleteValues} onUpdate={onUpdate} />
         </div>
       )}
     </div>
@@ -355,11 +370,15 @@ function TracesLogsBody({
   query,
   aggregateOptions,
   autocompleteValues,
+  onActiveAttributeKey,
+  onActiveResourceAttributeKey,
   onUpdate,
 }: {
   query: QueryBuilderQueryDraft
   aggregateOptions: Array<{ label: string; value: string }>
   autocompleteValues: AutocompleteValues
+  onActiveAttributeKey?: (key: string | null) => void
+  onActiveResourceAttributeKey?: (key: string | null) => void
   onUpdate: (
     updater: (q: QueryBuilderQueryDraft) => QueryBuilderQueryDraft,
   ) => void
@@ -369,10 +388,13 @@ function TracesLogsBody({
       {/* Row 1: Where clause */}
       <div className="flex items-start gap-2">
         <WhereClauseEditor
+          className="flex-1"
           rows={1}
           value={query.whereClause}
           dataSource={query.dataSource}
           values={autocompleteValues[query.dataSource]}
+          onActiveAttributeKey={onActiveAttributeKey}
+          onActiveResourceAttributeKey={onActiveResourceAttributeKey}
           onChange={(nextWhereClause) =>
             onUpdate((current) => ({
               ...current,
@@ -471,6 +493,8 @@ function MetricsBody({
   metricValue,
   metricSelectionOptions,
   autocompleteValues,
+  onActiveAttributeKey,
+  onActiveResourceAttributeKey,
   onUpdate,
 }: {
   query: QueryBuilderQueryDraft
@@ -478,6 +502,8 @@ function MetricsBody({
   metricValue: string | undefined
   metricSelectionOptions: MetricSelectionOption[]
   autocompleteValues: AutocompleteValues
+  onActiveAttributeKey?: (key: string | null) => void
+  onActiveResourceAttributeKey?: (key: string | null) => void
   onUpdate: (
     updater: (q: QueryBuilderQueryDraft) => QueryBuilderQueryDraft,
   ) => void
@@ -529,6 +555,8 @@ function MetricsBody({
         value={query.whereClause}
         dataSource={query.dataSource}
         values={autocompleteValues.metrics}
+        onActiveAttributeKey={onActiveAttributeKey}
+        onActiveResourceAttributeKey={onActiveResourceAttributeKey}
         onChange={(nextWhereClause) =>
           onUpdate((current) => ({
             ...current,
@@ -648,9 +676,11 @@ function MetricsBody({
 
 function AddOnSections({
   query,
+  autocompleteValues,
   onUpdate,
 }: {
   query: QueryBuilderQueryDraft
+  autocompleteValues: AutocompleteValues
   onUpdate: (
     updater: (q: QueryBuilderQueryDraft) => QueryBuilderQueryDraft,
   ) => void
@@ -671,6 +701,7 @@ function AddOnSections({
               onUpdate((current) => ({ ...current, groupBy: value }))
             }
             dataSource={query.dataSource}
+            attributeKeys={autocompleteValues[query.dataSource]?.attributeKeys}
           />
         </div>
       )}
