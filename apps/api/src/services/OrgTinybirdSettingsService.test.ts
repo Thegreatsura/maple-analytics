@@ -216,7 +216,7 @@ describe("OrgTinybirdSettingsService", () => {
 
     expect(row).toEqual({
       host: "https://customer-a.tinybird.co",
-      sync_status: "active",
+      sync_status: "error",
       project_revision: "rev-a",
     })
   })

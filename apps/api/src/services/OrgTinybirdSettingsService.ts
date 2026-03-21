@@ -14,7 +14,7 @@ import {
   type RoleName,
   UserId,
 } from "@maple/domain/http"
-import { getCurrentTinybirdProjectRevision, fetchInstanceHealth as fetchInstanceHealthFn, getDeploymentStatus as getDeploymentStatusFn, syncTinybirdProject } from "@maple/domain/tinybird-project-sync"
+import { TinybirdProjectSync, syncTinybirdProject, getCurrentTinybirdProjectRevision, getDeploymentStatus as getDeploymentStatusFn, fetchInstanceHealth as fetchInstanceHealthFn } from "@maple/domain/tinybird-project-sync"
 import { orgTinybirdSettings } from "@maple/db"
 import { eq } from "drizzle-orm"
 import { Effect, Layer, Option, Redacted, Schema, ServiceMap } from "effect"
@@ -319,7 +319,21 @@ export class OrgTinybirdSettingsService extends ServiceMap.Service<OrgTinybirdSe
                 encryptionKey,
               )
             : yield* normalizeToken(payload.token)
-        const syncResult = yield* syncCandidate(host, token)
+        const syncResult = yield* syncCandidate(host, token).pipe(
+          Effect.tapError((syncError) =>
+            database.execute((db) =>
+              db
+                .update(orgTinybirdSettings)
+                .set({
+                  syncStatus: "error",
+                  lastSyncError: syncError.message,
+                  updatedAt: Date.now(),
+                  updatedBy: userId,
+                })
+                .where(eq(orgTinybirdSettings.orgId, orgId)),
+            ).pipe(Effect.ignore),
+          ),
+        )
         const encryptedToken = yield* encryptToken(token, encryptionKey)
         const now = Date.now()
 
@@ -396,7 +410,21 @@ export class OrgTinybirdSettingsService extends ServiceMap.Service<OrgTinybirdSe
           },
           encryptionKey,
         )
-        const syncResult = yield* syncCandidate(row.host, token)
+        const syncResult = yield* syncCandidate(row.host, token).pipe(
+          Effect.tapError((syncError) =>
+            database.execute((db) =>
+              db
+                .update(orgTinybirdSettings)
+                .set({
+                  syncStatus: "error",
+                  lastSyncError: syncError.message,
+                  updatedAt: Date.now(),
+                  updatedBy: userId,
+                })
+                .where(eq(orgTinybirdSettings.orgId, orgId)),
+            ).pipe(Effect.ignore),
+          ),
+        )
         const now = Date.now()
 
         yield* database.execute((db) =>
