@@ -3,7 +3,7 @@ import {
   QueryEngineExecuteResponse,
   type QuerySpec,
   type TimeseriesPoint,
-} from "@maple/domain"
+} from "@maple/query-engine"
 import {
   QueryEngineExecutionError,
   QueryEngineValidationError,

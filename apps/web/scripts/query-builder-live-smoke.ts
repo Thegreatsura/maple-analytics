@@ -1,4 +1,4 @@
-import type { QuerySpec } from "@maple/domain"
+import type { QuerySpec } from "@maple/query-engine"
 import {
   buildFormulaResults,
   type QueryRunResult,

@@ -1,14 +1,10 @@
 {
-  "name": "@maple/domain",
+  "name": "@maple/query-engine",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./http": "./src/http/index.ts",
     "./query-engine": "./src/query-engine.ts",
-    "./tinybird-project-sync": "./src/tinybird/project-sync.ts",
-    "./tinybird-pipes": "./src/tinybird-pipes.ts",
-    "./tinybird": "./src/tinybird/index.ts",
     "./where-clause": "./src/where-clause.ts"
   },
   "scripts": {
@@ -16,8 +12,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@maple/query-engine": "workspace:*",
-    "@tinybirdco/sdk": "0.0.60",
     "effect": "4.0.0-beta.33"
   },
   "devDependencies": {

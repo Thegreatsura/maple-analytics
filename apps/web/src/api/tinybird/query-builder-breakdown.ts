@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { QueryEngineExecuteRequest } from "@maple/domain"
+import { QueryEngineExecuteRequest } from "@maple/query-engine"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import {
   buildBreakdownQuerySpec,

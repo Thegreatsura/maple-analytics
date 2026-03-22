@@ -22,6 +22,7 @@
     "@libsql/client": "0.15.15",
     "@maple/db": "workspace:*",
     "@maple/domain": "workspace:*",
+    "@maple/query-engine": "workspace:*",
     "@tinybirdco/sdk": "0.0.60",
     "autumn-js": "^0.1.75",
     "date-fns": "^4.1.0",

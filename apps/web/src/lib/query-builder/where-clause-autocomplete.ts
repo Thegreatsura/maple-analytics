@@ -3,6 +3,10 @@ import {
   type QueryBuilderDataSource,
   type QueryBuilderMetricType,
 } from "@/lib/query-builder/model"
+import {
+  type Operator,
+  normalizeKey as sharedNormalizeKey,
+} from "@maple/query-engine/where-clause"
 
 export type WhereClauseAutocompleteContext =
   | "key"
@@ -255,7 +259,7 @@ function findLastConjunctionBoundary(expression: string, cursor: number): number
 interface OperatorMatch {
   position: number
   length: number
-  operator: "=" | ">" | "<" | ">=" | "<=" | "contains" | "exists"
+  operator: Operator
 }
 
 function findFirstOperator(segment: string): OperatorMatch | null {
@@ -529,50 +533,15 @@ function normalizeKey(input: string | null): string {
     return ""
   }
 
-  const normalized = input.trim().toLowerCase()
-  if (normalized === "service") return "service.name"
-  if (normalized === "span") return "span.name"
-  if (
-    normalized === "deployment.environment" ||
-    normalized === "environment" ||
-    normalized === "env"
-  ) {
-    return "deployment.environment"
-  }
+  const normalized = sharedNormalizeKey(input)
 
-  if (normalized === "deployment.commit_sha" || normalized === "commit_sha") {
-    return "deployment.commit_sha"
-  }
-
-  if (normalized === "root_only" || normalized === "root.only") {
-    return "root_only"
-  }
-
-  if (normalized === "has_error") {
-    return "has_error"
-  }
-
-  if (normalized === "http.method") {
-    return "http.method"
-  }
-
-  if (normalized === "http.status_code") {
-    return "http.status_code"
-  }
-
-  if (normalized === "min_duration_ms") {
-    return "min_duration_ms"
-  }
-
-  if (normalized === "max_duration_ms") {
-    return "max_duration_ms"
-  }
-
-  if (normalized.startsWith("attr.")) {
+  // Autocomplete-specific: collapse attr.* and resource.* prefixes
+  // into wildcard keys for suggestion matching
+  if (normalized.startsWith("attr.") && normalized !== "attr.") {
     return "attr.*"
   }
 
-  if (normalized.startsWith("resource.")) {
+  if (normalized.startsWith("resource.") && normalized !== "resource.") {
     return "resource.*"
   }
 

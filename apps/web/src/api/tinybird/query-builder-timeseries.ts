@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { QueryEngineExecuteRequest, type QuerySpec } from "@maple/domain"
+import { QueryEngineExecuteRequest, type QuerySpec } from "@maple/query-engine"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import { formatForTinybird } from "@/lib/time-utils"
 import {

@@ -1,4 +1,4 @@
-import { QueryEngineExecuteRequest, type MetricsMetric, type QuerySpec, type TracesMetric } from "@maple/domain"
+import { QueryEngineExecuteRequest, type MetricsMetric, type QuerySpec, type TracesMetric } from "@maple/query-engine"
 import { Effect, Schema } from "effect"
 
 import { getTinybird } from "@/lib/tinybird"

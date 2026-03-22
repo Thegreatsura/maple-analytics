@@ -1,4 +1,11 @@
-import type { QuerySpec } from "@maple/domain"
+import type { QuerySpec } from "@maple/query-engine"
+import {
+  normalizeKey,
+  parseBoolean,
+  parseWhereClause,
+  splitCsv,
+} from "@maple/query-engine/where-clause"
+import { Match } from "effect"
 
 export type QueryBuilderDataSource = "traces" | "logs" | "metrics"
 export type QueryBuilderAddOnKey = "groupBy" | "having" | "orderBy" | "limit" | "legend"
@@ -24,20 +31,11 @@ export interface QueryBuilderQueryDraft {
   legend: string
 }
 
-interface ParsedClause {
-  key: string
-  value: string
-  operator?: "=" | ">" | "<" | ">=" | "<=" | "contains" | "exists"
-}
-
 export interface BuildSpecResult {
   query: QuerySpec | null
   warnings: string[]
   error: string | null
 }
-
-const TRUE_VALUES = new Set(["1", "true", "yes", "y"])
-const FALSE_VALUES = new Set(["0", "false", "no", "n"])
 
 export const AGGREGATIONS_BY_SOURCE: Record<
   QueryBuilderDataSource,
@@ -177,67 +175,6 @@ export function resetQueryForDataSource(
   }
 }
 
-function splitCsv(input: string): string[] {
-  return input
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
-function toBoolean(value: string): boolean | null {
-  const normalized = value.trim().toLowerCase()
-  if (TRUE_VALUES.has(normalized)) return true
-  if (FALSE_VALUES.has(normalized)) return false
-  return null
-}
-
-function parseWhereClause(expression: string): {
-  clauses: ParsedClause[]
-  warnings: string[]
-} {
-  const trimmed = expression.trim()
-  if (!trimmed) {
-    return { clauses: [], warnings: [] }
-  }
-
-  const parts = trimmed
-    .split(/\s+AND\s+/i)
-    .map((part) => part.trim())
-    .filter(Boolean)
-
-  const clauses: ParsedClause[] = []
-  const warnings: string[] = []
-
-  for (const part of parts) {
-    const existsMatch = part.match(/^([a-zA-Z0-9_.-]+)\s+exists$/i)
-    if (existsMatch) {
-      clauses.push({
-        key: existsMatch[1].trim().toLowerCase(),
-        value: "",
-        operator: "exists",
-      })
-      continue
-    }
-
-    const match = part.match(
-      /^([a-zA-Z0-9_.-]+)\s*(<=|>=|<|>|=)\s*(?:"([^"]*)"|'([^']*)'|([^\s]+))$/
-    )
-
-    if (!match) {
-      warnings.push(`Unsupported clause syntax ignored: ${part}`)
-      continue
-    }
-
-    clauses.push({
-      key: match[1].trim().toLowerCase(),
-      value: (match[3] ?? match[4] ?? match[5] ?? "").trim(),
-      operator: match[2] as ParsedClause["operator"],
-    })
-  }
-
-  return { clauses, warnings }
-}
-
 function parseBucketSeconds(raw: string): number | undefined {
   const trimmed = raw.trim().toLowerCase()
   if (!trimmed) return undefined
@@ -272,12 +209,222 @@ function parseBucketSeconds(raw: string): number | undefined {
   return undefined
 }
 
+// ---------------------------------------------------------------------------
+// Clause-to-filter mapping via Match
+// ---------------------------------------------------------------------------
+
+interface TracesFilterAccumulator {
+  serviceName?: string
+  spanName?: string
+  rootSpansOnly?: boolean
+  errorsOnly?: boolean
+  environments?: string[]
+  commitShas?: string[]
+  attributeKey?: string
+  attributeValue?: string
+  attributeFilterMode?: "equals" | "exists"
+  groupByAttributeKeys?: string[]
+  resourceAttributeKey?: string
+  resourceAttributeValue?: string
+  resourceAttributeFilterMode?: "equals" | "exists"
+}
+
+function applyTracesClause(
+  filters: TracesFilterAccumulator,
+  clause: { key: string; operator: string; value: string },
+  warnings: string[],
+): TracesFilterAccumulator {
+  const key = normalizeKey(clause.key)
+
+  // Handle attr.* and resource.* prefixes before Match
+  if (key.startsWith("attr.")) {
+    const attributeKey = key.slice(5)
+    if (!filters.attributeKey) {
+      return {
+        ...filters,
+        attributeKey,
+        ...(clause.operator === "exists"
+          ? { attributeFilterMode: "exists" as const }
+          : { attributeValue: clause.value }),
+      }
+    }
+    warnings.push(
+      `Multiple attr.* filters found; only ${filters.attributeKey} is used`,
+    )
+    return filters
+  }
+
+  if (key.startsWith("resource.")) {
+    const resourceKey = key.slice(9)
+    if (!filters.resourceAttributeKey) {
+      return {
+        ...filters,
+        resourceAttributeKey: resourceKey,
+        ...(clause.operator === "exists"
+          ? { resourceAttributeFilterMode: "exists" as const }
+          : { resourceAttributeValue: clause.value }),
+      }
+    }
+    warnings.push(
+      `Multiple resource.* filters found; only ${filters.resourceAttributeKey} is used`,
+    )
+    return filters
+  }
+
+  return Match.value(key).pipe(
+    Match.when("service.name", () => ({ ...filters, serviceName: clause.value })),
+    Match.when("span.name", () => ({ ...filters, spanName: clause.value })),
+    Match.when("deployment.environment", () => ({
+      ...filters,
+      environments: splitCsv(clause.value),
+    })),
+    Match.when("deployment.commit_sha", () => ({
+      ...filters,
+      commitShas: splitCsv(clause.value),
+    })),
+    Match.when("root_only", () => {
+      const boolValue = parseBoolean(clause.value)
+      if (boolValue == null) {
+        warnings.push(`Invalid root_only value ignored: ${clause.value}`)
+        return filters
+      }
+      return { ...filters, rootSpansOnly: boolValue }
+    }),
+    Match.when("has_error", () => {
+      const boolValue = parseBoolean(clause.value)
+      if (boolValue == null) {
+        warnings.push(`Invalid has_error value ignored: ${clause.value}`)
+        return filters
+      }
+      return { ...filters, errorsOnly: boolValue }
+    }),
+    Match.orElse(() => {
+      warnings.push(`Unsupported traces filter ignored: ${clause.key}`)
+      return filters
+    }),
+  )
+}
+
+function applyLogsClause(
+  filters: { serviceName?: string; severity?: string },
+  clause: { key: string; value: string },
+  warnings: string[],
+): { serviceName?: string; severity?: string } {
+  const key = normalizeKey(clause.key)
+
+  return Match.value(key).pipe(
+    Match.when("service.name", () => ({ ...filters, serviceName: clause.value })),
+    Match.when("severity", () => ({ ...filters, severity: clause.value })),
+    Match.orElse(() => {
+      warnings.push(`Unsupported logs filter ignored: ${clause.key}`)
+      return filters
+    }),
+  )
+}
+
+function applyMetricsClause(
+  filters: { metricName: string; metricType: QueryBuilderMetricType; serviceName?: string },
+  clause: { key: string; value: string },
+  warnings: string[],
+): { metricName: string; metricType: QueryBuilderMetricType; serviceName?: string } {
+  const key = normalizeKey(clause.key)
+
+  return Match.value(key).pipe(
+    Match.when("service.name", () => ({ ...filters, serviceName: clause.value })),
+    Match.when("metric.type", () => {
+      if (QUERY_BUILDER_METRIC_TYPES.includes(clause.value as QueryBuilderMetricType)) {
+        return { ...filters, metricType: clause.value as QueryBuilderMetricType }
+      }
+      warnings.push(`Invalid metric.type ignored: ${clause.value}`)
+      return filters
+    }),
+    Match.orElse(() => {
+      warnings.push(`Unsupported metrics filter ignored: ${clause.key}`)
+      return filters
+    }),
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Group-by mapping via Match
+// ---------------------------------------------------------------------------
+
+type TracesGroupByKey = "service" | "span_name" | "status_code" | "http_method" | "attribute" | "none"
+
+function resolveTracesGroupByToken(
+  token: string,
+  filters: TracesFilterAccumulator,
+  warnings: string[],
+  raw: string,
+): TracesGroupByKey | null {
+  return Match.value(token).pipe(
+    Match.whenOr("service", "service.name", () => "service" as const),
+    Match.whenOr("span", "span.name", () => "span_name" as const),
+    Match.whenOr("status", "status.code", () => "status_code" as const),
+    Match.when("http.method", () => "http_method" as const),
+    Match.whenOr("none", "all", () => "none" as const),
+    Match.orElse((t) => {
+      if (t.startsWith("attr.")) {
+        const attributeKey = t.slice(5)
+        if (!attributeKey) {
+          warnings.push("Invalid attr.* group by ignored")
+          return null
+        }
+        if (!filters.groupByAttributeKeys) filters.groupByAttributeKeys = []
+        filters.groupByAttributeKeys.push(attributeKey)
+        return "attribute" as const
+      }
+      warnings.push(`Unsupported traces group by ignored: ${raw}`)
+      return null
+    }),
+  )
+}
+
+type LogsGroupByKey = "service" | "severity" | "none"
+
+function resolveLogsGroupByToken(
+  token: string,
+  warnings: string[],
+  raw: string,
+): LogsGroupByKey | null {
+  return Match.value(token).pipe(
+    Match.whenOr("service", "service.name", () => "service" as const),
+    Match.when("severity", () => "severity" as const),
+    Match.whenOr("none", "all", () => "none" as const),
+    Match.orElse(() => {
+      warnings.push(`Unsupported logs group by ignored: ${raw}`)
+      return null
+    }),
+  )
+}
+
+type MetricsGroupByKey = "service" | "none"
+
+function resolveMetricsGroupByToken(
+  token: string,
+  warnings: string[],
+  raw: string,
+): MetricsGroupByKey | null {
+  return Match.value(token).pipe(
+    Match.whenOr("service", "service.name", () => "service" as const),
+    Match.whenOr("none", "all", () => "none" as const),
+    Match.orElse(() => {
+      warnings.push(`Unsupported metrics group by ignored: ${raw}`)
+      return null
+    }),
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Query spec builders
+// ---------------------------------------------------------------------------
+
 export function buildTimeseriesQuerySpec(
   query: QueryBuilderQueryDraft
 ): BuildSpecResult {
   const warnings: string[] = []
   const { clauses, warnings: parseWarnings } = parseWhereClause(query.whereClause)
-  warnings.push(...parseWarnings)
+  for (const w of parseWarnings) warnings.push(w.message)
 
   const bucketSeconds = parseBucketSeconds(query.stepInterval)
   if (query.stepInterval.trim() && !bucketSeconds) {
@@ -302,136 +449,18 @@ export function buildTimeseriesQuerySpec(
       }
     }
 
-    const filters: {
-      serviceName?: string
-      spanName?: string
-      rootSpansOnly?: boolean
-      errorsOnly?: boolean
-      environments?: string[]
-      commitShas?: string[]
-      attributeKey?: string
-      attributeValue?: string
-      attributeFilterMode?: "equals" | "exists"
-      groupByAttributeKeys?: string[]
-      resourceAttributeKey?: string
-      resourceAttributeValue?: string
-      resourceAttributeFilterMode?: "equals" | "exists"
-    } = {}
+    const filters = clauses.reduce<TracesFilterAccumulator>(
+      (acc, clause) => applyTracesClause(acc, clause, warnings),
+      {},
+    )
 
-    for (const clause of clauses) {
-      if (clause.key === "service" || clause.key === "service.name") {
-        filters.serviceName = clause.value
-        continue
-      }
-
-      if (clause.key === "span" || clause.key === "span.name") {
-        filters.spanName = clause.value
-        continue
-      }
-
-      if (
-        clause.key === "deployment.environment" ||
-        clause.key === "environment" ||
-        clause.key === "env"
-      ) {
-        filters.environments = splitCsv(clause.value)
-        continue
-      }
-
-      if (
-        clause.key === "deployment.commit_sha" ||
-        clause.key === "commit_sha"
-      ) {
-        filters.commitShas = splitCsv(clause.value)
-        continue
-      }
-
-      if (clause.key === "root_only" || clause.key === "root.only") {
-        const boolValue = toBoolean(clause.value)
-        if (boolValue == null) {
-          warnings.push(`Invalid root_only value ignored: ${clause.value}`)
-        } else {
-          filters.rootSpansOnly = boolValue
-        }
-        continue
-      }
-
-      if (clause.key === "has_error" || clause.key === "errors_only") {
-        const boolValue = toBoolean(clause.value)
-        if (boolValue == null) {
-          warnings.push(`Invalid has_error value ignored: ${clause.value}`)
-        } else {
-          filters.errorsOnly = boolValue
-        }
-        continue
-      }
-
-      if (clause.key.startsWith("attr.")) {
-        const attributeKey = clause.key.slice(5)
-        if (!filters.attributeKey) {
-          filters.attributeKey = attributeKey
-          if (clause.operator === "exists") {
-            filters.attributeFilterMode = "exists"
-          } else {
-            filters.attributeValue = clause.value
-          }
-        } else {
-          warnings.push(
-            `Multiple attr.* filters found; only ${filters.attributeKey} is used`
-          )
-        }
-        continue
-      }
-
-      if (clause.key.startsWith("resource.")) {
-        const resourceKey = clause.key.slice(9)
-        if (!filters.resourceAttributeKey) {
-          filters.resourceAttributeKey = resourceKey
-          if (clause.operator === "exists") {
-            filters.resourceAttributeFilterMode = "exists"
-          } else {
-            filters.resourceAttributeValue = clause.value
-          }
-        } else {
-          warnings.push(
-            `Multiple resource.* filters found; only ${filters.resourceAttributeKey} is used`
-          )
-        }
-        continue
-      }
-
-      warnings.push(`Unsupported traces filter ignored: ${clause.key}`)
-    }
-
-    type TracesGroupByKey = "service" | "span_name" | "status_code" | "http_method" | "attribute" | "none"
     const groupByKeys: TracesGroupByKey[] = []
-
     if (query.addOns.groupBy && query.groupBy.length > 0) {
       for (const raw of query.groupBy) {
         const token = raw.trim().toLowerCase()
         if (!token) continue
-        if (token === "service" || token === "service.name") {
-          groupByKeys.push("service")
-        } else if (token === "span" || token === "span.name") {
-          groupByKeys.push("span_name")
-        } else if (token === "status" || token === "status.code") {
-          groupByKeys.push("status_code")
-        } else if (token === "http.method") {
-          groupByKeys.push("http_method")
-        } else if (token === "none" || token === "all") {
-          groupByKeys.push("none")
-        } else if (token.startsWith("attr.")) {
-          const attributeKey = token.slice(5)
-          if (!attributeKey) {
-            warnings.push("Invalid attr.* group by ignored")
-          } else {
-            groupByKeys.push("attribute")
-            if (!filters.groupByAttributeKeys) filters.groupByAttributeKeys = []
-            filters.groupByAttributeKeys.push(attributeKey)
-          }
-        } else {
-          warnings.push(`Unsupported traces group by ignored: ${raw}`)
-        }
+        const resolved = resolveTracesGroupByToken(token, filters, warnings, raw)
+        if (resolved) groupByKeys.push(resolved)
       }
     }
 
@@ -474,41 +503,18 @@ export function buildTimeseriesQuerySpec(
       }
     }
 
-    const filters: {
-      serviceName?: string
-      severity?: string
-    } = {}
+    const filters = clauses.reduce<{ serviceName?: string; severity?: string }>(
+      (acc, clause) => applyLogsClause(acc, clause, warnings),
+      {},
+    )
 
-    for (const clause of clauses) {
-      if (clause.key === "service" || clause.key === "service.name") {
-        filters.serviceName = clause.value
-        continue
-      }
-
-      if (clause.key === "severity") {
-        filters.severity = clause.value
-        continue
-      }
-
-      warnings.push(`Unsupported logs filter ignored: ${clause.key}`)
-    }
-
-    type LogsGroupByKey = "service" | "severity" | "none"
     const logsGroupByKeys: LogsGroupByKey[] = []
-
     if (query.addOns.groupBy && query.groupBy.length > 0) {
       for (const raw of query.groupBy) {
         const token = raw.trim().toLowerCase()
         if (!token) continue
-        if (token === "service" || token === "service.name") {
-          logsGroupByKeys.push("service")
-        } else if (token === "severity") {
-          logsGroupByKeys.push("severity")
-        } else if (token === "none" || token === "all") {
-          logsGroupByKeys.push("none")
-        } else {
-          warnings.push(`Unsupported logs group by ignored: ${raw}`)
-        }
+        const resolved = resolveLogsGroupByToken(token, warnings, raw)
+        if (resolved) logsGroupByKeys.push(resolved)
       }
     }
 
@@ -545,46 +551,21 @@ export function buildTimeseriesQuerySpec(
     }
   }
 
-  const filters: {
-    metricName: string
-    metricType: QueryBuilderMetricType
-    serviceName?: string
-  } = {
-    metricName: query.metricName,
-    metricType: query.metricType,
-  }
+  const metricsFilters = clauses.reduce(
+    (acc, clause) => applyMetricsClause(acc, clause, warnings),
+    {
+      metricName: query.metricName,
+      metricType: query.metricType,
+    } as { metricName: string; metricType: QueryBuilderMetricType; serviceName?: string },
+  )
 
-  for (const clause of clauses) {
-    if (clause.key === "service" || clause.key === "service.name") {
-      filters.serviceName = clause.value
-      continue
-    }
-
-    if (clause.key === "metric.type") {
-      if (QUERY_BUILDER_METRIC_TYPES.includes(clause.value as QueryBuilderMetricType)) {
-        filters.metricType = clause.value as QueryBuilderMetricType
-      } else {
-        warnings.push(`Invalid metric.type ignored: ${clause.value}`)
-      }
-      continue
-    }
-
-    warnings.push(`Unsupported metrics filter ignored: ${clause.key}`)
-  }
-
-  type MetricsGroupByKey = "service" | "none"
   const metricsGroupByKeys: MetricsGroupByKey[] = []
   if (query.addOns.groupBy && query.groupBy.length > 0) {
     for (const raw of query.groupBy) {
       const token = raw.trim().toLowerCase()
       if (!token) continue
-      if (token === "service" || token === "service.name") {
-        metricsGroupByKeys.push("service")
-      } else if (token === "none" || token === "all") {
-        metricsGroupByKeys.push("none")
-      } else {
-        warnings.push(`Unsupported metrics group by ignored: ${raw}`)
-      }
+      const resolved = resolveMetricsGroupByToken(token, warnings, raw)
+      if (resolved) metricsGroupByKeys.push(resolved)
     }
   }
   const groupBy = metricsGroupByKeys.length > 0 ? metricsGroupByKeys : undefined
@@ -595,7 +576,7 @@ export function buildTimeseriesQuerySpec(
       source: "metrics",
       metric: query.aggregation as "avg" | "sum" | "min" | "max" | "count",
       groupBy,
-      filters,
+      filters: metricsFilters,
       bucketSeconds,
     } as QuerySpec,
     warnings,
@@ -697,8 +678,7 @@ export function formatFiltersAsWhereClause(
     typeof filters.attributeValue === "string"
   ) {
     clauses.push(
-      `attr.${filters.attributeKey.trim()} = "${filters.attributeValue.trim()}"`
-    )
+      `attr.${filters.attributeKey.trim()} = "${filters.attributeValue.trim()}"`)
   }
 
   if (
@@ -707,8 +687,7 @@ export function formatFiltersAsWhereClause(
     typeof filters.resourceAttributeValue === "string"
   ) {
     clauses.push(
-      `resource.${filters.resourceAttributeKey.trim()} = "${filters.resourceAttributeValue.trim()}"`
-    )
+      `resource.${filters.resourceAttributeKey.trim()} = "${filters.resourceAttributeValue.trim()}"`)
   }
 
   return clauses.join(" AND ")

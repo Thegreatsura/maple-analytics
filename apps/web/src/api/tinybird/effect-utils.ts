@@ -1,4 +1,4 @@
-import { TinybirdDateTime } from "@maple/domain"
+import { TinybirdDateTime } from "@maple/query-engine"
 import { Effect, Schema } from "effect"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 

@@ -21,7 +21,7 @@ import {
   type QueryEngineExecuteResponse,
   type QuerySpec as QuerySpecType,
   type TracesFilters,
-} from "@maple/domain"
+} from "@maple/query-engine"
 import type { TenantContext } from "@/services/AuthService"
 
 const commonTimeRangeFields = {

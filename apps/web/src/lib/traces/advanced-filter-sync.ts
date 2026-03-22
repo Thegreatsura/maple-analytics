@@ -1,3 +1,11 @@
+import {
+  normalizeKey,
+  parseBoolean,
+  parseNumber,
+  parseWhereClause as parseWhereClauses,
+} from "@maple/query-engine/where-clause"
+import { Match } from "effect"
+
 export interface TracesSearchLike {
   services?: string[]
   spanNames?: string[]
@@ -41,37 +49,6 @@ export interface ParsedWhereClauseFilters {
   matchModes?: Partial<Record<string, FilterMatchMode>>
 }
 
-const TRUE_VALUES = new Set(["1", "true", "yes", "y"])
-const FALSE_VALUES = new Set(["0", "false", "no", "n"])
-
-const CLAUSE_RE = /^([a-zA-Z0-9_.-]+)\s*(<=|>=|<|>|=|contains)\s*(?:"([^"]*)"|'([^']*)'|([^\s]+))$/i
-
-function parseBoolean(value: string): boolean | null {
-  const normalized = value.trim().toLowerCase()
-  if (TRUE_VALUES.has(normalized)) {
-    return true
-  }
-
-  if (FALSE_VALUES.has(normalized)) {
-    return false
-  }
-
-  return null
-}
-
-function parseNumber(value: string): number | null {
-  if (!value.trim()) {
-    return null
-  }
-
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) {
-    return null
-  }
-
-  return parsed
-}
-
 function quoteValue(value: string): string {
   return `"${value.replace(/\\/g, "\\\\").replace(/\"/g, '\\\"')}"`
 }
@@ -87,142 +64,98 @@ export function parseWhereClause(whereClause: string | undefined): {
     }
   }
 
-  const parts = whereClause
-    .trim()
-    .split(/\s+AND\s+/i)
-    .map((part) => part.trim())
-    .filter(Boolean)
+  const { clauses, warnings } = parseWhereClauses(whereClause.trim())
 
-  const parsed: ParsedWhereClauseFilters = {}
-  let hasIncompleteClauses = false
+  let parsed: ParsedWhereClauseFilters = {}
+  let hasIncompleteClauses = warnings.length > 0
 
-  for (const part of parts) {
-    const match = part.match(CLAUSE_RE)
-    if (!match) {
-      hasIncompleteClauses = true
-      continue
-    }
+  for (const clause of clauses) {
+    const key = normalizeKey(clause.key)
+    const isContains = clause.operator === "contains"
 
-    const unquotedToken = match[5]
-    if (
-      unquotedToken &&
-      (unquotedToken.startsWith("\"") || unquotedToken.startsWith("'"))
-    ) {
-      hasIncompleteClauses = true
-      continue
-    }
-
-    const rawKey = match[1]?.trim().toLowerCase()
-    const rawOperator = match[2]?.toLowerCase()
-    const rawValue = (match[3] ?? match[4] ?? match[5] ?? "").trim()
-    const isContains = rawOperator === "contains"
-    if (!rawKey || !rawValue) {
-      continue
-    }
-
-    function setMatchMode(key: string) {
+    function setMatchMode(modeKey: string) {
       if (isContains) {
         parsed.matchModes ??= {}
-        parsed.matchModes[key] = "contains"
+        parsed.matchModes[modeKey] = "contains"
       }
     }
 
-    if (rawKey === "service" || rawKey === "service.name") {
-      parsed.service = rawValue
-      setMatchMode("service")
-      continue
-    }
-
-    if (rawKey === "span" || rawKey === "span.name") {
-      parsed.spanName = rawValue
-      setMatchMode("spanName")
-      continue
-    }
-
-    if (
-      rawKey === "deployment.environment" ||
-      rawKey === "environment" ||
-      rawKey === "env"
-    ) {
-      parsed.deploymentEnv = rawValue
-      setMatchMode("deploymentEnv")
-      continue
-    }
-
-    if (rawKey === "http.method") {
-      parsed.httpMethod = rawValue
-      setMatchMode("httpMethod")
-      continue
-    }
-
-    if (rawKey === "http.status_code") {
-      parsed.httpStatusCode = rawValue
-      setMatchMode("httpStatusCode")
-      continue
-    }
-
-    if (rawKey === "has_error") {
-      const boolValue = parseBoolean(rawValue)
-      if (boolValue === null) {
-        hasIncompleteClauses = true
-      } else {
-        parsed.hasError = boolValue === true ? true : undefined
-      }
-      continue
-    }
-
-    if (rawKey === "root_only" || rawKey === "root.only") {
-      const boolValue = parseBoolean(rawValue)
-      if (boolValue === null) {
-        hasIncompleteClauses = true
-      } else {
-        parsed.rootOnly = boolValue === false ? false : undefined
-      }
-      continue
-    }
-
-    if (rawKey === "min_duration_ms") {
-      const numeric = parseNumber(rawValue)
-      if (numeric === null) {
-        hasIncompleteClauses = true
-      } else {
-        parsed.minDurationMs = numeric
-      }
-      continue
-    }
-
-    if (rawKey === "max_duration_ms") {
-      const numeric = parseNumber(rawValue)
-      if (numeric === null) {
-        hasIncompleteClauses = true
-      } else {
-        parsed.maxDurationMs = numeric
-      }
-      continue
-    }
-
-    if (rawKey.startsWith("attr.")) {
-      const attributeKey = rawKey.slice(5).trim()
-      if (!attributeKey || parsed.attributeKey) {
-        continue
-      }
-
-      parsed.attributeKey = attributeKey
-      parsed.attributeValue = rawValue
+    // Handle attr.* and resource.* prefixes before Match
+    if (key.startsWith("attr.")) {
+      const attributeKey = key.slice(5).trim()
+      if (!attributeKey || parsed.attributeKey) continue
+      parsed = { ...parsed, attributeKey, attributeValue: clause.value }
       setMatchMode("attributeValue")
       continue
     }
 
-    if (rawKey.startsWith("resource.")) {
-      const resourceKey = rawKey.slice(9).trim()
-      if (!resourceKey || parsed.resourceAttributeKey) {
-        continue
+    if (key.startsWith("resource.")) {
+      const resourceKey = key.slice(9).trim()
+      if (!resourceKey || parsed.resourceAttributeKey) continue
+      parsed = {
+        ...parsed,
+        resourceAttributeKey: resourceKey,
+        resourceAttributeValue: clause.value,
       }
-
-      parsed.resourceAttributeKey = resourceKey
-      parsed.resourceAttributeValue = rawValue
       setMatchMode("resourceAttributeValue")
+      continue
     }
+
+    parsed = Match.value(key).pipe(
+      Match.when("service.name", () => {
+        setMatchMode("service")
+        return { ...parsed, service: clause.value }
+      }),
+      Match.when("span.name", () => {
+        setMatchMode("spanName")
+        return { ...parsed, spanName: clause.value }
+      }),
+      Match.when("deployment.environment", () => {
+        setMatchMode("deploymentEnv")
+        return { ...parsed, deploymentEnv: clause.value }
+      }),
+      Match.when("http.method", () => {
+        setMatchMode("httpMethod")
+        return { ...parsed, httpMethod: clause.value }
+      }),
+      Match.when("http.status_code", () => {
+        setMatchMode("httpStatusCode")
+        return { ...parsed, httpStatusCode: clause.value }
+      }),
+      Match.when("has_error", () => {
+        const boolValue = parseBoolean(clause.value)
+        if (boolValue === null) {
+          hasIncompleteClauses = true
+          return parsed
+        }
+        return { ...parsed, hasError: boolValue === true ? (true as const) : undefined }
+      }),
+      Match.when("root_only", () => {
+        const boolValue = parseBoolean(clause.value)
+        if (boolValue === null) {
+          hasIncompleteClauses = true
+          return parsed
+        }
+        return { ...parsed, rootOnly: boolValue === false ? (false as const) : undefined }
+      }),
+      Match.when("min_duration_ms", () => {
+        const numeric = parseNumber(clause.value)
+        if (numeric === null) {
+          hasIncompleteClauses = true
+          return parsed
+        }
+        return { ...parsed, minDurationMs: numeric }
+      }),
+      Match.when("max_duration_ms", () => {
+        const numeric = parseNumber(clause.value)
+        if (numeric === null) {
+          hasIncompleteClauses = true
+          return parsed
+        }
+        return { ...parsed, maxDurationMs: numeric }
+      }),
+      Match.orElse(() => parsed),
+    )
   }
 
   return {

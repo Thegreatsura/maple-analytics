@@ -19,6 +19,7 @@
         "@libsql/client": "0.15.15",
         "@maple/db": "workspace:*",
         "@maple/domain": "workspace:*",
+        "@maple/query-engine": "workspace:*",
         "@tinybirdco/sdk": "0.0.60",
         "autumn-js": "^0.1.75",
         "date-fns": "^4.1.0",
@@ -102,6 +103,7 @@
         "@json-render/react": "^0.10.0",
         "@maple/domain": "workspace:*",
         "@maple/infra": "workspace:*",
+        "@maple/query-engine": "workspace:*",
         "@maple/ui": "workspace:*",
         "@streamdown/cjk": "^1.0.2",
         "@streamdown/code": "^1.0.3",
@@ -185,6 +187,7 @@
     "packages/domain": {
       "name": "@maple/domain",
       "dependencies": {
+        "@maple/query-engine": "workspace:*",
         "@tinybirdco/sdk": "0.0.60",
         "effect": "4.0.0-beta.33",
       },
@@ -201,6 +204,18 @@
         "alchemy": "https://pkg.pr.new/Makisuo/alchemy@e3f48848",
       },
       "devDependencies": {
+        "@types/node": "^22.10.2",
+        "typescript": "^5.9.3",
+      },
+    },
+    "packages/query-engine": {
+      "name": "@maple/query-engine",
+      "dependencies": {
+        "effect": "4.0.0-beta.33",
+      },
+      "devDependencies": {
+        "@effect/language-service": "^0.75.1",
+        "@types/bun": "^1.3.8",
         "@types/node": "^22.10.2",
         "typescript": "^5.9.3",
       },
@@ -735,6 +750,8 @@
     "@maple/ingest": ["@maple/ingest@workspace:apps/ingest"],
 
     "@maple/landing": ["@maple/landing@workspace:apps/landing"],
+
+    "@maple/query-engine": ["@maple/query-engine@workspace:packages/query-engine"],
 
     "@maple/ui": ["@maple/ui@workspace:packages/ui"],
 

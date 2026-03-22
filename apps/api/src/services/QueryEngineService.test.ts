@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { Effect, Exit, Option, Schema } from "effect"
-import { OrgId, UserId, type QueryEngineExecuteRequest } from "@maple/domain"
+import { OrgId, UserId } from "@maple/domain"
+import type { QueryEngineExecuteRequest } from "@maple/query-engine"
 import { makeQueryEngineExecute } from "./QueryEngineService"
 import type { TenantContext } from "./AuthService"
 

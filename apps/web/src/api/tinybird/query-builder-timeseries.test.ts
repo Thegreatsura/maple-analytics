@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { QuerySpec } from "@maple/domain"
+import type { QuerySpec } from "@maple/query-engine"
 import { __testables } from "@/api/tinybird/query-builder-timeseries"
 import type { QueryRunResult } from "@/components/query-builder/formula-results"
 
