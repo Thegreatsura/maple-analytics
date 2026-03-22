@@ -40,10 +40,11 @@ function DashboardPreview({ widgets }: { widgets: DashboardWidget[] }) {
         const y = widget.layout?.y ?? 0
         const w = widget.layout?.w ?? 4
         const h = widget.layout?.h ?? 4
-        const left = `${(x / cols) * 100}%`
-        const top = `${(y / rows) * 100}%`
-        const width = `${(w / cols) * 100}%`
-        const height = `${(h / rows) * 100}%`
+        const gap = 3 // px gap between widgets
+        const left = `calc(${(x / cols) * 100}% + ${gap}px)`
+        const top = `calc(${(y / rows) * 100}% + ${gap}px)`
+        const width = `calc(${(w / cols) * 100}% - ${gap * 2}px)`
+        const height = `calc(${(h / rows) * 100}% - ${gap * 2}px)`
 
         const color =
           widget.visualization === "chart"
@@ -56,7 +57,7 @@ function DashboardPreview({ widgets }: { widgets: DashboardWidget[] }) {
           <div
             key={widget.id}
             className={`absolute rounded-sm ${color}`}
-            style={{ left, top, width, height, padding: "1px" }}
+            style={{ left, top, width, height }}
           >
             <div className="w-full h-full rounded-sm" />
           </div>
@@ -129,7 +130,7 @@ export function DashboardList({
         type="button"
         onClick={onCreate}
         disabled={readOnly}
-        className="ring-1 ring-dashed ring-border hover:ring-border-active bg-card/50 flex flex-col items-center justify-center gap-2 p-8 transition-all text-muted hover:text-foreground min-h-[160px] disabled:opacity-50 disabled:cursor-not-allowed rounded-md"
+        className="ring-1 ring-dashed ring-border hover:ring-border-active bg-card/50 flex flex-col items-center justify-center gap-2 p-8 transition-all text-dim hover:text-foreground min-h-[160px] disabled:opacity-50 disabled:cursor-not-allowed rounded-md"
       >
         <PlusIcon size={24} />
         <span className="text-xs font-medium">Create Dashboard</span>
