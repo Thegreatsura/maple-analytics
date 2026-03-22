@@ -17,9 +17,26 @@ describe("Tinybird project sync", () => {
     let requestBody: FormData | null = null
     let authorizationHeader = ""
 
-    globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      authorizationHeader = String(init?.headers instanceof Headers ? init.headers.get("Authorization") : (init?.headers as Record<string, string> | undefined)?.Authorization ?? "")
-      requestBody = init?.body as FormData
+    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const isRequest = input instanceof Request
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
+      const method = init?.method ?? (isRequest ? input.method : "GET")
+      const headers = init?.headers instanceof Headers
+        ? init.headers
+        : isRequest
+          ? input.headers
+          : new Headers(init?.headers as HeadersInit | undefined)
+      authorizationHeader = headers.get("Authorization") ?? ""
+
+      // Stale deployment cleanup call
+      if (url.includes("/v1/deployments") && method === "GET") {
+        return new Response(JSON.stringify({ deployments: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      }
+
+      requestBody = (init?.body ?? (isRequest ? input.body : null)) as FormData
 
       return new Response(
         JSON.stringify({
