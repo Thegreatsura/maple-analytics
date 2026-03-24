@@ -32,11 +32,31 @@ if (import.meta.env.DEV && isClerkAuthEnabled && !clerkPublishableKey) {
 }
 
 function AutumnProviderWithClerk({ children }: { children: React.ReactNode }) {
+  const { getToken } = useAuth()
+  const getTokenRef = useRef(getToken)
+  getTokenRef.current = getToken
+
+  useEffect(() => {
+    const originalFetch = window.fetch
+    window.fetch = async function (input: RequestInfo | URL, init?: RequestInit) {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+      if (url.includes("/api/autumn/")) {
+        const token = await getTokenRef.current()
+        if (token) {
+          const headers = new Headers(init?.headers)
+          headers.set("Authorization", `Bearer ${token}`)
+          return originalFetch.call(window, input, { ...init, headers })
+        }
+      }
+      return originalFetch.call(window, input, init)
+    }
+    return () => {
+      window.fetch = originalFetch
+    }
+  }, [])
+
   return (
-    <AutumnProvider
-      includeCredentials
-      backendUrl={apiBaseUrl}
-    >
+    <AutumnProvider backendUrl={apiBaseUrl}>
       {children}
     </AutumnProvider>
   )
