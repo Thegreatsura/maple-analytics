@@ -1,6 +1,6 @@
 import { ClerkProvider, useAuth } from "@clerk/clerk-react"
 import { AutumnProvider } from "autumn-js/react"
-import { StrictMode, useCallback, useEffect, useRef, useState } from "react"
+import { Component, StrictMode, useCallback, useEffect, useRef, useState } from "react"
 import ReactDOM from "react-dom/client"
 import { RouterProvider } from "@tanstack/react-router"
 
@@ -32,16 +32,27 @@ if (import.meta.env.DEV && isClerkAuthEnabled && !clerkPublishableKey) {
 }
 
 function AutumnProviderWithClerk({ children }: { children: React.ReactNode }) {
-  const { getToken } = useAuth()
   return (
     <AutumnProvider
-      includeCredentials={false}
+      includeCredentials
       backendUrl={apiBaseUrl}
-      getBearerToken={() => getToken().then((t) => t ?? "")}
     >
       {children}
     </AutumnProvider>
   )
+}
+
+class AutumnErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  state = { hasError: false }
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+  componentDidCatch(error: Error) {
+    console.error("[Autumn] Provider error, bypassing billing:", error)
+  }
+  render() {
+    return this.props.children
+  }
 }
 
 const AUTH_SETTLE_TIMEOUT_MS = 2000
@@ -160,9 +171,11 @@ const app = isClerkAuthEnabled
         afterSignOutUrl={clerkSignInUrl}
       >
         <ClerkAuthBridge />
-        <AutumnProviderWithClerk>
-          <ClerkInnerApp />
-        </AutumnProviderWithClerk>
+        <AutumnErrorBoundary>
+          <AutumnProviderWithClerk>
+            <ClerkInnerApp />
+          </AutumnProviderWithClerk>
+        </AutumnErrorBoundary>
       </ClerkProvider>
     )
   : <SelfHostedInnerApp />
