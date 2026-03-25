@@ -1,6 +1,11 @@
 import {
+  type QueryEngineAlertObservation,
+  type QueryEngineAlertReducer,
+  type QueryEngineEvaluateRequest,
+  QueryEngineEvaluateResponse,
   type QueryEngineExecuteRequest,
   QueryEngineExecuteResponse,
+  type QueryEngineSampleCountStrategy,
   type QuerySpec,
   type TimeseriesPoint,
 } from "@maple/query-engine"
@@ -35,11 +40,38 @@ interface MetricTimeseriesRow {
   readonly dataPointCount: number
 }
 
+type AlertObservation = QueryEngineAlertObservation
+
+export interface GroupedAlertObservation {
+  readonly groupKey: string
+  readonly value: number | null
+  readonly sampleCount: number
+  readonly hasData: boolean
+}
+
 export interface QueryEngineServiceShape {
   readonly execute: (
     tenant: TenantContext,
     request: QueryEngineExecuteRequest,
-  ) => Effect.Effect<QueryEngineExecuteResponse, QueryEngineValidationError | QueryEngineExecutionError>
+  ) => Effect.Effect<
+    QueryEngineExecuteResponse,
+    QueryEngineValidationError | QueryEngineExecutionError
+  >
+  readonly evaluate: (
+    tenant: TenantContext,
+    request: QueryEngineEvaluateRequest,
+  ) => Effect.Effect<
+    QueryEngineEvaluateResponse,
+    QueryEngineValidationError | QueryEngineExecutionError
+  >
+  readonly evaluateGrouped: (
+    tenant: TenantContext,
+    request: QueryEngineEvaluateRequest,
+    groupBy: "service",
+  ) => Effect.Effect<
+    ReadonlyArray<GroupedAlertObservation>,
+    QueryEngineValidationError | QueryEngineExecutionError
+  >
 }
 
 const MAX_RANGE_SECONDS = 60 * 60 * 24 * 31
@@ -110,7 +142,7 @@ const normalizeBucket = (bucket: string | Date): string => {
 }
 
 const validateTimeRange = Effect.fn("QueryEngineService.validateTimeRange")(function* (
-  request: QueryEngineExecuteRequest,
+  request: { readonly startTime: string; readonly endTime: string },
 ): Effect.fn.Return<TimeRangeBounds, QueryEngineValidationError> {
   const startMs = toEpochMs(request.startTime)
   const endMs = toEpochMs(request.endTime)
@@ -270,12 +302,20 @@ function collapseMetricTimeseriesRows(
     }))
 }
 
-const validate = Effect.fn("QueryEngineService.validate")(function* (
+const validateExecute = Effect.fn("QueryEngineService.validateExecute")(function* (
   request: QueryEngineExecuteRequest,
 ): Effect.fn.Return<TimeRangeBounds, QueryEngineValidationError> {
   const range = yield* validateTimeRange(request)
   yield* validateTraceAttributeFilters(request.query)
   yield* validatePointBudget(request, range)
+  return range
+})
+
+const validateEvaluate = Effect.fn("QueryEngineService.validateEvaluate")(function* (
+  request: QueryEngineEvaluateRequest,
+): Effect.fn.Return<TimeRangeBounds, QueryEngineValidationError> {
+  const range = yield* validateTimeRange(request)
+  yield* validateTraceAttributeFilters(request.query)
   return range
 })
 
@@ -306,7 +346,108 @@ type QueryEngineTinybird = Pick<
   | "customTracesBreakdownQuery"
   | "customLogsBreakdownQuery"
   | "customMetricsBreakdownQuery"
+  | "alertTracesAggregateQuery"
+  | "alertMetricsAggregateQuery"
+  | "alertLogsAggregateQuery"
+  | "alertTracesAggregateByServiceQuery"
+  | "alertMetricsAggregateByServiceQuery"
+  | "alertLogsAggregateByServiceQuery"
 >
+
+const tracesMetricFieldMap = {
+  count: "count",
+  avg_duration: "avgDuration",
+  p50_duration: "p50Duration",
+  p95_duration: "p95Duration",
+  p99_duration: "p99Duration",
+  error_rate: "errorRate",
+  apdex: "apdexScore",
+} as const
+
+const tracesAggregateValueForMetric = (
+  metric: Extract<QuerySpec, { source: "traces" }>["metric"],
+  row: {
+    readonly count: number
+    readonly avgDuration: number
+    readonly p50Duration: number
+    readonly p95Duration: number
+    readonly p99Duration: number
+    readonly errorRate: number
+    readonly apdexScore: number
+  },
+): number => Number(row[tracesMetricFieldMap[metric]])
+
+const metricsAggregateValueForMetric = (
+  metric: Extract<QuerySpec, { source: "metrics" }>["metric"],
+  row: {
+    readonly avgValue: number
+    readonly minValue: number
+    readonly maxValue: number
+    readonly sumValue: number
+    readonly dataPointCount: number
+  },
+): number => {
+  switch (metric) {
+    case "avg":
+      return Number(row.avgValue)
+    case "min":
+      return Number(row.minValue)
+    case "max":
+      return Number(row.maxValue)
+    case "sum":
+      return Number(row.sumValue)
+    case "count":
+      return Number(row.dataPointCount)
+  }
+}
+
+const applyAlertReducer = (
+  observations: ReadonlyArray<AlertObservation>,
+  reducer: QueryEngineAlertReducer,
+): number | null => {
+  const values = observations
+    .filter((observation) => observation.hasData && observation.value != null)
+    .map((observation) => observation.value as number)
+
+  if (values.length === 0) {
+    return null
+  }
+
+  switch (reducer) {
+    case "identity":
+      return values[0] ?? null
+    case "sum":
+      return values.reduce((sum, value) => sum + value, 0)
+    case "avg":
+      return values.reduce((sum, value) => sum + value, 0) / values.length
+    case "min":
+      return Math.min(...values)
+    case "max":
+      return Math.max(...values)
+  }
+}
+
+const sampleCountForStrategy = (
+  _strategy: QueryEngineSampleCountStrategy,
+  observations: ReadonlyArray<AlertObservation>,
+): number =>
+  observations.reduce((sum, observation) => sum + Number(observation.sampleCount), 0)
+
+const isScalarAlertQuery = (
+  query: QuerySpec,
+): query is Extract<QuerySpec, { kind: "timeseries"; source: "traces" | "logs" | "metrics" }> => {
+  if (query.kind !== "timeseries") {
+    return false
+  }
+
+  if (query.source !== "traces" && query.source !== "metrics" && query.source !== "logs") {
+    return false
+  }
+
+  return query.groupBy == null || query.groupBy.length === 0 || (
+    query.groupBy.length === 1 && query.groupBy[0] === "none"
+  )
+}
 
 export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
   Effect.fn("QueryEngineService.execute")(function* (
@@ -316,7 +457,7 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
     QueryEngineExecuteResponse,
     QueryEngineValidationError | QueryEngineExecutionError
   > {
-    const range = yield* validate(request)
+    const range = yield* validateExecute(request)
     const bucketSeconds = request.query.kind === "timeseries"
       ? request.query.bucketSeconds ?? computeBucketSeconds(range.startMs, range.endMs)
       : undefined
@@ -349,24 +490,28 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
               ? request.query.filters.groupByAttributeKeys.join(",")
               : undefined,
           attribute_filter_key: request.query.filters?.attributeKey,
-          attribute_filter_value: request.query.filters?.attributeFilterMode === "exists" ? undefined : request.query.filters?.attributeValue,
-          attribute_filter_exists: request.query.filters?.attributeFilterMode === "exists" ? "1" : undefined,
+          attribute_filter_value:
+            request.query.filters?.attributeFilterMode === "exists"
+              ? undefined
+              : request.query.filters?.attributeValue,
+          attribute_filter_exists:
+            request.query.filters?.attributeFilterMode === "exists" ? "1" : undefined,
           resource_filter_key: request.query.filters?.resourceAttributeKey,
-          resource_filter_value: request.query.filters?.resourceAttributeFilterMode === "exists" ? undefined : request.query.filters?.resourceAttributeValue,
-          resource_filter_exists: request.query.filters?.resourceAttributeFilterMode === "exists" ? "1" : undefined,
+          resource_filter_value:
+            request.query.filters?.resourceAttributeFilterMode === "exists"
+              ? undefined
+              : request.query.filters?.resourceAttributeValue,
+          resource_filter_exists:
+            request.query.filters?.resourceAttributeFilterMode === "exists"
+              ? "1"
+              : undefined,
+          apdex_threshold_ms:
+            request.query.metric === "apdex" ? request.query.apdexThresholdMs : undefined,
         }),
         "Failed to execute traces timeseries query",
       )
 
-      const fieldMap = {
-        count: "count",
-        avg_duration: "avgDuration",
-        p50_duration: "p50Duration",
-        p95_duration: "p95Duration",
-        p99_duration: "p99Duration",
-        error_rate: "errorRate",
-      } as const
-      const field = fieldMap[request.query.metric]
+      const field = tracesMetricFieldMap[request.query.metric]
 
       return new QueryEngineExecuteResponse({
         result: {
@@ -474,24 +619,28 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
               ? request.query.filters?.groupByAttributeKeys?.[0]
               : undefined,
           attribute_filter_key: request.query.filters?.attributeKey,
-          attribute_filter_value: request.query.filters?.attributeFilterMode === "exists" ? undefined : request.query.filters?.attributeValue,
-          attribute_filter_exists: request.query.filters?.attributeFilterMode === "exists" ? "1" : undefined,
+          attribute_filter_value:
+            request.query.filters?.attributeFilterMode === "exists"
+              ? undefined
+              : request.query.filters?.attributeValue,
+          attribute_filter_exists:
+            request.query.filters?.attributeFilterMode === "exists" ? "1" : undefined,
           resource_filter_key: request.query.filters?.resourceAttributeKey,
-          resource_filter_value: request.query.filters?.resourceAttributeFilterMode === "exists" ? undefined : request.query.filters?.resourceAttributeValue,
-          resource_filter_exists: request.query.filters?.resourceAttributeFilterMode === "exists" ? "1" : undefined,
+          resource_filter_value:
+            request.query.filters?.resourceAttributeFilterMode === "exists"
+              ? undefined
+              : request.query.filters?.resourceAttributeValue,
+          resource_filter_exists:
+            request.query.filters?.resourceAttributeFilterMode === "exists"
+              ? "1"
+              : undefined,
+          apdex_threshold_ms:
+            request.query.metric === "apdex" ? request.query.apdexThresholdMs : undefined,
         }),
         "Failed to execute traces breakdown query",
       )
 
-      const fieldMap = {
-        count: "count",
-        avg_duration: "avgDuration",
-        p50_duration: "p50Duration",
-        p95_duration: "p95Duration",
-        p99_duration: "p99Duration",
-        error_rate: "errorRate",
-      } as const
-      const field = fieldMap[request.query.metric]
+      const field = tracesMetricFieldMap[request.query.metric]
 
       return new QueryEngineExecuteResponse({
         result: {
@@ -568,15 +717,247 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
     })
   })
 
+export const makeQueryEngineEvaluate = (tinybird: QueryEngineTinybird) =>
+  Effect.fn("QueryEngineService.evaluate")(function* (
+    tenant: TenantContext,
+    request: QueryEngineEvaluateRequest,
+  ): Effect.fn.Return<
+    QueryEngineEvaluateResponse,
+    QueryEngineValidationError | QueryEngineExecutionError
+  > {
+    yield* validateEvaluate(request)
+
+    if (!isScalarAlertQuery(request.query)) {
+      return yield* new QueryEngineValidationError({
+        message: "Unsupported alert evaluation query",
+        details: [
+          "Alert evaluation currently supports collapsed traces, logs, and metrics timeseries queries only",
+        ],
+      })
+    }
+
+    let observations: ReadonlyArray<AlertObservation>
+
+    if (request.query.source === "traces") {
+      const rows = yield* mapTinybirdError(
+        tinybird.alertTracesAggregateQuery(tenant, {
+          start_time: request.startTime,
+          end_time: request.endTime,
+          service_name: request.query.filters?.serviceName,
+          span_name: request.query.filters?.spanName,
+          root_only: request.query.filters?.rootSpansOnly ? "1" : undefined,
+          errors_only: request.query.filters?.errorsOnly ? "1" : undefined,
+          environments: request.query.filters?.environments?.join(","),
+          commit_shas: request.query.filters?.commitShas?.join(","),
+          attribute_filter_key: request.query.filters?.attributeKey,
+          attribute_filter_value:
+            request.query.filters?.attributeFilterMode === "exists"
+              ? undefined
+              : request.query.filters?.attributeValue,
+          attribute_filter_exists:
+            request.query.filters?.attributeFilterMode === "exists" ? "1" : undefined,
+          resource_filter_key: request.query.filters?.resourceAttributeKey,
+          resource_filter_value:
+            request.query.filters?.resourceAttributeFilterMode === "exists"
+              ? undefined
+              : request.query.filters?.resourceAttributeValue,
+          resource_filter_exists:
+            request.query.filters?.resourceAttributeFilterMode === "exists"
+              ? "1"
+              : undefined,
+          apdex_threshold_ms:
+            request.query.metric === "apdex" ? request.query.apdexThresholdMs : undefined,
+        }),
+        "Failed to evaluate traces alert query",
+      )
+
+      const row = rows[0]
+      const sampleCount = Number(row?.count ?? 0)
+      observations = [{
+        value:
+          sampleCount > 0 && row
+            ? tracesAggregateValueForMetric(request.query.metric, row)
+            : null,
+        sampleCount,
+        hasData: sampleCount > 0,
+      }]
+    } else if (request.query.source === "logs") {
+      const rows = yield* mapTinybirdError(
+        tinybird.alertLogsAggregateQuery(tenant, {
+          service_name: request.query.filters?.serviceName,
+          severity: request.query.filters?.severity,
+          start_time: request.startTime,
+          end_time: request.endTime,
+        }),
+        "Failed to evaluate logs alert query",
+      )
+
+      const row = rows[0]
+      const sampleCount = Number(row?.count ?? 0)
+      observations = [{
+        value: sampleCount > 0 ? sampleCount : null,
+        sampleCount,
+        hasData: sampleCount > 0,
+      }]
+    } else {
+      const rows = yield* mapTinybirdError(
+        tinybird.alertMetricsAggregateQuery(tenant, {
+          metric_name: request.query.filters.metricName,
+          metric_type: request.query.filters.metricType,
+          service: request.query.filters.serviceName,
+          start_time: request.startTime,
+          end_time: request.endTime,
+        }),
+        "Failed to evaluate metrics alert query",
+      )
+
+      const row = rows[0]
+      const sampleCount = Number(row?.dataPointCount ?? 0)
+      observations = [{
+        value:
+          sampleCount > 0 && row
+            ? metricsAggregateValueForMetric(request.query.metric, row)
+            : null,
+        sampleCount,
+        hasData: sampleCount > 0,
+      }]
+    }
+
+    return new QueryEngineEvaluateResponse({
+      value: applyAlertReducer(observations, request.reducer),
+      sampleCount: sampleCountForStrategy(request.sampleCountStrategy, observations),
+      hasData: observations.some((observation) => observation.hasData),
+      reason: `Reduced ${observations.length} observation(s) with ${request.reducer}`,
+      reducer: request.reducer,
+      observations,
+    })
+  })
+
+export const makeQueryEngineEvaluateGrouped = (tinybird: QueryEngineTinybird) =>
+  Effect.fn("QueryEngineService.evaluateGrouped")(function* (
+    tenant: TenantContext,
+    request: QueryEngineEvaluateRequest,
+    groupBy: "service",
+  ): Effect.fn.Return<
+    ReadonlyArray<GroupedAlertObservation>,
+    QueryEngineValidationError | QueryEngineExecutionError
+  > {
+    yield* validateEvaluate(request)
+
+    if (
+      request.query.kind !== "timeseries" ||
+      (request.query.source !== "traces" &&
+        request.query.source !== "metrics" &&
+        request.query.source !== "logs")
+    ) {
+      return yield* new QueryEngineValidationError({
+        message: "Unsupported grouped alert evaluation query",
+        details: ["Grouped alert evaluation supports traces, logs, and metrics timeseries queries only"],
+      })
+    }
+
+    if (groupBy === "service") {
+      if (request.query.source === "traces") {
+        const rows = yield* mapTinybirdError(
+          tinybird.alertTracesAggregateByServiceQuery(tenant, {
+            start_time: request.startTime,
+            end_time: request.endTime,
+            span_name: request.query.filters?.spanName,
+            root_only: request.query.filters?.rootSpansOnly ? "1" : undefined,
+            errors_only: request.query.filters?.errorsOnly ? "1" : undefined,
+            environments: request.query.filters?.environments?.join(","),
+            commit_shas: request.query.filters?.commitShas?.join(","),
+            attribute_filter_key: request.query.filters?.attributeKey,
+            attribute_filter_value:
+              request.query.filters?.attributeFilterMode === "exists"
+                ? undefined
+                : request.query.filters?.attributeValue,
+            attribute_filter_exists:
+              request.query.filters?.attributeFilterMode === "exists" ? "1" : undefined,
+            resource_filter_key: request.query.filters?.resourceAttributeKey,
+            resource_filter_value:
+              request.query.filters?.resourceAttributeFilterMode === "exists"
+                ? undefined
+                : request.query.filters?.resourceAttributeValue,
+            resource_filter_exists:
+              request.query.filters?.resourceAttributeFilterMode === "exists"
+                ? "1"
+                : undefined,
+            apdex_threshold_ms:
+              request.query.metric === "apdex" ? request.query.apdexThresholdMs : undefined,
+          }),
+          "Failed to evaluate grouped traces alert query",
+        )
+
+        return rows.map((row) => {
+          const sampleCount = Number(row.count ?? 0)
+          return {
+            groupKey: row.serviceName,
+            value: sampleCount > 0 ? tracesAggregateValueForMetric(request.query.metric as Extract<QuerySpec, { source: "traces" }>["metric"], row) : null,
+            sampleCount,
+            hasData: sampleCount > 0,
+          }
+        })
+      } else if (request.query.source === "logs") {
+        const rows = yield* mapTinybirdError(
+          tinybird.alertLogsAggregateByServiceQuery(tenant, {
+            severity: request.query.filters?.severity,
+            start_time: request.startTime,
+            end_time: request.endTime,
+          }),
+          "Failed to evaluate grouped logs alert query",
+        )
+
+        return rows.map((row) => {
+          const sampleCount = Number(row.count ?? 0)
+          return {
+            groupKey: row.serviceName,
+            value: sampleCount > 0 ? sampleCount : null,
+            sampleCount,
+            hasData: sampleCount > 0,
+          }
+        })
+      } else {
+        const rows = yield* mapTinybirdError(
+          tinybird.alertMetricsAggregateByServiceQuery(tenant, {
+            metric_name: (request.query as Extract<QuerySpec, { source: "metrics" }>).filters.metricName,
+            metric_type: (request.query as Extract<QuerySpec, { source: "metrics" }>).filters.metricType,
+            start_time: request.startTime,
+            end_time: request.endTime,
+          }),
+          "Failed to evaluate grouped metrics alert query",
+        )
+
+        return rows.map((row) => {
+          const sampleCount = Number(row.dataPointCount ?? 0)
+          return {
+            groupKey: row.serviceName,
+            value: sampleCount > 0 ? metricsAggregateValueForMetric(request.query.metric as Extract<QuerySpec, { source: "metrics" }>["metric"], row) : null,
+            sampleCount,
+            hasData: sampleCount > 0,
+          }
+        })
+      }
+    }
+
+    return []
+  })
+
 export class QueryEngineService extends ServiceMap.Service<QueryEngineService, QueryEngineServiceShape>()("QueryEngineService", {
   make: Effect.gen(function* () {
     const tinybird = yield* TinybirdService
     const execute = makeQueryEngineExecute(tinybird)
+    const evaluate = makeQueryEngineEvaluate(tinybird)
+    const evaluateGrouped = makeQueryEngineEvaluateGrouped(tinybird)
 
     return {
       execute,
+      evaluate,
+      evaluateGrouped,
     }
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make)
+  static readonly Live = this.layer
+  static readonly Default = this.layer
 }

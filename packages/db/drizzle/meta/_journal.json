@@ -64,6 +64,13 @@
       "when": 1773800000000,
       "tag": "0008_grey_scarlet_spider",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1774100000000,
+      "tag": "0009_alert_system",
+      "breakpoints": true
     }
   ]
 }

@@ -6,6 +6,7 @@ import {
   PulseIcon,
   ChartLineIcon,
   ServerIcon,
+  BellIcon,
   CircleWarningIcon,
   GearIcon,
   LogoutIcon,
@@ -66,7 +67,7 @@ const mainNavItems = [
   },
 ]
 
-const servicesNavItems = [
+const topologyNavItems = [
   {
     title: "Services",
     href: "/services",
@@ -79,12 +80,7 @@ const servicesNavItems = [
   },
 ]
 
-const telemetryNavItems = [
-  {
-    title: "Errors",
-    href: "/errors",
-    icon: CircleWarningIcon,
-  },
+const signalsNavItems = [
   {
     title: "Traces",
     href: "/traces",
@@ -102,11 +98,17 @@ const telemetryNavItems = [
   },
 ]
 
-const configureNavItems = [
+const investigateNavItems = [
   {
-    title: "Settings",
-    href: "/settings",
-    icon: GearIcon,
+    title: "Errors",
+    href: "/errors",
+    icon: CircleWarningIcon,
+  },
+  {
+    title: "Alerts",
+    href: "/alerts",
+    icon: BellIcon,
+    badge: "Beta",
   },
 ]
 
@@ -366,73 +368,54 @@ export function AppSidebar() {
           </SidebarGroup>
         </Collapsible>
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Services</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {servicesNavItems.map((item) => {
-                const isActive = currentPath.startsWith(item.href)
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton
-                      render={<Link to={item.href} />}
-                      tooltip={item.title}
-                      isActive={isActive}
-                    >
-                      <item.icon size={18} />
-                      <span>{item.title}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Telemetry</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {telemetryNavItems.map((item) => {
-                const isActive = currentPath.startsWith(item.href)
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton
-                      render={<Link to={item.href} />}
-                      tooltip={item.title}
-                      isActive={isActive}
-                    >
-                      <item.icon size={18} />
-                      <span>{item.title}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {[topologyNavItems, signalsNavItems, investigateNavItems].map(
+          (group) => (
+            <SidebarGroup key={group[0].title}>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {group.map((item) => {
+                    const isActive = currentPath.startsWith(item.href)
+                    return (
+                      <SidebarMenuItem key={item.title}>
+                        <SidebarMenuButton
+                          render={<Link to={item.href} />}
+                          tooltip={item.title}
+                          isActive={isActive}
+                        >
+                          <item.icon size={18} />
+                          <span>{item.title}</span>
+                        </SidebarMenuButton>
+                        {"badge" in item && (item.badge as string) ? (
+                          <SidebarMenuBadge>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">
+                              {item.badge as string}
+                            </Badge>
+                          </SidebarMenuBadge>
+                        ) : null}
+                      </SidebarMenuItem>
+                    )
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ),
+        )}
 
         <div className="flex-1" />
 
         <SidebarGroup>
-          <SidebarGroupLabel>Configure</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {configureNavItems.map((item) => {
-                const isActive = currentPath.startsWith(item.href)
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton
-                      render={<Link to={item.href} />}
-                      tooltip={item.title}
-                      isActive={isActive}
-                    >
-                      <item.icon size={18} />
-                      <span>{item.title}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  render={<Link to="/settings" />}
+                  tooltip="Settings"
+                  isActive={currentPath.startsWith("/settings")}
+                >
+                  <GearIcon size={18} />
+                  <span>Settings</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
