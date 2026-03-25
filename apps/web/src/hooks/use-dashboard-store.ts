@@ -83,8 +83,11 @@ function ensureDashboard(value: unknown): Dashboard | null {
 }
 
 function toDashboardDocument(dashboard: Dashboard): DashboardDocument {
+  const { tags, description, ...rest } = dashboard
   return new DashboardDocument({
-    ...dashboard,
+    ...rest,
+    ...(tags ? { tags: [...tags] } : {}),
+    ...(description != null ? { description } : {}),
     id: asDashboardId(dashboard.id),
     createdAt: asIsoDateTimeString(dashboard.createdAt),
     updatedAt: asIsoDateTimeString(dashboard.updatedAt),
@@ -104,7 +107,7 @@ function toPortableDashboardDocument(
 ): PortableDashboardDocument {
   return new PortableDashboardDocument({
     ...dashboard,
-    tags: dashboard.tags ? [...dashboard.tags] : undefined,
+    ...(dashboard.tags ? { tags: [...dashboard.tags] } : {}),
     widgets: structuredClone(dashboard.widgets),
     timeRange:
       dashboard.timeRange.type === "absolute"
