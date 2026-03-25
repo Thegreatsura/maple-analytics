@@ -19,8 +19,8 @@ export class QueryEngineExecutionError extends Schema.TaggedErrorClass<QueryEngi
   "QueryEngineExecutionError",
   {
     message: Schema.String,
-    causeTag: Schema.optionalKey(Schema.String),
-    pipe: Schema.optionalKey(TinybirdPipeSchema),
+    causeTag: Schema.optional(Schema.String),
+    pipe: Schema.optional(TinybirdPipeSchema),
   },
   { httpApiStatus: 502 },
 ) {}

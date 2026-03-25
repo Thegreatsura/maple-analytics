@@ -92,7 +92,7 @@ export function toPortableDashboard(dashboard: Dashboard): PortableDashboard {
   return {
     name: dashboard.name,
     description: dashboard.description,
-    ...(dashboard.tags ? { tags: [...dashboard.tags] } : {}),
+    tags: dashboard.tags ? [...dashboard.tags] : undefined,
     timeRange: clonePortableDashboard(dashboard.timeRange),
     widgets: normalizeWidgetLayouts(clonePortableDashboard(dashboard.widgets)),
   }
@@ -105,7 +105,7 @@ export function parsePortableDashboardJson(json: string): PortableDashboard {
   return {
     name: decoded.name,
     description: decoded.description,
-    ...(decoded.tags ? { tags: [...decoded.tags] } : {}),
+    tags: decoded.tags ? [...decoded.tags] : undefined,
     timeRange:
       decoded.timeRange.type === "absolute"
         ? {

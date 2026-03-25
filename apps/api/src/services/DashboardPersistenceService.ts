@@ -66,8 +66,8 @@ const createDashboardDocument = (portableDashboard: PortableDashboardDocument) =
   return new DashboardDocument({
     id: decodeDashboardIdSync(randomUUID()),
     name: portableDashboard.name,
-    ...(portableDashboard.description != null ? { description: portableDashboard.description } : {}),
-    ...(portableDashboard.tags != null ? { tags: portableDashboard.tags } : {}),
+    description: portableDashboard.description,
+    tags: portableDashboard.tags,
     timeRange: portableDashboard.timeRange,
     widgets: portableDashboard.widgets,
     createdAt: decodeIsoDateTimeStringSync(now),
