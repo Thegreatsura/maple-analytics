@@ -244,6 +244,7 @@ export function signalToQueryParams(form: RuleFormState): {
   source: "traces" | "logs" | "metrics"
   metric: string
   filters: Record<string, unknown>
+  apdexThresholdMs?: number
 } | null {
   const baseFilters = form.serviceNames.length === 1
     ? { serviceName: form.serviceNames[0] }
@@ -263,6 +264,7 @@ export function signalToQueryParams(form: RuleFormState): {
         source: "traces",
         metric: "apdex",
         filters: { ...baseFilters, rootSpansOnly: true },
+        apdexThresholdMs: parsePositiveNumber(form.apdexThresholdMs, 500),
       }
     case "metric": {
       if (!form.metricName.trim() || !form.metricType) return null

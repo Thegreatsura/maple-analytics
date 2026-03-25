@@ -35,6 +35,7 @@ export function useAlertRuleChart(form: RuleFormState) {
         endTime,
         bucketSeconds,
         filters: queryParams.filters as Record<string, string | boolean | string[] | undefined>,
+        apdexThresholdMs: queryParams.apdexThresholdMs,
       },
     }
   }, [queryParams, startTime, endTime, bucketSeconds, chartGroupBy])

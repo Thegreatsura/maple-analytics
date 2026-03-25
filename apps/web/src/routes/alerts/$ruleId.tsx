@@ -74,8 +74,8 @@ function RuleDetailPage() {
   const search = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
 
-  const rulesResult = useAtomValue(MapleApiAtomClient.query("alerts", "listRules", {}))
-  const incidentsResult = useAtomValue(MapleApiAtomClient.query("alerts", "listIncidents", {}))
+  const rulesResult = useAtomValue(MapleApiAtomClient.query("alerts", "listRules", { reactivityKeys: ["alertRules"] }))
+  const incidentsResult = useAtomValue(MapleApiAtomClient.query("alerts", "listIncidents", { reactivityKeys: ["alertIncidents"] }))
 
   const rules = Result.builder(rulesResult)
     .onSuccess((response) => [...response.rules] as AlertRuleDocument[])

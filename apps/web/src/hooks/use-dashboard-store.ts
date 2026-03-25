@@ -123,7 +123,7 @@ export function useDashboardStore() {
   const [readOnly, setReadOnly] = useState(false)
   const [persistenceError, setPersistenceError] = useState<string | null>(null)
 
-  const listResult = useAtomValue(MapleApiAtomClient.query("dashboards", "list", {}))
+  const listResult = useAtomValue(MapleApiAtomClient.query("dashboards", "list", { reactivityKeys: ["dashboards"] }))
   const createMutation = useAtomSet(MapleApiAtomClient.mutation("dashboards", "create"), { mode: "promiseExit" })
   const upsertMutation = useAtomSet(MapleApiAtomClient.mutation("dashboards", "upsert"), { mode: "promiseExit" })
   const deleteMutation = useAtomSet(MapleApiAtomClient.mutation("dashboards", "delete"), { mode: "promiseExit" })
@@ -140,6 +140,7 @@ export function useDashboardStore() {
         payload: new DashboardUpsertRequest({
           dashboard: toDashboardDocument(dashboard),
         }),
+        reactivityKeys: ["dashboards"],
       }).then((result) => {
         if (Exit.isFailure(result)) {
           setDashboards(rollback)
@@ -152,7 +153,7 @@ export function useDashboardStore() {
 
   const persistDelete = useCallback(
     (rollback: Dashboard[], dashboardId: string) => {
-      void deleteMutation({ params: { dashboardId: asDashboardId(dashboardId) } }).then((result) => {
+      void deleteMutation({ params: { dashboardId: asDashboardId(dashboardId) }, reactivityKeys: ["dashboards"] }).then((result) => {
         if (Exit.isFailure(result)) {
           setDashboards(rollback)
           setPersistenceFailure(result)
@@ -218,6 +219,7 @@ export function useDashboardStore() {
         payload: new DashboardCreateRequest({
           dashboard: toPortableDashboardDocument(imported),
         }),
+        reactivityKeys: ["dashboards"],
       })
 
       if (Exit.isFailure(result)) {
@@ -255,6 +257,7 @@ export function useDashboardStore() {
             widgets: [],
           }),
         }),
+        reactivityKeys: ["dashboards"],
       })
 
       if (Exit.isFailure(result)) {

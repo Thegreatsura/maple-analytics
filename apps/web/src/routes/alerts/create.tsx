@@ -92,8 +92,8 @@ function AlertCreatePage() {
   const search = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
 
-  const destinationsQueryAtom = MapleApiAtomClient.query("alerts", "listDestinations", {})
-  const rulesQueryAtom = MapleApiAtomClient.query("alerts", "listRules", {})
+  const destinationsQueryAtom = MapleApiAtomClient.query("alerts", "listDestinations", { reactivityKeys: ["alertDestinations"] })
+  const rulesQueryAtom = MapleApiAtomClient.query("alerts", "listRules", { reactivityKeys: ["alertRules"] })
   const destinationsResult = useAtomValue(destinationsQueryAtom)
   const rulesResult = useAtomValue(rulesQueryAtom)
 
@@ -249,8 +249,8 @@ function AlertCreatePage() {
     setSavingRule(true)
     const payload = buildRuleRequest(ruleForm)
     const result = editingRule
-      ? await updateRule({ params: { ruleId: editingRule.id }, payload })
-      : await createRule({ payload })
+      ? await updateRule({ params: { ruleId: editingRule.id }, payload, reactivityKeys: ["alertRules"] })
+      : await createRule({ payload, reactivityKeys: ["alertRules"] })
 
     if (Exit.isSuccess(result)) {
       toast.success(editingRule ? "Rule updated" : "Rule created")
@@ -269,6 +269,7 @@ function AlertCreatePage() {
     setPreviewingRule(true)
     const result = await testRule({
       payload: buildRuleTestRequest(ruleForm, ruleForm.destinationIds.length > 0),
+      reactivityKeys: ["alertDeliveryEvents"],
     })
     if (Exit.isSuccess(result)) {
       setPreviewResult(result.value)

@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
-import { Result, useAtomRefresh, useAtomSet, useAtomValue } from "@/lib/effect-atom"
+import { Result, useAtomSet, useAtomValue } from "@/lib/effect-atom"
 import { Exit, Option, Schema } from "effect"
 import { useState, useMemo } from "react"
 import { toast } from "sonner"
@@ -366,20 +366,15 @@ function AlertsPage() {
   const navigate = useNavigate({ from: Route.fullPath })
 
   const sessionResult = useAtomValue(MapleApiAtomClient.query("auth", "session", {}))
-  const destinationsQueryAtom = MapleApiAtomClient.query("alerts", "listDestinations", {})
-  const rulesQueryAtom = MapleApiAtomClient.query("alerts", "listRules", {})
-  const incidentsQueryAtom = MapleApiAtomClient.query("alerts", "listIncidents", {})
-  const deliveryEventsQueryAtom = MapleApiAtomClient.query("alerts", "listDeliveryEvents", {})
+  const destinationsQueryAtom = MapleApiAtomClient.query("alerts", "listDestinations", { reactivityKeys: ["alertDestinations"] })
+  const rulesQueryAtom = MapleApiAtomClient.query("alerts", "listRules", { reactivityKeys: ["alertRules"] })
+  const incidentsQueryAtom = MapleApiAtomClient.query("alerts", "listIncidents", { reactivityKeys: ["alertIncidents"] })
+  const deliveryEventsQueryAtom = MapleApiAtomClient.query("alerts", "listDeliveryEvents", { reactivityKeys: ["alertDeliveryEvents"] })
 
   const destinationsResult = useAtomValue(destinationsQueryAtom)
   const rulesResult = useAtomValue(rulesQueryAtom)
   const incidentsResult = useAtomValue(incidentsQueryAtom)
   const deliveryEventsResult = useAtomValue(deliveryEventsQueryAtom)
-
-  const refreshDestinations = useAtomRefresh(destinationsQueryAtom)
-  const refreshRules = useAtomRefresh(rulesQueryAtom)
-
-  const refreshDeliveryEvents = useAtomRefresh(deliveryEventsQueryAtom)
 
   const createDestination = useAtomSet(MapleApiAtomClient.mutation("alerts", "createDestination"), { mode: "promiseExit" })
   const updateDestination = useAtomSet(MapleApiAtomClient.mutation("alerts", "updateDestination"), { mode: "promiseExit" })
@@ -444,15 +439,16 @@ function AlertsPage() {
       ? await updateDestination({
           params: { destinationId: editingDestination.id },
           payload: buildDestinationUpdatePayload(destinationForm) as never,
+          reactivityKeys: ["alertDestinations"],
         })
       : await createDestination({
           payload: buildDestinationCreatePayload(destinationForm) as never,
+          reactivityKeys: ["alertDestinations"],
         })
 
     if (Exit.isSuccess(result)) {
       toast.success(editingDestination ? "Destination updated" : "Destination created")
       setDestinationDialogOpen(false)
-      refreshDestinations()
     } else {
       toast.error(getExitErrorMessage(result, "Failed to save destination"))
     }
@@ -461,14 +457,11 @@ function AlertsPage() {
 
   async function handleDestinationTest(destination: AlertDestination) {
     setTestingDestinationId(destination.id)
-    const result = await testDestination({ params: { destinationId: destination.id } })
+    const result = await testDestination({ params: { destinationId: destination.id }, reactivityKeys: ["alertDestinations", "alertDeliveryEvents"] })
     if (Exit.isSuccess(result)) {
       toast.success(result.value.message)
-      refreshDestinations()
-      refreshDeliveryEvents()
     } else {
       toast.error(getExitErrorMessage(result, "Failed to send test notification"))
-      refreshDestinations()
     }
     setTestingDestinationId(null)
   }
@@ -479,9 +472,9 @@ function AlertsPage() {
     const result = await updateDestination({
       params: { destinationId: destination.id },
       payload: buildDestinationUpdatePayload(form) as never,
+      reactivityKeys: ["alertDestinations"],
     })
     if (Exit.isSuccess(result)) {
-      refreshDestinations()
     } else {
       toast.error(getExitErrorMessage(result, "Failed to update destination"))
     }
@@ -489,11 +482,9 @@ function AlertsPage() {
 
   async function handleDestinationDelete(destination: AlertDestination) {
     setDeletingDestinationId(destination.id)
-    const result = await deleteDestination({ params: { destinationId: destination.id } })
+    const result = await deleteDestination({ params: { destinationId: destination.id }, reactivityKeys: ["alertDestinations", "alertRules"] })
     if (Exit.isSuccess(result)) {
       toast.success("Destination deleted")
-      refreshDestinations()
-      refreshRules()
     } else {
       const failure = Option.getOrUndefined(Exit.findErrorOption(result))
       if (
@@ -521,9 +512,9 @@ function AlertsPage() {
     const result = await updateRule({
       params: { ruleId: rule.id },
       payload: buildRuleToggleRequest(rule),
+      reactivityKeys: ["alertRules"],
     })
     if (Exit.isSuccess(result)) {
-      refreshRules()
     } else {
       toast.error(getExitErrorMessage(result, "Failed to update rule"))
     }

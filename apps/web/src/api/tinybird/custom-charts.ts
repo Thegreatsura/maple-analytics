@@ -161,6 +161,9 @@ const CustomChartTimeSeriesInputSchema = Schema.Struct({
   bucketSeconds: Schema.optional(
     Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
   ),
+  apdexThresholdMs: Schema.optional(
+    Schema.Number.check(Schema.isFinite(), Schema.isGreaterThan(0)),
+  ),
 })
 
 export type CustomChartTimeSeriesInput = Schema.Schema.Type<typeof CustomChartTimeSeriesInputSchema>
@@ -181,6 +184,7 @@ const tracesMetrics = new Set<TracesMetric>([
   "p95_duration",
   "p99_duration",
   "error_rate",
+  "apdex",
 ])
 const metricsMetrics = new Set<MetricsMetric>(["avg", "sum", "min", "max", "count"])
 const metricsBreakdownMetrics = new Set<"avg" | "sum" | "count">(["avg", "sum", "count"])
@@ -227,6 +231,7 @@ function buildTimeseriesQuerySpec(data: CustomChartTimeSeriesInput): QuerySpec |
       kind: "timeseries",
       source: "traces",
       metric: data.metric as TracesMetric,
+      apdexThresholdMs: data.apdexThresholdMs,
       groupBy: data.groupBy ? [data.groupBy] as any : undefined,
       filters: {
         serviceName: data.filters?.serviceName,
