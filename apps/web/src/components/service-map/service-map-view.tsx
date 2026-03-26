@@ -8,6 +8,7 @@ import {
   applyNodeChanges,
   type Node,
   type NodeChange,
+  type ReactFlowInstance,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 
@@ -428,8 +429,24 @@ function ServiceMapCanvas({
     })
   }
 
+  // Programmatic fitView after ALL nodes are measured (the fitView prop fires too early)
+  const rfInstance = useRef<ReactFlowInstance | null>(null)
+  const hasFitView = useRef(false)
+
   const onNodesChange = useCallback((changes: NodeChange[]) => {
-    setNodes((prev) => applyNodeChanges(changes, prev) as typeof prev)
+    setNodes((prev) => {
+      const next = applyNodeChanges(changes, prev) as typeof prev
+
+      if (!hasFitView.current && rfInstance.current && changes.some((c) => c.type === "dimensions")) {
+        const allMeasured = next.length > 0 && next.every((n) => n.measured?.width && n.measured?.height)
+        if (allMeasured) {
+          hasFitView.current = true
+          setTimeout(() => rfInstance.current?.fitView(), 0)
+        }
+      }
+
+      return next
+    })
   }, [])
 
   const handleNodeClick = useCallback((_: React.MouseEvent, node: Node<ServiceNodeData>) => {
@@ -468,14 +485,13 @@ function ServiceMapCanvas({
                 onNodesChange={onNodesChange}
                 onNodeClick={handleNodeClick}
                 onPaneClick={handlePaneClick}
+                onInit={(instance) => { rfInstance.current = instance }}
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
                 nodesDraggable
                 nodesConnectable={false}
                 connectOnClick={false}
                 elementsSelectable={false}
-                fitView
-                fitViewOptions={{ padding: 0.15, maxZoom: 1.5 }}
                 minZoom={0.1}
                 maxZoom={2}
                 proOptions={{ hideAttribution: true }}
