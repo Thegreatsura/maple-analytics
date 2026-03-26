@@ -2,6 +2,8 @@ import { FetchHttpClient } from "effect/unstable/http"
 import { Layer } from "effect"
 import { getMapleAuthHeaders } from "./auth-headers"
 
+const CLIENT_TIMEOUT_MS = 45_000
+
 const mapleFetch: typeof globalThis.fetch = async (input, init) => {
   const headers = new Headers(init?.headers)
   const authHeaders = await getMapleAuthHeaders()
@@ -13,6 +15,7 @@ const mapleFetch: typeof globalThis.fetch = async (input, init) => {
   return globalThis.fetch(input, {
     ...init,
     headers,
+    signal: init?.signal ?? AbortSignal.timeout(CLIENT_TIMEOUT_MS),
   })
 }
 

@@ -17,7 +17,8 @@ export class MapleApiAtomClient extends AtomHttpApi.Service<MapleApiAtomClient>(
           while: (error) => {
             if (HttpClientError.isHttpClientError(error)) {
               const status = error.response?.status
-              return status === undefined || (status >= 500 && status < 600)
+              // Only retry on 500/502/503 — not 504 (timeout) or undefined (network failure)
+              return status !== undefined && status >= 500 && status < 600 && status !== 504
             }
 
             return false

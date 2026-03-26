@@ -25,12 +25,20 @@ export class QueryEngineExecutionError extends Schema.TaggedErrorClass<QueryEngi
   { httpApiStatus: 502 },
 ) {}
 
+export class QueryEngineTimeoutError extends Schema.TaggedErrorClass<QueryEngineTimeoutError>()(
+  "QueryEngineTimeoutError",
+  {
+    message: Schema.String,
+  },
+  { httpApiStatus: 504 },
+) {}
+
 export class QueryEngineApiGroup extends HttpApiGroup.make("queryEngine")
   .add(
     HttpApiEndpoint.post("execute", "/execute", {
       payload: QueryEngineExecuteRequest,
       success: QueryEngineExecuteResponse,
-      error: [QueryEngineValidationError, QueryEngineExecutionError],
+      error: [QueryEngineValidationError, QueryEngineExecutionError, QueryEngineTimeoutError],
     }),
   )
   .prefix("/api/query-engine")

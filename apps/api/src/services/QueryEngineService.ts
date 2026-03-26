@@ -11,10 +11,11 @@ import {
 } from "@maple/query-engine"
 import {
   QueryEngineExecutionError,
+  QueryEngineTimeoutError,
   QueryEngineValidationError,
   TinybirdQueryError,
 } from "@maple/domain/http"
-import { Effect, Layer, ServiceMap } from "effect"
+import { Duration, Effect, Layer, ServiceMap } from "effect"
 import type { TenantContext } from "./AuthService"
 import { TinybirdService, type TinybirdServiceShape } from "./TinybirdService"
 
@@ -55,14 +56,14 @@ export interface QueryEngineServiceShape {
     request: QueryEngineExecuteRequest,
   ) => Effect.Effect<
     QueryEngineExecuteResponse,
-    QueryEngineValidationError | QueryEngineExecutionError
+    QueryEngineValidationError | QueryEngineExecutionError | QueryEngineTimeoutError
   >
   readonly evaluate: (
     tenant: TenantContext,
     request: QueryEngineEvaluateRequest,
   ) => Effect.Effect<
     QueryEngineEvaluateResponse,
-    QueryEngineValidationError | QueryEngineExecutionError
+    QueryEngineValidationError | QueryEngineExecutionError | QueryEngineTimeoutError
   >
   readonly evaluateGrouped: (
     tenant: TenantContext,
@@ -70,12 +71,26 @@ export interface QueryEngineServiceShape {
     groupBy: "service",
   ) => Effect.Effect<
     ReadonlyArray<GroupedAlertObservation>,
-    QueryEngineValidationError | QueryEngineExecutionError
+    QueryEngineValidationError | QueryEngineExecutionError | QueryEngineTimeoutError
   >
 }
 
 const MAX_RANGE_SECONDS = 60 * 60 * 24 * 31
 const MAX_TIMESERIES_POINTS = 1_500
+const QUERY_ENGINE_TIMEOUT = Duration.seconds(30)
+
+const withTimeout = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
+    Effect.timeoutOrElse({
+      duration: QUERY_ENGINE_TIMEOUT,
+      onTimeout: () =>
+        Effect.fail(
+          new QueryEngineTimeoutError({
+            message: "Query execution timed out after 30 seconds",
+          }),
+        ),
+    }),
+  )
 
 const toEpochMs = (value: string): number => new Date(value.replace(" ", "T") + "Z").getTime()
 const TINYBIRD_DATETIME_RE = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(\.\d+)?$/
@@ -185,9 +200,6 @@ const validateTraceAttributeFilters = Effect.fn("QueryEngineService.validateTrac
   if (query.groupBy?.includes("attribute") && !query.filters?.groupByAttributeKeys?.length) {
     details.push("groupBy=attribute requires filters.groupByAttributeKeys")
   }
-  if (!query.filters?.attributeKey && query.filters?.attributeValue) {
-    details.push("filters.attributeValue requires filters.attributeKey")
-  }
 
   if (details.length > 0) {
     return yield* new QueryEngineValidationError({
@@ -196,6 +208,51 @@ const validateTraceAttributeFilters = Effect.fn("QueryEngineService.validateTrac
     })
   }
 })
+
+// ---------------------------------------------------------------------------
+// Helper: map attributeFilters/resourceAttributeFilters arrays to numbered Tinybird params
+// ---------------------------------------------------------------------------
+
+const SUFFIXES = ["", "_2", "_3", "_4", "_5"] as const
+
+function buildAttributeFilterParams(
+  filters: (QuerySpec extends { filters?: infer F } ? F : never) | undefined,
+) {
+  const f = filters as Record<string, unknown> | undefined
+  const result: Record<string, string | undefined> = {}
+
+  const attrFilters = (f?.attributeFilters ?? []) as ReadonlyArray<{
+    key: string
+    value?: string
+    mode: "equals" | "exists"
+  }>
+  for (let i = 0; i < Math.min(attrFilters.length, 5); i++) {
+    const af = attrFilters[i]
+    const suffix = SUFFIXES[i]
+    result[`attribute_filter_key${suffix}`] = af.key
+    result[`attribute_filter_value${suffix}`] =
+      af.mode === "exists" ? undefined : af.value
+    result[`attribute_filter_exists${suffix}`] =
+      af.mode === "exists" ? "1" : undefined
+  }
+
+  const resFilters = (f?.resourceAttributeFilters ?? []) as ReadonlyArray<{
+    key: string
+    value?: string
+    mode: "equals" | "exists"
+  }>
+  for (let i = 0; i < Math.min(resFilters.length, 5); i++) {
+    const rf = resFilters[i]
+    const suffix = SUFFIXES[i]
+    result[`resource_filter_key${suffix}`] = rf.key
+    result[`resource_filter_value${suffix}`] =
+      rf.mode === "exists" ? undefined : rf.value
+    result[`resource_filter_exists${suffix}`] =
+      rf.mode === "exists" ? "1" : undefined
+  }
+
+  return result
+}
 
 const validatePointBudget = Effect.fn("QueryEngineService.validatePointBudget")(function* (
   request: QueryEngineExecuteRequest,
@@ -489,22 +546,7 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
             request.query.groupBy?.includes("attribute") && request.query.filters?.groupByAttributeKeys?.length
               ? request.query.filters.groupByAttributeKeys.join(",")
               : undefined,
-          attribute_filter_key: request.query.filters?.attributeKey,
-          attribute_filter_value:
-            request.query.filters?.attributeFilterMode === "exists"
-              ? undefined
-              : request.query.filters?.attributeValue,
-          attribute_filter_exists:
-            request.query.filters?.attributeFilterMode === "exists" ? "1" : undefined,
-          resource_filter_key: request.query.filters?.resourceAttributeKey,
-          resource_filter_value:
-            request.query.filters?.resourceAttributeFilterMode === "exists"
-              ? undefined
-              : request.query.filters?.resourceAttributeValue,
-          resource_filter_exists:
-            request.query.filters?.resourceAttributeFilterMode === "exists"
-              ? "1"
-              : undefined,
+          ...buildAttributeFilterParams(request.query.filters),
           apdex_threshold_ms:
             request.query.metric === "apdex" ? request.query.apdexThresholdMs : undefined,
         }),
@@ -618,22 +660,7 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
             request.query.groupBy === "attribute"
               ? request.query.filters?.groupByAttributeKeys?.[0]
               : undefined,
-          attribute_filter_key: request.query.filters?.attributeKey,
-          attribute_filter_value:
-            request.query.filters?.attributeFilterMode === "exists"
-              ? undefined
-              : request.query.filters?.attributeValue,
-          attribute_filter_exists:
-            request.query.filters?.attributeFilterMode === "exists" ? "1" : undefined,
-          resource_filter_key: request.query.filters?.resourceAttributeKey,
-          resource_filter_value:
-            request.query.filters?.resourceAttributeFilterMode === "exists"
-              ? undefined
-              : request.query.filters?.resourceAttributeValue,
-          resource_filter_exists:
-            request.query.filters?.resourceAttributeFilterMode === "exists"
-              ? "1"
-              : undefined,
+          ...buildAttributeFilterParams(request.query.filters),
           apdex_threshold_ms:
             request.query.metric === "apdex" ? request.query.apdexThresholdMs : undefined,
         }),
@@ -749,22 +776,7 @@ export const makeQueryEngineEvaluate = (tinybird: QueryEngineTinybird) =>
           errors_only: request.query.filters?.errorsOnly ? "1" : undefined,
           environments: request.query.filters?.environments?.join(","),
           commit_shas: request.query.filters?.commitShas?.join(","),
-          attribute_filter_key: request.query.filters?.attributeKey,
-          attribute_filter_value:
-            request.query.filters?.attributeFilterMode === "exists"
-              ? undefined
-              : request.query.filters?.attributeValue,
-          attribute_filter_exists:
-            request.query.filters?.attributeFilterMode === "exists" ? "1" : undefined,
-          resource_filter_key: request.query.filters?.resourceAttributeKey,
-          resource_filter_value:
-            request.query.filters?.resourceAttributeFilterMode === "exists"
-              ? undefined
-              : request.query.filters?.resourceAttributeValue,
-          resource_filter_exists:
-            request.query.filters?.resourceAttributeFilterMode === "exists"
-              ? "1"
-              : undefined,
+          ...buildAttributeFilterParams(request.query.filters),
           apdex_threshold_ms:
             request.query.metric === "apdex" ? request.query.apdexThresholdMs : undefined,
         }),
@@ -867,22 +879,7 @@ export const makeQueryEngineEvaluateGrouped = (tinybird: QueryEngineTinybird) =>
             errors_only: request.query.filters?.errorsOnly ? "1" : undefined,
             environments: request.query.filters?.environments?.join(","),
             commit_shas: request.query.filters?.commitShas?.join(","),
-            attribute_filter_key: request.query.filters?.attributeKey,
-            attribute_filter_value:
-              request.query.filters?.attributeFilterMode === "exists"
-                ? undefined
-                : request.query.filters?.attributeValue,
-            attribute_filter_exists:
-              request.query.filters?.attributeFilterMode === "exists" ? "1" : undefined,
-            resource_filter_key: request.query.filters?.resourceAttributeKey,
-            resource_filter_value:
-              request.query.filters?.resourceAttributeFilterMode === "exists"
-                ? undefined
-                : request.query.filters?.resourceAttributeValue,
-            resource_filter_exists:
-              request.query.filters?.resourceAttributeFilterMode === "exists"
-                ? "1"
-                : undefined,
+            ...buildAttributeFilterParams(request.query.filters),
             apdex_threshold_ms:
               request.query.metric === "apdex" ? request.query.apdexThresholdMs : undefined,
           }),
@@ -951,9 +948,9 @@ export class QueryEngineService extends ServiceMap.Service<QueryEngineService, Q
     const evaluateGrouped = makeQueryEngineEvaluateGrouped(tinybird)
 
     return {
-      execute,
-      evaluate,
-      evaluateGrouped,
+      execute: (tenant, request) => withTimeout(execute(tenant, request)),
+      evaluate: (tenant, request) => withTimeout(evaluate(tenant, request)),
+      evaluateGrouped: (tenant, request, groupBy) => withTimeout(evaluateGrouped(tenant, request, groupBy)),
     }
   }),
 }) {
