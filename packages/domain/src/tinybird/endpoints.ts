@@ -46,6 +46,12 @@ export const listTraces = defineEndpoint("list_traces", {
     service_match_mode: p.string().optional().describe("Match mode for service filter: 'contains' for substring match"),
     span_name_match_mode: p.string().optional().describe("Match mode for span name filter: 'contains' for substring match"),
     deployment_env_match_mode: p.string().optional().describe("Match mode for deployment env filter: 'contains' for substring match"),
+    attribute_filter_key: p.string().optional().describe("Filter where SpanAttributes[key] matches value"),
+    attribute_filter_value: p.string().optional().describe("Value to match for span attribute filter"),
+    attribute_filter_value_match_mode: p.string().optional().describe("Match mode for attribute value: 'contains' for substring match"),
+    resource_filter_key: p.string().optional().describe("Filter where ResourceAttributes[key] matches value"),
+    resource_filter_value: p.string().optional().describe("Value to match for resource attribute filter"),
+    resource_filter_value_match_mode: p.string().optional().describe("Match mode for resource attribute value: 'contains' for substring match"),
   },
   nodes: [
     node({
@@ -108,6 +114,40 @@ export const listTraces = defineEndpoint("list_traces", {
           {% else %}
           AND DeploymentEnv = {{String(deployment_env, "")}}
           {% end %}
+        {% end %}
+        {% if defined(attribute_filter_key) %}
+          AND TraceId IN (
+            SELECT DISTINCT TraceId FROM traces
+            WHERE OrgId = {{String(org_id, "")}}
+            {% if defined(start_time) %}
+              AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
+            {% end %}
+            {% if defined(end_time) %}
+              AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
+            {% end %}
+            {% if defined(attribute_filter_value_match_mode) and attribute_filter_value_match_mode == "contains" %}
+              AND positionCaseInsensitive(SpanAttributes[{{String(attribute_filter_key)}}], {{String(attribute_filter_value, '')}}) > 0
+            {% else %}
+              AND SpanAttributes[{{String(attribute_filter_key)}}] = {{String(attribute_filter_value, '')}}
+            {% end %}
+          )
+        {% end %}
+        {% if defined(resource_filter_key) %}
+          AND TraceId IN (
+            SELECT DISTINCT TraceId FROM traces
+            WHERE OrgId = {{String(org_id, "")}}
+            {% if defined(start_time) %}
+              AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
+            {% end %}
+            {% if defined(end_time) %}
+              AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
+            {% end %}
+            {% if defined(resource_filter_value_match_mode) and resource_filter_value_match_mode == "contains" %}
+              AND positionCaseInsensitive(ResourceAttributes[{{String(resource_filter_key)}}], {{String(resource_filter_value, '')}}) > 0
+            {% else %}
+              AND ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, '')}}
+            {% end %}
+          )
         {% end %}
         ORDER BY Timestamp DESC
         LIMIT {{Int32(limit, 100)}}
@@ -1088,6 +1128,12 @@ export const tracesFacets = defineEndpoint("traces_facets", {
     service_match_mode: p.string().optional().describe("Match mode for service filter: 'contains' for substring match"),
     span_name_match_mode: p.string().optional().describe("Match mode for span name filter: 'contains' for substring match"),
     deployment_env_match_mode: p.string().optional().describe("Match mode for deployment env filter: 'contains' for substring match"),
+    attribute_filter_key: p.string().optional().describe("Filter where SpanAttributes[key] matches value"),
+    attribute_filter_value: p.string().optional().describe("Value to match for span attribute filter"),
+    attribute_filter_value_match_mode: p.string().optional().describe("Match mode for attribute value: 'contains' for substring match"),
+    resource_filter_key: p.string().optional().describe("Filter where ResourceAttributes[key] matches value"),
+    resource_filter_value: p.string().optional().describe("Value to match for resource attribute filter"),
+    resource_filter_value_match_mode: p.string().optional().describe("Match mode for resource attribute value: 'contains' for substring match"),
   },
   nodes: [
     node({
@@ -1140,6 +1186,40 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           {% else %}
           AND DeploymentEnv = {{String(deployment_env, "")}}
           {% end %}
+        {% end %}
+        {% if defined(attribute_filter_key) %}
+          AND TraceId IN (
+            SELECT DISTINCT TraceId FROM traces
+            WHERE OrgId = {{String(org_id, "")}}
+            {% if defined(start_time) %}
+              AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
+            {% end %}
+            {% if defined(end_time) %}
+              AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
+            {% end %}
+            {% if defined(attribute_filter_value_match_mode) and attribute_filter_value_match_mode == "contains" %}
+              AND positionCaseInsensitive(SpanAttributes[{{String(attribute_filter_key)}}], {{String(attribute_filter_value, '')}}) > 0
+            {% else %}
+              AND SpanAttributes[{{String(attribute_filter_key)}}] = {{String(attribute_filter_value, '')}}
+            {% end %}
+          )
+        {% end %}
+        {% if defined(resource_filter_key) %}
+          AND TraceId IN (
+            SELECT DISTINCT TraceId FROM traces
+            WHERE OrgId = {{String(org_id, "")}}
+            {% if defined(start_time) %}
+              AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
+            {% end %}
+            {% if defined(end_time) %}
+              AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
+            {% end %}
+            {% if defined(resource_filter_value_match_mode) and resource_filter_value_match_mode == "contains" %}
+              AND positionCaseInsensitive(ResourceAttributes[{{String(resource_filter_key)}}], {{String(resource_filter_value, '')}}) > 0
+            {% else %}
+              AND ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, '')}}
+            {% end %}
+          )
         {% end %}
         GROUP BY ServiceName
         ORDER BY count DESC
@@ -1196,6 +1276,40 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           {% else %}
           AND DeploymentEnv = {{String(deployment_env, "")}}
           {% end %}
+        {% end %}
+        {% if defined(attribute_filter_key) %}
+          AND TraceId IN (
+            SELECT DISTINCT TraceId FROM traces
+            WHERE OrgId = {{String(org_id, "")}}
+            {% if defined(start_time) %}
+              AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
+            {% end %}
+            {% if defined(end_time) %}
+              AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
+            {% end %}
+            {% if defined(attribute_filter_value_match_mode) and attribute_filter_value_match_mode == "contains" %}
+              AND positionCaseInsensitive(SpanAttributes[{{String(attribute_filter_key)}}], {{String(attribute_filter_value, '')}}) > 0
+            {% else %}
+              AND SpanAttributes[{{String(attribute_filter_key)}}] = {{String(attribute_filter_value, '')}}
+            {% end %}
+          )
+        {% end %}
+        {% if defined(resource_filter_key) %}
+          AND TraceId IN (
+            SELECT DISTINCT TraceId FROM traces
+            WHERE OrgId = {{String(org_id, "")}}
+            {% if defined(start_time) %}
+              AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
+            {% end %}
+            {% if defined(end_time) %}
+              AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
+            {% end %}
+            {% if defined(resource_filter_value_match_mode) and resource_filter_value_match_mode == "contains" %}
+              AND positionCaseInsensitive(ResourceAttributes[{{String(resource_filter_key)}}], {{String(resource_filter_value, '')}}) > 0
+            {% else %}
+              AND ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, '')}}
+            {% end %}
+          )
         {% end %}
           AND SpanName != ''
         GROUP BY SpanName
@@ -1254,6 +1368,40 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           AND DeploymentEnv = {{String(deployment_env, "")}}
           {% end %}
         {% end %}
+        {% if defined(attribute_filter_key) %}
+          AND TraceId IN (
+            SELECT DISTINCT TraceId FROM traces
+            WHERE OrgId = {{String(org_id, "")}}
+            {% if defined(start_time) %}
+              AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
+            {% end %}
+            {% if defined(end_time) %}
+              AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
+            {% end %}
+            {% if defined(attribute_filter_value_match_mode) and attribute_filter_value_match_mode == "contains" %}
+              AND positionCaseInsensitive(SpanAttributes[{{String(attribute_filter_key)}}], {{String(attribute_filter_value, '')}}) > 0
+            {% else %}
+              AND SpanAttributes[{{String(attribute_filter_key)}}] = {{String(attribute_filter_value, '')}}
+            {% end %}
+          )
+        {% end %}
+        {% if defined(resource_filter_key) %}
+          AND TraceId IN (
+            SELECT DISTINCT TraceId FROM traces
+            WHERE OrgId = {{String(org_id, "")}}
+            {% if defined(start_time) %}
+              AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
+            {% end %}
+            {% if defined(end_time) %}
+              AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
+            {% end %}
+            {% if defined(resource_filter_value_match_mode) and resource_filter_value_match_mode == "contains" %}
+              AND positionCaseInsensitive(ResourceAttributes[{{String(resource_filter_key)}}], {{String(resource_filter_value, '')}}) > 0
+            {% else %}
+              AND ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, '')}}
+            {% end %}
+          )
+        {% end %}
           AND HttpMethod != ''
         GROUP BY HttpMethod
         ORDER BY count DESC
@@ -1310,6 +1458,40 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           {% else %}
           AND DeploymentEnv = {{String(deployment_env, "")}}
           {% end %}
+        {% end %}
+        {% if defined(attribute_filter_key) %}
+          AND TraceId IN (
+            SELECT DISTINCT TraceId FROM traces
+            WHERE OrgId = {{String(org_id, "")}}
+            {% if defined(start_time) %}
+              AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
+            {% end %}
+            {% if defined(end_time) %}
+              AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
+            {% end %}
+            {% if defined(attribute_filter_value_match_mode) and attribute_filter_value_match_mode == "contains" %}
+              AND positionCaseInsensitive(SpanAttributes[{{String(attribute_filter_key)}}], {{String(attribute_filter_value, '')}}) > 0
+            {% else %}
+              AND SpanAttributes[{{String(attribute_filter_key)}}] = {{String(attribute_filter_value, '')}}
+            {% end %}
+          )
+        {% end %}
+        {% if defined(resource_filter_key) %}
+          AND TraceId IN (
+            SELECT DISTINCT TraceId FROM traces
+            WHERE OrgId = {{String(org_id, "")}}
+            {% if defined(start_time) %}
+              AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
+            {% end %}
+            {% if defined(end_time) %}
+              AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
+            {% end %}
+            {% if defined(resource_filter_value_match_mode) and resource_filter_value_match_mode == "contains" %}
+              AND positionCaseInsensitive(ResourceAttributes[{{String(resource_filter_key)}}], {{String(resource_filter_value, '')}}) > 0
+            {% else %}
+              AND ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, '')}}
+            {% end %}
+          )
         {% end %}
           AND HttpStatusCode != ''
         GROUP BY HttpStatusCode
@@ -1368,6 +1550,40 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           AND DeploymentEnv = {{String(deployment_env, "")}}
           {% end %}
         {% end %}
+        {% if defined(attribute_filter_key) %}
+          AND TraceId IN (
+            SELECT DISTINCT TraceId FROM traces
+            WHERE OrgId = {{String(org_id, "")}}
+            {% if defined(start_time) %}
+              AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
+            {% end %}
+            {% if defined(end_time) %}
+              AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
+            {% end %}
+            {% if defined(attribute_filter_value_match_mode) and attribute_filter_value_match_mode == "contains" %}
+              AND positionCaseInsensitive(SpanAttributes[{{String(attribute_filter_key)}}], {{String(attribute_filter_value, '')}}) > 0
+            {% else %}
+              AND SpanAttributes[{{String(attribute_filter_key)}}] = {{String(attribute_filter_value, '')}}
+            {% end %}
+          )
+        {% end %}
+        {% if defined(resource_filter_key) %}
+          AND TraceId IN (
+            SELECT DISTINCT TraceId FROM traces
+            WHERE OrgId = {{String(org_id, "")}}
+            {% if defined(start_time) %}
+              AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
+            {% end %}
+            {% if defined(end_time) %}
+              AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
+            {% end %}
+            {% if defined(resource_filter_value_match_mode) and resource_filter_value_match_mode == "contains" %}
+              AND positionCaseInsensitive(ResourceAttributes[{{String(resource_filter_key)}}], {{String(resource_filter_value, '')}}) > 0
+            {% else %}
+              AND ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, '')}}
+            {% end %}
+          )
+        {% end %}
           AND DeploymentEnv != ''
         GROUP BY DeploymentEnv
         ORDER BY count DESC
@@ -1425,6 +1641,40 @@ export const tracesFacets = defineEndpoint("traces_facets", {
           AND DeploymentEnv = {{String(deployment_env, "")}}
           {% end %}
         {% end %}
+        {% if defined(attribute_filter_key) %}
+          AND TraceId IN (
+            SELECT DISTINCT TraceId FROM traces
+            WHERE OrgId = {{String(org_id, "")}}
+            {% if defined(start_time) %}
+              AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
+            {% end %}
+            {% if defined(end_time) %}
+              AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
+            {% end %}
+            {% if defined(attribute_filter_value_match_mode) and attribute_filter_value_match_mode == "contains" %}
+              AND positionCaseInsensitive(SpanAttributes[{{String(attribute_filter_key)}}], {{String(attribute_filter_value, '')}}) > 0
+            {% else %}
+              AND SpanAttributes[{{String(attribute_filter_key)}}] = {{String(attribute_filter_value, '')}}
+            {% end %}
+          )
+        {% end %}
+        {% if defined(resource_filter_key) %}
+          AND TraceId IN (
+            SELECT DISTINCT TraceId FROM traces
+            WHERE OrgId = {{String(org_id, "")}}
+            {% if defined(start_time) %}
+              AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
+            {% end %}
+            {% if defined(end_time) %}
+              AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
+            {% end %}
+            {% if defined(resource_filter_value_match_mode) and resource_filter_value_match_mode == "contains" %}
+              AND positionCaseInsensitive(ResourceAttributes[{{String(resource_filter_key)}}], {{String(resource_filter_value, '')}}) > 0
+            {% else %}
+              AND ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, '')}}
+            {% end %}
+          )
+        {% end %}
           AND HasError = 1
       `,
     }),
@@ -1473,6 +1723,12 @@ export const tracesDurationStats = defineEndpoint("traces_duration_stats", {
     service_match_mode: p.string().optional().describe("Match mode for service filter: 'contains' for substring match"),
     span_name_match_mode: p.string().optional().describe("Match mode for span name filter: 'contains' for substring match"),
     deployment_env_match_mode: p.string().optional().describe("Match mode for deployment env filter: 'contains' for substring match"),
+    attribute_filter_key: p.string().optional().describe("Filter where SpanAttributes[key] matches value"),
+    attribute_filter_value: p.string().optional().describe("Value to match for span attribute filter"),
+    attribute_filter_value_match_mode: p.string().optional().describe("Match mode for attribute value: 'contains' for substring match"),
+    resource_filter_key: p.string().optional().describe("Filter where ResourceAttributes[key] matches value"),
+    resource_filter_value: p.string().optional().describe("Value to match for resource attribute filter"),
+    resource_filter_value_match_mode: p.string().optional().describe("Match mode for resource attribute value: 'contains' for substring match"),
   },
   nodes: [
     node({
@@ -1526,6 +1782,40 @@ export const tracesDurationStats = defineEndpoint("traces_duration_stats", {
           {% else %}
           AND DeploymentEnv = {{String(deployment_env, "")}}
           {% end %}
+        {% end %}
+        {% if defined(attribute_filter_key) %}
+          AND TraceId IN (
+            SELECT DISTINCT TraceId FROM traces
+            WHERE OrgId = {{String(org_id, "")}}
+            {% if defined(start_time) %}
+              AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
+            {% end %}
+            {% if defined(end_time) %}
+              AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
+            {% end %}
+            {% if defined(attribute_filter_value_match_mode) and attribute_filter_value_match_mode == "contains" %}
+              AND positionCaseInsensitive(SpanAttributes[{{String(attribute_filter_key)}}], {{String(attribute_filter_value, '')}}) > 0
+            {% else %}
+              AND SpanAttributes[{{String(attribute_filter_key)}}] = {{String(attribute_filter_value, '')}}
+            {% end %}
+          )
+        {% end %}
+        {% if defined(resource_filter_key) %}
+          AND TraceId IN (
+            SELECT DISTINCT TraceId FROM traces
+            WHERE OrgId = {{String(org_id, "")}}
+            {% if defined(start_time) %}
+              AND Timestamp >= {{DateTime(start_time, "2023-01-01 00:00:00")}}
+            {% end %}
+            {% if defined(end_time) %}
+              AND Timestamp <= {{DateTime(end_time, "2099-12-31 23:59:59")}}
+            {% end %}
+            {% if defined(resource_filter_value_match_mode) and resource_filter_value_match_mode == "contains" %}
+              AND positionCaseInsensitive(ResourceAttributes[{{String(resource_filter_key)}}], {{String(resource_filter_value, '')}}) > 0
+            {% else %}
+              AND ResourceAttributes[{{String(resource_filter_key)}}] = {{String(resource_filter_value, '')}}
+            {% end %}
+          )
         {% end %}
       `,
     }),

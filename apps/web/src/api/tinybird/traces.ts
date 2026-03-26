@@ -150,6 +150,12 @@ const listTracesEffect = Effect.fn("Tinybird.listTraces")(function* ({
         service_match_mode: input.serviceMatchMode,
         span_name_match_mode: input.spanNameMatchMode,
         deployment_env_match_mode: input.deploymentEnvMatchMode,
+        attribute_filter_key: input.attributeKey,
+        attribute_filter_value: input.attributeValue,
+        attribute_filter_value_match_mode: input.attributeValueMatchMode,
+        resource_filter_key: input.resourceAttributeKey,
+        resource_filter_value: input.resourceAttributeValue,
+        resource_filter_value_match_mode: input.resourceAttributeValueMatchMode,
       }),
     )
 
@@ -473,6 +479,12 @@ const getTracesFacetsEffect = Effect.fn("Tinybird.getTracesFacets")(function* ({
           service_match_mode: input.serviceMatchMode,
           span_name_match_mode: input.spanNameMatchMode,
           deployment_env_match_mode: input.deploymentEnvMatchMode,
+          attribute_filter_key: input.attributeKey,
+          attribute_filter_value: input.attributeValue,
+          attribute_filter_value_match_mode: input.attributeValueMatchMode,
+          resource_filter_key: input.resourceAttributeKey,
+          resource_filter_value: input.resourceAttributeValue,
+          resource_filter_value_match_mode: input.resourceAttributeValueMatchMode,
         }),
       ),
       runTinybirdQuery("traces_duration_stats", () =>
@@ -488,6 +500,12 @@ const getTracesFacetsEffect = Effect.fn("Tinybird.getTracesFacets")(function* ({
           service_match_mode: input.serviceMatchMode,
           span_name_match_mode: input.spanNameMatchMode,
           deployment_env_match_mode: input.deploymentEnvMatchMode,
+          attribute_filter_key: input.attributeKey,
+          attribute_filter_value: input.attributeValue,
+          attribute_filter_value_match_mode: input.attributeValueMatchMode,
+          resource_filter_key: input.resourceAttributeKey,
+          resource_filter_value: input.resourceAttributeValue,
+          resource_filter_value_match_mode: input.resourceAttributeValueMatchMode,
         }),
       ),
     ])
@@ -529,6 +547,12 @@ const getTracesDurationStatsEffect = Effect.fn("Tinybird.getTracesDurationStats"
         service_match_mode: input.serviceMatchMode,
         span_name_match_mode: input.spanNameMatchMode,
         deployment_env_match_mode: input.deploymentEnvMatchMode,
+        attribute_filter_key: input.attributeKey,
+        attribute_filter_value: input.attributeValue,
+        attribute_filter_value_match_mode: input.attributeValueMatchMode,
+        resource_filter_key: input.resourceAttributeKey,
+        resource_filter_value: input.resourceAttributeValue,
+        resource_filter_value_match_mode: input.resourceAttributeValueMatchMode,
       }),
     )
 
