@@ -1240,7 +1240,7 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
           payloadJson: JSON.stringify(payload),
           createdAt: scheduledAt,
           updatedAt: scheduledAt,
-        })
+        }).onConflictDoNothing()
 
       const insertDeliveryEvent = Effect.fn("AlertsService.insertDeliveryEvent")(function* (
         orgId: OrgId,

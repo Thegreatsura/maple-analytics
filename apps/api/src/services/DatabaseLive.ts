@@ -20,11 +20,16 @@ export interface DatabaseShape {
   readonly execute: <T>(fn: (db: DatabaseClient) => Promise<T>) => Effect.Effect<T, DatabaseError>
 }
 
-const toDatabaseError = (cause: unknown) =>
-  new DatabaseError({
-    message: cause instanceof Error ? cause.message : "Database operation failed",
+const toDatabaseError = (cause: unknown) => {
+  const message = cause instanceof Error ? cause.message : "Database operation failed"
+  const rootCause = cause instanceof Error && cause.cause instanceof Error
+    ? cause.cause.message
+    : undefined
+  return new DatabaseError({
+    message: rootCause ? `${message} [caused by: ${rootCause}]` : message,
     cause,
   })
+}
 
 const makeDatabase = Effect.gen(function* () {
   const env = yield* Env
