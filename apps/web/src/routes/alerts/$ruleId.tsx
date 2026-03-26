@@ -200,34 +200,41 @@ function RuleDetailPage() {
           Edit Rule
         </Button>
       }
-      stickyContent={tabBar}
+      stickyContent={
+        <div className="space-y-3">
+          {tabBar}
+          <div className="space-y-1">
+            <div className="flex items-center gap-[3px]">
+              {Array.from({ length: 45 }, (_, i) => {
+                const totalRange = timelineRange.max - timelineRange.min
+                const bucketStart = timelineRange.min + (i / 45) * totalRange
+                const bucketEnd = timelineRange.min + ((i + 1) / 45) * totalRange
+                const hit = timelineSegments.find(
+                  (seg) => seg.end > bucketStart && seg.start < bucketEnd,
+                )
+                return (
+                  <div
+                    key={i}
+                    className={cn(
+                      "h-4 flex-1 rounded-[2px]",
+                      hit
+                        ? hit.status === "open"
+                          ? "bg-destructive"
+                          : "bg-destructive/50"
+                        : "bg-chart-apdex/60",
+                    )}
+                  />
+                )
+              })}
+            </div>
+            <div className="flex justify-between text-[11px] text-muted-foreground font-mono">
+              <span>{new Date(timelineRange.min).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+              <span>{new Date(timelineRange.max).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+            </div>
+          </div>
+        </div>
+      }
     >
-      {/* ─── Incident Timeline (always visible) ─── */}
-      <div className="space-y-1">
-        <div className="relative h-5 rounded overflow-hidden bg-green-500/20">
-          {timelineSegments.map((seg, idx) => {
-            const totalRange = timelineRange.max - timelineRange.min
-            if (totalRange <= 0) return null
-            const leftPct = ((seg.start - timelineRange.min) / totalRange) * 100
-            const widthPct = Math.max(((seg.end - seg.start) / totalRange) * 100, 0.5)
-            return (
-              <div
-                key={idx}
-                className={cn(
-                  "absolute h-5",
-                  seg.status === "open" ? "bg-red-500" : "bg-red-500/60",
-                )}
-                style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
-              />
-            )
-          })}
-        </div>
-        <div className="flex justify-between text-xs text-muted-foreground">
-          <span>{new Date(timelineRange.min).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
-          <span>{new Date(timelineRange.max).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
-        </div>
-      </div>
-
       {/* ─── Overview Sub-Tab ─── */}
       {activeTab === "overview" && (
         <div className="space-y-6">
