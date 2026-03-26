@@ -697,7 +697,7 @@ describe("AlertsService", () => {
     expect(events.events.find((event) => event.deliveryKey === "shared-delivery-key")?.status).toBe("success")
   })
 
-  it("rolls back incident creation when notification enqueue fails", async () => {
+  it("skips duplicate delivery events and still creates the incident", async () => {
     const fixedTime = 1_710_000_200_000
     const { url, dbPath } = createTempDbUrl()
 
@@ -755,6 +755,9 @@ describe("AlertsService", () => {
             destinationIds: [destination.id],
           }),
         )
+        // Pre-insert a conflicting delivery event with the same delivery key
+        // that processEvaluation will generate. With onConflictDoNothing(),
+        // the duplicate insert is silently skipped and the incident is still created.
         yield* Effect.sync(() =>
           insertDeliveryEventRow(dbPath, {
             id: "00000000-0000-4000-8000-000000000099",
@@ -799,8 +802,9 @@ describe("AlertsService", () => {
       }).pipe(Effect.provide(layer)),
     )
 
-    expect(result.tick.evaluationFailureCount).toBe(1)
-    expect(result.incidents.incidents).toHaveLength(0)
+    expect(result.tick.evaluationFailureCount).toBe(0)
+    expect(result.incidents.incidents).toHaveLength(1)
+    // Only the pre-existing event — the duplicate was silently skipped
     expect(result.events.events).toHaveLength(1)
     expect(result.events.events[0]?.deliveryKey).toContain(":trigger:")
   })
