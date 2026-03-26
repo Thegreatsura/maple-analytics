@@ -10,13 +10,10 @@ export function useRefreshableAtomValue<A>(atom: Atom.Atom<A>): A {
   const refreshVersion = pageRefresh?.refreshVersion ?? 0
   const lastSeenVersion = React.useRef(refreshVersion)
 
-  React.useEffect(() => {
-    if (!pageRefresh) return
-    if (refreshVersion === lastSeenVersion.current) return
-
+  if (pageRefresh && refreshVersion !== lastSeenVersion.current) {
     lastSeenVersion.current = refreshVersion
-    refresh()
-  }, [pageRefresh, refresh, refreshVersion])
+    queueMicrotask(refresh)
+  }
 
   return value
 }

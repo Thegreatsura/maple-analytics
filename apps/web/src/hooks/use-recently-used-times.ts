@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useCallback } from "react"
 
 const STORAGE_KEY = "maple-recently-used-times"
 const MAX_ITEMS = 5
@@ -11,18 +11,15 @@ export interface RecentTimeRange {
 }
 
 export function useRecentlyUsedTimes() {
-  const [recentTimes, setRecentTimes] = useState<RecentTimeRange[]>([])
-
-  useEffect(() => {
+  const [recentTimes, setRecentTimes] = useState<RecentTimeRange[]>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) {
-        setRecentTimes(JSON.parse(stored))
-      }
+      if (stored) return JSON.parse(stored)
     } catch {
       // Ignore localStorage errors
     }
-  }, [])
+    return []
+  })
 
   const addRecentTime = useCallback((item: RecentTimeRange) => {
     setRecentTimes((prev) => {

@@ -45,23 +45,30 @@ export function useTableRefreshTimeRange({
   })
   const [refreshedRange, setRefreshedRange] = React.useState<TimeRange>(baseRange)
 
-  React.useEffect(() => {
+  const prevBaseStartRef = React.useRef(baseRange.startTime)
+  const prevBaseEndRef = React.useRef(baseRange.endTime)
+  const prevPresetRef = React.useRef(relativePreset)
+
+  if (
+    baseRange.startTime !== prevBaseStartRef.current ||
+    baseRange.endTime !== prevBaseEndRef.current ||
+    relativePreset !== prevPresetRef.current
+  ) {
+    prevBaseStartRef.current = baseRange.startTime
+    prevBaseEndRef.current = baseRange.endTime
+    prevPresetRef.current = relativePreset
     setRefreshedRange(baseRange)
-  }, [baseRange.endTime, baseRange.startTime, relativePreset])
+  }
 
-  React.useEffect(() => {
-    if (!pageRefresh) return
-    if (refreshVersion === lastRefreshVersion.current) return
-
+  if (pageRefresh && refreshVersion !== lastRefreshVersion.current) {
     lastRefreshVersion.current = refreshVersion
-
-    if (!relativePreset) return
-
-    const nextRange = relativeToAbsolute(relativePreset)
-    if (nextRange) {
-      setRefreshedRange(nextRange)
+    if (relativePreset) {
+      const nextRange = relativeToAbsolute(relativePreset)
+      if (nextRange) {
+        setRefreshedRange(nextRange)
+      }
     }
-  }, [pageRefresh, refreshVersion, relativePreset])
+  }
 
   return refreshedRange
 }

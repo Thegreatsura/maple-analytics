@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback } from "react"
 
 const STORAGE_KEY = "maple-chat-tabs"
 const DEFAULT_TAB_ID = "default"
@@ -47,20 +47,17 @@ export function useChatTabs(initialTabId?: string) {
     return s
   })
 
-  useEffect(() => {
-    saveState(state)
-  }, [state])
-
   const createTab = useCallback(() => {
     const newTab: ChatTab = {
       id: crypto.randomUUID(),
       title: "New Chat",
       createdAt: Date.now(),
     }
-    setState((prev) => ({
-      tabs: [...prev.tabs, newTab],
-      activeTabId: newTab.id,
-    }))
+    setState((prev) => {
+      const next = { tabs: [...prev.tabs, newTab], activeTabId: newTab.id }
+      saveState(next)
+      return next
+    })
     return newTab.id
   }, [])
 
@@ -75,19 +72,30 @@ export function useChatTabs(initialTabId?: string) {
         const newIdx = Math.min(idx, newTabs.length - 1)
         newActiveId = newTabs[newIdx]!.id
       }
-      return { tabs: newTabs, activeTabId: newActiveId }
+      const next = { tabs: newTabs, activeTabId: newActiveId }
+      saveState(next)
+      return next
     })
   }, [])
 
   const setActiveTab = useCallback((id: string) => {
-    setState((prev) => (prev.activeTabId === id ? prev : { ...prev, activeTabId: id }))
+    setState((prev) => {
+      if (prev.activeTabId === id) return prev
+      const next = { ...prev, activeTabId: id }
+      saveState(next)
+      return next
+    })
   }, [])
 
   const renameTab = useCallback((id: string, title: string) => {
-    setState((prev) => ({
-      ...prev,
-      tabs: prev.tabs.map((t) => (t.id === id ? { ...t, title } : t)),
-    }))
+    setState((prev) => {
+      const next = {
+        ...prev,
+        tabs: prev.tabs.map((t) => (t.id === id ? { ...t, title } : t)),
+      }
+      saveState(next)
+      return next
+    })
   }, [])
 
   return {

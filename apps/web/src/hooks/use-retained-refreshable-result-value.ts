@@ -8,12 +8,14 @@ export function useRetainedRefreshableResultValue<A, E>(
 ): Result.Result<A, E> {
   const result = useRefreshableAtomValue(atom)
   const [lastSuccess, setLastSuccess] = React.useState<Result.Success<A, E> | null>(null)
+  const prevResultRef = React.useRef<Result.Result<A, E> | null>(null)
 
-  React.useEffect(() => {
-    if (Result.isSuccess(result)) {
+  if (result !== prevResultRef.current) {
+    prevResultRef.current = result
+    if (Result.isSuccess(result) && result !== lastSuccess) {
       setLastSuccess(result)
     }
-  }, [result])
+  }
 
   return React.useMemo(() => {
     if (Result.isInitial(result) && lastSuccess) {
