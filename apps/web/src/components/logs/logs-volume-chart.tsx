@@ -1,6 +1,6 @@
 import { Result, useAtomValue } from "@/lib/effect-atom"
-import { useMemo } from "react"
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { useCallback, useMemo, useRef, useState } from "react"
+import { Bar, BarChart, CartesianGrid, ReferenceArea, XAxis, YAxis } from "recharts"
 
 import {
   ChartContainer,
@@ -18,6 +18,7 @@ import {
   inferBucketSeconds,
   inferRangeMs,
 } from "@/lib/format"
+import { formatForTinybird } from "@/lib/time-utils"
 import type { LogsSearchParams } from "@/routes/logs"
 import { SEVERITY_COLORS, SEVERITY_ORDER } from "@/lib/severity"
 
@@ -38,9 +39,10 @@ function buildChartConfig(seriesKeys: string[]): ChartConfig {
 
 interface LogsVolumeChartProps {
   filters?: LogsSearchParams
+  onTimeRangeSelect?: (range: { startTime: string; endTime: string }) => void
 }
 
-export function LogsVolumeChart({ filters }: LogsVolumeChartProps) {
+export function LogsVolumeChart({ filters, onTimeRangeSelect }: LogsVolumeChartProps) {
   const { startTime: effectiveStartTime, endTime: effectiveEndTime } =
     useEffectiveTimeRange(filters?.startTime, filters?.endTime, filters?.timePreset ?? "12h")
 
@@ -65,6 +67,83 @@ export function LogsVolumeChart({ filters }: LogsVolumeChartProps) {
       },
     }),
   )
+
+  // Brush selection state (lifted out of onSuccess so hooks are unconditional)
+  const [refAreaLeft, setRefAreaLeft] = useState<string | null>(null)
+  const [refAreaRight, setRefAreaRight] = useState<string | null>(null)
+  const [isSelecting, setIsSelecting] = useState(false)
+  const bucketSecondsRef = useRef(300)
+
+  const handleMouseDown = useCallback(
+    (nextState: { activeLabel?: string }) => {
+      if (nextState.activeLabel && onTimeRangeSelect) {
+        setRefAreaLeft(nextState.activeLabel)
+        setRefAreaRight(null)
+        setIsSelecting(true)
+      }
+    },
+    [onTimeRangeSelect],
+  )
+
+  const handleMouseMove = useCallback(
+    (nextState: { activeLabel?: string }) => {
+      if (isSelecting && nextState.activeLabel) {
+        setRefAreaRight(nextState.activeLabel)
+      }
+    },
+    [isSelecting],
+  )
+
+  const handleMouseUp = useCallback(() => {
+    if (!isSelecting || !refAreaLeft) {
+      setIsSelecting(false)
+      setRefAreaLeft(null)
+      setRefAreaRight(null)
+      return
+    }
+
+    setIsSelecting(false)
+
+    const left = refAreaLeft
+    const right = refAreaRight ?? refAreaLeft
+    const leftMs = new Date(left).getTime()
+    const rightMs = new Date(right).getTime()
+
+    if (Number.isNaN(leftMs) || Number.isNaN(rightMs)) {
+      setRefAreaLeft(null)
+      setRefAreaRight(null)
+      return
+    }
+
+    const startMs = Math.min(leftMs, rightMs)
+    const endMs = Math.max(leftMs, rightMs)
+
+    // Don't zoom if user just clicked without dragging
+    if (startMs === endMs) {
+      setRefAreaLeft(null)
+      setRefAreaRight(null)
+      return
+    }
+
+    // Extend end by one bucket width so the rightmost selected bar is included
+    const endWithBucket = endMs + bucketSecondsRef.current * 1000
+
+    onTimeRangeSelect?.({
+      startTime: formatForTinybird(new Date(startMs)),
+      endTime: formatForTinybird(new Date(endWithBucket)),
+    })
+
+    setRefAreaLeft(null)
+    setRefAreaRight(null)
+  }, [isSelecting, refAreaLeft, refAreaRight, onTimeRangeSelect])
+
+  const handleMouseLeave = useCallback(() => {
+    if (isSelecting) {
+      setIsSelecting(false)
+      setRefAreaLeft(null)
+      setRefAreaRight(null)
+    }
+  }, [isSelecting])
 
   return Result.builder(timeSeriesResult)
     .onInitial(() => <Skeleton className="h-[120px] w-full rounded-md" />)
@@ -103,6 +182,7 @@ export function LogsVolumeChart({ filters }: LogsVolumeChartProps) {
       const chartConfig = buildChartConfig(seriesKeys)
       const rangeMs = inferRangeMs(chartData)
       const dataBucketSeconds = inferBucketSeconds(chartData)
+      bucketSecondsRef.current = dataBucketSeconds ?? 300
 
       return (
         <div className={`transition-opacity ${result.waiting ? "opacity-60" : ""}`}>
@@ -110,10 +190,17 @@ export function LogsVolumeChart({ filters }: LogsVolumeChartProps) {
             <span className="text-sm font-medium">{formatNumber(totalCount)} logs</span>
             <span className="text-xs text-muted-foreground">in selected range</span>
           </div>
-          <ChartContainer config={chartConfig} className="h-[120px] w-full">
+          <ChartContainer
+            config={chartConfig}
+            className={`h-[120px] w-full select-none ${onTimeRangeSelect ? "cursor-crosshair" : ""}`}
+          >
             <BarChart
               data={chartData}
               margin={{ top: 4, right: 0, left: 0, bottom: 0 }}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseLeave}
             >
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis
@@ -135,19 +222,21 @@ export function LogsVolumeChart({ filters }: LogsVolumeChartProps) {
                 width={40}
                 tickFormatter={(value) => formatNumber(value)}
               />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    labelFormatter={(value) =>
-                      formatBucketLabel(
-                        value,
-                        { rangeMs, bucketSeconds: dataBucketSeconds },
-                        "tooltip",
-                      )
-                    }
-                  />
-                }
-              />
+              {!isSelecting && (
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      labelFormatter={(value) =>
+                        formatBucketLabel(
+                          value,
+                          { rangeMs, bucketSeconds: dataBucketSeconds },
+                          "tooltip",
+                        )
+                      }
+                    />
+                  }
+                />
+              )}
               {seriesKeys.map((key) => (
                 <Bar
                   key={key}
@@ -161,6 +250,15 @@ export function LogsVolumeChart({ filters }: LogsVolumeChartProps) {
                   isAnimationActive={false}
                 />
               ))}
+              {refAreaLeft && refAreaRight && (
+                <ReferenceArea
+                  x1={refAreaLeft}
+                  x2={refAreaRight}
+                  strokeOpacity={0.3}
+                  fill="hsl(var(--primary))"
+                  fillOpacity={0.15}
+                />
+              )}
             </BarChart>
           </ChartContainer>
         </div>
