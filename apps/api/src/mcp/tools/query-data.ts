@@ -113,14 +113,21 @@ export function buildQuerySpec(args: QueryDataArgs): { spec: QuerySpecType } | {
   }
 
   if (args.source === "traces") {
+    const attributeFilters: Array<{ key: string; value?: string; mode: "equals" | "exists" }> = []
+    if (attributeKey) {
+      attributeFilters.push({
+        key: attributeKey,
+        ...(attributeValue ? { value: attributeValue, mode: "equals" as const } : { mode: "exists" as const }),
+      })
+    }
+
     const filters: TracesFilters = {
       ...(args.service_name && { serviceName: args.service_name }),
       ...(args.span_name && { spanName: args.span_name }),
       ...(args.root_spans_only && { rootSpansOnly: args.root_spans_only }),
       ...(args.environments && { environments: splitCsv(args.environments) }),
       ...(args.commit_shas && { commitShas: splitCsv(args.commit_shas) }),
-      ...(attributeKey && { attributeKey }),
-      ...(attributeValue && { attributeValue }),
+      ...(attributeFilters.length > 0 && { attributeFilters }),
     }
     const hasFilters = Object.keys(filters).length > 0
 

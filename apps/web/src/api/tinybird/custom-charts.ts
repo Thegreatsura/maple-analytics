@@ -141,12 +141,16 @@ const SharedFiltersSchema = Schema.Struct({
   rootSpansOnly: Schema.optional(Schema.Boolean),
   environments: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
   commitShas: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
-  attributeKey: Schema.optional(Schema.String),
-  attributeValue: Schema.optional(Schema.String),
-  attributeFilterMode: Schema.optional(Schema.Literals(["equals", "exists"])),
-  resourceAttributeKey: Schema.optional(Schema.String),
-  resourceAttributeValue: Schema.optional(Schema.String),
-  resourceAttributeFilterMode: Schema.optional(Schema.Literals(["equals", "exists"])),
+  attributeFilters: Schema.optional(Schema.mutable(Schema.Array(Schema.Struct({
+    key: Schema.String,
+    value: Schema.optional(Schema.String),
+    mode: Schema.Literals(["equals", "exists"]),
+  })))),
+  resourceAttributeFilters: Schema.optional(Schema.mutable(Schema.Array(Schema.Struct({
+    key: Schema.String,
+    value: Schema.optional(Schema.String),
+    mode: Schema.Literals(["equals", "exists"]),
+  })))),
 })
 
 const CustomChartTimeSeriesInputSchema = Schema.Struct({
@@ -239,12 +243,8 @@ function buildTimeseriesQuerySpec(data: CustomChartTimeSeriesInput): QuerySpec |
         rootSpansOnly: data.filters?.rootSpansOnly,
         environments: data.filters?.environments,
         commitShas: data.filters?.commitShas,
-        attributeKey: data.filters?.attributeKey,
-        attributeValue: data.filters?.attributeValue,
-        attributeFilterMode: data.filters?.attributeFilterMode,
-        resourceAttributeKey: data.filters?.resourceAttributeKey,
-        resourceAttributeValue: data.filters?.resourceAttributeValue,
-        resourceAttributeFilterMode: data.filters?.resourceAttributeFilterMode,
+        attributeFilters: data.filters?.attributeFilters,
+        resourceAttributeFilters: data.filters?.resourceAttributeFilters,
       },
       bucketSeconds: data.bucketSeconds,
     }
@@ -401,12 +401,8 @@ function buildBreakdownQuerySpec(data: CustomChartBreakdownInput): QuerySpec | s
         rootSpansOnly: data.filters?.rootSpansOnly,
         environments: data.filters?.environments,
         commitShas: data.filters?.commitShas,
-        attributeKey: data.filters?.attributeKey,
-        attributeValue: data.filters?.attributeValue,
-        attributeFilterMode: data.filters?.attributeFilterMode,
-        resourceAttributeKey: data.filters?.resourceAttributeKey,
-        resourceAttributeValue: data.filters?.resourceAttributeValue,
-        resourceAttributeFilterMode: data.filters?.resourceAttributeFilterMode,
+        attributeFilters: data.filters?.attributeFilters,
+        resourceAttributeFilters: data.filters?.resourceAttributeFilters,
       },
       limit: data.limit,
     }

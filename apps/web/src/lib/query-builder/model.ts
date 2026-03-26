@@ -213,6 +213,12 @@ function parseBucketSeconds(raw: string): number | undefined {
 // Clause-to-filter mapping via Match
 // ---------------------------------------------------------------------------
 
+interface AccumulatedAttributeFilter {
+  key: string
+  value?: string
+  mode: "equals" | "exists"
+}
+
 interface TracesFilterAccumulator {
   serviceName?: string
   spanName?: string
@@ -220,13 +226,9 @@ interface TracesFilterAccumulator {
   errorsOnly?: boolean
   environments?: string[]
   commitShas?: string[]
-  attributeKey?: string
-  attributeValue?: string
-  attributeFilterMode?: "equals" | "exists"
+  attributeFilters: AccumulatedAttributeFilter[]
   groupByAttributeKeys?: string[]
-  resourceAttributeKey?: string
-  resourceAttributeValue?: string
-  resourceAttributeFilterMode?: "equals" | "exists"
+  resourceAttributeFilters: AccumulatedAttributeFilter[]
 }
 
 function applyTracesClause(
@@ -239,36 +241,40 @@ function applyTracesClause(
   // Handle attr.* and resource.* prefixes before Match
   if (key.startsWith("attr.")) {
     const attributeKey = key.slice(5)
-    if (!filters.attributeKey) {
-      return {
-        ...filters,
-        attributeKey,
-        ...(clause.operator === "exists"
-          ? { attributeFilterMode: "exists" as const }
-          : { attributeValue: clause.value }),
-      }
+    if (filters.attributeFilters.length >= 5) {
+      warnings.push(`Maximum of 5 attr.* filters supported; ignoring attr.${attributeKey}`)
+      return filters
     }
-    warnings.push(
-      `Multiple attr.* filters found; only ${filters.attributeKey} is used`,
-    )
-    return filters
+    return {
+      ...filters,
+      attributeFilters: [
+        ...filters.attributeFilters,
+        {
+          key: attributeKey,
+          mode: clause.operator === "exists" ? "exists" as const : "equals" as const,
+          ...(clause.operator !== "exists" ? { value: clause.value } : {}),
+        },
+      ],
+    }
   }
 
   if (key.startsWith("resource.")) {
     const resourceKey = key.slice(9)
-    if (!filters.resourceAttributeKey) {
-      return {
-        ...filters,
-        resourceAttributeKey: resourceKey,
-        ...(clause.operator === "exists"
-          ? { resourceAttributeFilterMode: "exists" as const }
-          : { resourceAttributeValue: clause.value }),
-      }
+    if (filters.resourceAttributeFilters.length >= 5) {
+      warnings.push(`Maximum of 5 resource.* filters supported; ignoring resource.${resourceKey}`)
+      return filters
     }
-    warnings.push(
-      `Multiple resource.* filters found; only ${filters.resourceAttributeKey} is used`,
-    )
-    return filters
+    return {
+      ...filters,
+      resourceAttributeFilters: [
+        ...filters.resourceAttributeFilters,
+        {
+          key: resourceKey,
+          mode: clause.operator === "exists" ? "exists" as const : "equals" as const,
+          ...(clause.operator !== "exists" ? { value: clause.value } : {}),
+        },
+      ],
+    }
   }
 
   return Match.value(key).pipe(
@@ -416,6 +422,26 @@ function resolveMetricsGroupByToken(
 }
 
 // ---------------------------------------------------------------------------
+// Accumulator → QuerySpec filters
+// ---------------------------------------------------------------------------
+
+function buildTracesSpecFilters(acc: TracesFilterAccumulator): Record<string, unknown> | undefined {
+  const filters: Record<string, unknown> = {}
+
+  if (acc.serviceName) filters.serviceName = acc.serviceName
+  if (acc.spanName) filters.spanName = acc.spanName
+  if (acc.rootSpansOnly) filters.rootSpansOnly = acc.rootSpansOnly
+  if (acc.errorsOnly) filters.errorsOnly = acc.errorsOnly
+  if (acc.environments?.length) filters.environments = acc.environments
+  if (acc.commitShas?.length) filters.commitShas = acc.commitShas
+  if (acc.groupByAttributeKeys?.length) filters.groupByAttributeKeys = acc.groupByAttributeKeys
+  if (acc.attributeFilters.length > 0) filters.attributeFilters = acc.attributeFilters
+  if (acc.resourceAttributeFilters.length > 0) filters.resourceAttributeFilters = acc.resourceAttributeFilters
+
+  return Object.keys(filters).length > 0 ? filters : undefined
+}
+
+// ---------------------------------------------------------------------------
 // Query spec builders
 // ---------------------------------------------------------------------------
 
@@ -451,7 +477,7 @@ export function buildTimeseriesQuerySpec(
 
     const filters = clauses.reduce<TracesFilterAccumulator>(
       (acc, clause) => applyTracesClause(acc, clause, warnings),
-      {},
+      { attributeFilters: [], resourceAttributeFilters: [] },
     )
 
     const groupByKeys: TracesGroupByKey[] = []
@@ -474,6 +500,8 @@ export function buildTimeseriesQuerySpec(
       }
     }
 
+    const specFilters = buildTracesSpecFilters(filters)
+
     return {
       query: {
         kind: "timeseries",
@@ -486,7 +514,7 @@ export function buildTimeseriesQuerySpec(
           | "p99_duration"
           | "error_rate",
         groupBy,
-        filters: Object.keys(filters).length ? filters : undefined,
+        filters: specFilters,
         bucketSeconds,
       } as QuerySpec,
       warnings,
@@ -672,22 +700,24 @@ export function formatFiltersAsWhereClause(
     }
   }
 
-  if (
-    typeof filters.attributeKey === "string" &&
-    filters.attributeKey.trim() &&
-    typeof filters.attributeValue === "string"
-  ) {
-    clauses.push(
-      `attr.${filters.attributeKey.trim()} = "${filters.attributeValue.trim()}"`)
+  if (Array.isArray(filters.attributeFilters)) {
+    for (const af of filters.attributeFilters as Array<{ key: string; value?: string; mode: string }>) {
+      if (af.mode === "exists") {
+        clauses.push(`attr.${af.key} exists`)
+      } else if (af.value != null) {
+        clauses.push(`attr.${af.key} = "${af.value}"`)
+      }
+    }
   }
 
-  if (
-    typeof filters.resourceAttributeKey === "string" &&
-    filters.resourceAttributeKey.trim() &&
-    typeof filters.resourceAttributeValue === "string"
-  ) {
-    clauses.push(
-      `resource.${filters.resourceAttributeKey.trim()} = "${filters.resourceAttributeValue.trim()}"`)
+  if (Array.isArray(filters.resourceAttributeFilters)) {
+    for (const rf of filters.resourceAttributeFilters as Array<{ key: string; value?: string; mode: string }>) {
+      if (rf.mode === "exists") {
+        clauses.push(`resource.${rf.key} exists`)
+      } else if (rf.value != null) {
+        clauses.push(`resource.${rf.key} = "${rf.value}"`)
+      }
+    }
   }
 
   return clauses.join(" AND ")

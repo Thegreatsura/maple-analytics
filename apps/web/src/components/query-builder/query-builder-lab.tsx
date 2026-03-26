@@ -35,6 +35,11 @@ import {
 import { cn } from "@maple/ui/utils"
 import { WhereClauseEditor } from "@/components/query-builder/where-clause-editor"
 import {
+  getPerformanceHints,
+  hasSlowHints,
+  slowHintsSummary,
+} from "@/lib/query-builder/performance-hints"
+import {
   getLogsFacetsResultAtom,
   getQueryBuilderTimeseriesResultAtom,
   getSpanAttributeKeysResultAtom,
@@ -1007,6 +1012,19 @@ export function QueryBuilderLab({
                               ariaLabel={`Where clause for query ${query.name}`}
                             />
                           </div>
+                          {(() => {
+                            if (query.dataSource !== "traces") return null
+                            const hints = getPerformanceHints(
+                              query.whereClause,
+                              query.addOns.groupBy ? query.groupBy : [],
+                            )
+                            if (!hasSlowHints(hints)) return null
+                            return (
+                              <p className="mt-1 text-[11px] text-amber-500">
+                                {slowHintsSummary(hints)}
+                              </p>
+                            )
+                          })()}
                         </div>
 
                         <div className="grid gap-2 md:grid-cols-[1.1fr_1fr]">

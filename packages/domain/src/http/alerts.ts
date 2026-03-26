@@ -516,29 +516,30 @@ export function buildAlertQueryFilterSet(params: {
       ? {}
       : { serviceName: params.serviceName }
 
+    const attributeFilters: Array<{ key: string; value?: string; mode: "equals" | "exists" }> = []
+    const resourceAttributeFilters: Array<{ key: string; value?: string; mode: "equals" | "exists" }> = []
+
     for (const clause of clauses) {
       const key = normalizeKey(clause.key)
 
       if (key.startsWith("attr.")) {
-        if (filters.attributeKey == null) {
-          filters.attributeKey = key.slice(5)
-          if (clause.operator === "exists") {
-            filters.attributeFilterMode = "exists"
-          } else {
-            filters.attributeValue = clause.value
-          }
+        if (attributeFilters.length < 5) {
+          attributeFilters.push({
+            key: key.slice(5),
+            mode: clause.operator === "exists" ? "exists" : "equals",
+            ...(clause.operator !== "exists" ? { value: clause.value } : {}),
+          })
         }
         continue
       }
 
       if (key.startsWith("resource.")) {
-        if (filters.resourceAttributeKey == null) {
-          filters.resourceAttributeKey = key.slice(9)
-          if (clause.operator === "exists") {
-            filters.resourceAttributeFilterMode = "exists"
-          } else {
-            filters.resourceAttributeValue = clause.value
-          }
+        if (resourceAttributeFilters.length < 5) {
+          resourceAttributeFilters.push({
+            key: key.slice(9),
+            mode: clause.operator === "exists" ? "exists" : "equals",
+            ...(clause.operator !== "exists" ? { value: clause.value } : {}),
+          })
         }
         continue
       }
@@ -572,6 +573,9 @@ export function buildAlertQueryFilterSet(params: {
         }
       }
     }
+
+    if (attributeFilters.length > 0) filters.attributeFilters = attributeFilters
+    if (resourceAttributeFilters.length > 0) filters.resourceAttributeFilters = resourceAttributeFilters
 
     return {
       source: "traces",

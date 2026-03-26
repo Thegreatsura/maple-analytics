@@ -32,20 +32,23 @@ export const MetricType = Schema.Literals([
 ])
 export type MetricType = Schema.Schema.Type<typeof MetricType>
 
+export const AttributeFilter = Schema.Struct({
+  key: Schema.String,
+  value: Schema.optional(Schema.String),
+  mode: Schema.Literals(["equals", "exists"]),
+})
+export type AttributeFilter = Schema.Schema.Type<typeof AttributeFilter>
+
 export const TracesFilters = Schema.Struct({
   serviceName: Schema.optional(Schema.String),
   spanName: Schema.optional(Schema.String),
   rootSpansOnly: Schema.optional(Schema.Boolean),
   environments: Schema.optional(Schema.Array(Schema.String)),
   commitShas: Schema.optional(Schema.Array(Schema.String)),
-  attributeKey: Schema.optional(Schema.String),
-  attributeValue: Schema.optional(Schema.String),
-  attributeFilterMode: Schema.optional(Schema.Literals(["equals", "exists"])),
   groupByAttributeKeys: Schema.optional(Schema.Array(Schema.String)),
-  resourceAttributeKey: Schema.optional(Schema.String),
-  resourceAttributeValue: Schema.optional(Schema.String),
-  resourceAttributeFilterMode: Schema.optional(Schema.Literals(["equals", "exists"])),
   errorsOnly: Schema.optional(Schema.Boolean),
+  attributeFilters: Schema.optional(Schema.Array(AttributeFilter)),
+  resourceAttributeFilters: Schema.optional(Schema.Array(AttributeFilter)),
 })
 export type TracesFilters = Schema.Schema.Type<typeof TracesFilters>
 
