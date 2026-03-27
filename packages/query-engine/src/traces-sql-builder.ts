@@ -1,20 +1,18 @@
 import type { TracesMetric, AttributeFilter } from "./query-engine"
+import {
+  type SqlFragment,
+  escapeClickHouseString,
+  raw,
+  str,
+  ident,
+  as_,
+  when,
+  compile,
+} from "./sql/sql-fragment"
+import { compileQuery } from "./sql/sql-query"
+import { attrFilter, eq, gte, lte, inList, toStartOfInterval } from "./sql/clickhouse"
 
-// ---------------------------------------------------------------------------
-// ClickHouse string escaping
-// ---------------------------------------------------------------------------
-
-export function escapeClickHouseString(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")
-}
-
-function esc(value: string): string {
-  return `'${escapeClickHouseString(value)}'`
-}
-
-function escInt(value: number): string {
-  return String(Math.round(value))
-}
+export { escapeClickHouseString }
 
 // ---------------------------------------------------------------------------
 // Row types returned by SQL queries
@@ -66,55 +64,102 @@ const METRIC_NEEDS: Record<TracesMetric, MetricNeed[]> = {
   apdex: ["count", "apdex"],
 }
 
-function buildSelectColumns(
+// ---------------------------------------------------------------------------
+// Metric SELECT fragments
+// ---------------------------------------------------------------------------
+
+function metricSelectFragments(
   metric: TracesMetric,
   needsSampling: boolean,
   apdexThresholdMs: number,
-): string[] {
+): SqlFragment[] {
   const needs = new Set(METRIC_NEEDS[metric])
-  const cols: string[] = ["count() AS count"]
+  const cols: SqlFragment[] = [raw("count() AS count")]
 
   if (needs.has("avg_duration")) {
-    cols.push("avg(Duration) / 1000000 AS avgDuration")
+    cols.push(raw("avg(Duration) / 1000000 AS avgDuration"))
   } else {
-    cols.push("0 AS avgDuration")
+    cols.push(raw("0 AS avgDuration"))
   }
 
   if (needs.has("quantiles")) {
     cols.push(
-      "quantile(0.5)(Duration) / 1000000 AS p50Duration",
-      "quantile(0.95)(Duration) / 1000000 AS p95Duration",
-      "quantile(0.99)(Duration) / 1000000 AS p99Duration",
+      raw("quantile(0.5)(Duration) / 1000000 AS p50Duration"),
+      raw("quantile(0.95)(Duration) / 1000000 AS p95Duration"),
+      raw("quantile(0.99)(Duration) / 1000000 AS p99Duration"),
     )
   } else {
-    cols.push("0 AS p50Duration", "0 AS p95Duration", "0 AS p99Duration")
+    cols.push(raw("0 AS p50Duration"), raw("0 AS p95Duration"), raw("0 AS p99Duration"))
   }
 
   if (needs.has("error_rate")) {
-    cols.push("if(count() > 0, countIf(StatusCode = 'Error') * 100.0 / count(), 0) AS errorRate")
+    cols.push(raw("if(count() > 0, countIf(StatusCode = 'Error') * 100.0 / count(), 0) AS errorRate"))
   } else {
-    cols.push("0 AS errorRate")
+    cols.push(raw("0 AS errorRate"))
   }
 
   const t = String(apdexThresholdMs)
   if (needs.has("apdex")) {
     cols.push(
-      `countIf(Duration / 1000000 < ${t}) AS satisfiedCount`,
-      `countIf(Duration / 1000000 >= ${t} AND Duration / 1000000 < ${t} * 4) AS toleratingCount`,
-      `if(count() > 0, round((countIf(Duration / 1000000 < ${t}) + countIf(Duration / 1000000 >= ${t} AND Duration / 1000000 < ${t} * 4) * 0.5) / count(), 4), 0) AS apdexScore`,
+      raw(`countIf(Duration / 1000000 < ${t}) AS satisfiedCount`),
+      raw(`countIf(Duration / 1000000 >= ${t} AND Duration / 1000000 < ${t} * 4) AS toleratingCount`),
+      raw(`if(count() > 0, round((countIf(Duration / 1000000 < ${t}) + countIf(Duration / 1000000 >= ${t} AND Duration / 1000000 < ${t} * 4) * 0.5) / count(), 4), 0) AS apdexScore`),
     )
   } else {
-    cols.push("0 AS satisfiedCount", "0 AS toleratingCount", "0 AS apdexScore")
+    cols.push(raw("0 AS satisfiedCount"), raw("0 AS toleratingCount"), raw("0 AS apdexScore"))
   }
 
   if (needsSampling) {
     cols.push(
-      "countIf(TraceState LIKE '%th:%') AS sampledSpanCount",
-      "countIf(TraceState = '' OR TraceState NOT LIKE '%th:%') AS unsampledSpanCount",
-      "anyIf(extract(TraceState, 'th:([0-9a-f]+)'), TraceState LIKE '%th:%') AS dominantThreshold",
+      raw("countIf(TraceState LIKE '%th:%') AS sampledSpanCount"),
+      raw("countIf(TraceState = '' OR TraceState NOT LIKE '%th:%') AS unsampledSpanCount"),
+      raw("anyIf(extract(TraceState, 'th:([0-9a-f]+)'), TraceState LIKE '%th:%') AS dominantThreshold"),
     )
   } else {
-    cols.push("0 AS sampledSpanCount", "0 AS unsampledSpanCount", "'' AS dominantThreshold")
+    cols.push(raw("0 AS sampledSpanCount"), raw("0 AS unsampledSpanCount"), raw("'' AS dominantThreshold"))
+  }
+
+  return cols
+}
+
+function breakdownMetricSelectFragments(
+  metric: TracesMetric,
+  apdexThresholdMs: number,
+): SqlFragment[] {
+  const needs = new Set(METRIC_NEEDS[metric])
+  const cols: SqlFragment[] = [raw("count() AS count")]
+
+  if (needs.has("avg_duration")) {
+    cols.push(raw("avg(Duration) / 1000000 AS avgDuration"))
+  } else {
+    cols.push(raw("0 AS avgDuration"))
+  }
+
+  if (needs.has("quantiles")) {
+    cols.push(
+      raw("quantile(0.5)(Duration) / 1000000 AS p50Duration"),
+      raw("quantile(0.95)(Duration) / 1000000 AS p95Duration"),
+      raw("quantile(0.99)(Duration) / 1000000 AS p99Duration"),
+    )
+  } else {
+    cols.push(raw("0 AS p50Duration"), raw("0 AS p95Duration"), raw("0 AS p99Duration"))
+  }
+
+  if (needs.has("error_rate")) {
+    cols.push(raw("if(count() > 0, countIf(StatusCode = 'Error') * 100.0 / count(), 0) AS errorRate"))
+  } else {
+    cols.push(raw("0 AS errorRate"))
+  }
+
+  const t = String(apdexThresholdMs)
+  if (needs.has("apdex")) {
+    cols.push(
+      raw(`countIf(Duration / 1000000 < ${t}) AS satisfiedCount`),
+      raw(`countIf(Duration / 1000000 >= ${t} AND Duration / 1000000 < ${t} * 4) AS toleratingCount`),
+      raw(`if(count() > 0, round((countIf(Duration / 1000000 < ${t}) + countIf(Duration / 1000000 >= ${t} AND Duration / 1000000 < ${t} * 4) * 0.5) / count(), 4), 0) AS apdexScore`),
+    )
+  } else {
+    cols.push(raw("0 AS satisfiedCount"), raw("0 AS toleratingCount"), raw("0 AS apdexScore"))
   }
 
   return cols
@@ -124,13 +169,13 @@ function buildSelectColumns(
 // GROUP BY expression builder
 // ---------------------------------------------------------------------------
 
-function buildGroupNameExpression(
+function groupNameFragment(
   groupBy: readonly string[] | undefined,
   groupByAttributeKeys: readonly string[] | undefined,
   useTraceListMv: boolean,
-): string {
+): SqlFragment {
   if (!groupBy || groupBy.length === 0) {
-    return "'all' AS groupName"
+    return raw("'all' AS groupName")
   }
 
   const parts: string[] = []
@@ -156,7 +201,7 @@ function buildGroupNameExpression(
         if (groupByAttributeKeys?.length) {
           const keys = groupByAttributeKeys.map((k) => {
             const mvCol = useTraceListMv ? TRACE_LIST_MV_ATTR_MAP[k] : undefined
-            return mvCol ? `toString(${mvCol})` : `toString(SpanAttributes[${esc(k)}])`
+            return mvCol ? `toString(${mvCol})` : `toString(SpanAttributes[${compile(str(k))}])`
           })
           parts.push(`arrayStringConcat([${keys.join(", ")}], ' · ')`)
         }
@@ -167,14 +212,33 @@ function buildGroupNameExpression(
   }
 
   if (parts.length === 0) {
-    return "'all' AS groupName"
+    return raw("'all' AS groupName")
   }
 
   if (parts.length === 1) {
-    return `coalesce(nullIf(${parts[0]}, ''), 'all') AS groupName`
+    return raw(`coalesce(nullIf(${parts[0]}, ''), 'all') AS groupName`)
   }
 
-  return `coalesce(nullIf(arrayStringConcat(arrayFilter(x -> x != '', [${parts.join(", ")}]), ' · '), ''), 'all') AS groupName`
+  return raw(`coalesce(nullIf(arrayStringConcat(arrayFilter(x -> x != '', [${parts.join(", ")}]), ' · '), ''), 'all') AS groupName`)
+}
+
+function breakdownGroupFragment(groupBy: string, groupByAttributeKey?: string): SqlFragment {
+  switch (groupBy) {
+    case "service":
+      return raw("ServiceName AS name")
+    case "span_name":
+      return raw("SpanName AS name")
+    case "status_code":
+      return raw("StatusCode AS name")
+    case "http_method":
+      return raw("SpanAttributes['http.method'] AS name")
+    case "attribute":
+      return groupByAttributeKey
+        ? raw(`SpanAttributes[${compile(str(groupByAttributeKey))}] AS name`)
+        : raw("ServiceName AS name")
+    default:
+      return raw("ServiceName AS name")
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -194,9 +258,6 @@ const TRACE_LIST_MV_ATTR_MAP: Record<string, string> = {
 const TRACE_LIST_MV_RESOURCE_MAP: Record<string, string> = {
   "deployment.environment": "DeploymentEnv",
 }
-
-/** Numeric columns in trace_list_mv that need casting from string for comparisons */
-const NUMERIC_MV_COLUMNS = new Set(["HttpStatusCode"])
 
 function canUseTraceListMv(params: {
   rootOnly?: boolean
@@ -239,53 +300,6 @@ function canUseTraceListMv(params: {
 }
 
 // ---------------------------------------------------------------------------
-// Comparison SQL helpers
-// ---------------------------------------------------------------------------
-
-const MODE_TO_OPERATOR: Record<string, string> = {
-  gt: ">",
-  gte: ">=",
-  lt: "<",
-  lte: "<=",
-}
-
-function buildAttrFilterSQL(
-  af: AttributeFilter,
-  useTraceListMv: boolean,
-  mapName: "SpanAttributes" | "ResourceAttributes",
-  mvMap: Record<string, string>,
-): string {
-  const mvColumn = useTraceListMv ? mvMap[af.key] : undefined
-
-  if (af.mode === "exists") {
-    return mvColumn
-      ? `${mvColumn} != ''`
-      : `mapContains(${mapName}, ${esc(af.key)})`
-  }
-
-  if (af.mode === "contains") {
-    const col = mvColumn ?? `${mapName}[${esc(af.key)}]`
-    return `positionCaseInsensitive(${col}, ${esc(af.value ?? "")}) > 0`
-  }
-
-  const op = MODE_TO_OPERATOR[af.mode]
-  if (op) {
-    // Comparison operator — need numeric cast for string columns
-    if (mvColumn) {
-      const cast = NUMERIC_MV_COLUMNS.has(mvColumn) ? `toUInt16OrZero(${mvColumn})` : mvColumn
-      return `${cast} ${op} ${esc(af.value ?? "")}`
-    }
-    return `toFloat64OrZero(${mapName}[${esc(af.key)}]) ${op} ${escapeClickHouseString(af.value ?? "")}`
-  }
-
-  // equals (default)
-  if (mvColumn) {
-    return `${mvColumn} = ${esc(af.value ?? "")}`
-  }
-  return `${mapName}[${esc(af.key)}] = ${esc(af.value ?? "")}`
-}
-
-// ---------------------------------------------------------------------------
 // WHERE clause builder
 // ---------------------------------------------------------------------------
 
@@ -303,63 +317,58 @@ interface WhereClauseParams {
   resourceAttributeFilters?: readonly AttributeFilter[]
 }
 
-function buildWhereClause(params: WhereClauseParams, useTraceListMv: boolean): string {
-  const clauses: string[] = [
-    `OrgId = ${esc(params.orgId)}`,
+function buildWhereFragments(params: WhereClauseParams, useTraceListMv: boolean): SqlFragment[] {
+  const clauses: SqlFragment[] = [
+    eq("OrgId", str(params.orgId)),
   ]
 
   if (params.serviceName) {
-    clauses.push(`ServiceName = ${esc(params.serviceName)}`)
+    clauses.push(eq("ServiceName", str(params.serviceName)))
   }
   if (params.spanName) {
-    clauses.push(`SpanName = ${esc(params.spanName)}`)
+    clauses.push(eq("SpanName", str(params.spanName)))
   }
 
   clauses.push(
-    `Timestamp >= ${esc(params.startTime)}`,
-    `Timestamp <= ${esc(params.endTime)}`,
+    gte("Timestamp", str(params.startTime)),
+    lte("Timestamp", str(params.endTime)),
   )
 
   // trace_list_mv only has root spans, so skip the ParentSpanId filter
-  if (params.rootOnly && !useTraceListMv) {
-    clauses.push("ParentSpanId = ''")
-  }
+  clauses.push(
+    when(!!params.rootOnly && !useTraceListMv, raw("ParentSpanId = ''")),
+  )
   if (params.errorsOnly) {
     if (useTraceListMv) {
-      clauses.push("HasError = 1")
+      clauses.push(raw("HasError = 1"))
     } else {
-      clauses.push("StatusCode = 'Error'")
+      clauses.push(raw("StatusCode = 'Error'"))
     }
   }
   if (params.environments?.length) {
     if (useTraceListMv) {
-      const envList = params.environments.map(esc).join(", ")
-      clauses.push(`DeploymentEnv IN (${envList})`)
+      clauses.push(inList("DeploymentEnv", params.environments.map(str)))
     } else {
-      const envList = params.environments.map(esc).join(", ")
-      clauses.push(`ResourceAttributes['deployment.environment'] IN (${envList})`)
+      clauses.push(inList("ResourceAttributes['deployment.environment']", params.environments.map(str)))
     }
   }
   if (params.commitShas?.length) {
-    // trace_list_mv doesn't have CommitSha — if we're here with useTraceListMv=true,
-    // canUseTraceListMv should have returned false. Fall back to raw traces pattern.
-    const shaList = params.commitShas.map(esc).join(", ")
-    clauses.push(`ResourceAttributes['deployment.commit_sha'] IN (${shaList})`)
+    clauses.push(inList("ResourceAttributes['deployment.commit_sha']", params.commitShas.map(str)))
   }
 
   if (params.attributeFilters) {
     for (const af of params.attributeFilters) {
-      clauses.push(buildAttrFilterSQL(af, useTraceListMv, "SpanAttributes", TRACE_LIST_MV_ATTR_MAP))
+      clauses.push(attrFilter(af, useTraceListMv, "SpanAttributes", TRACE_LIST_MV_ATTR_MAP))
     }
   }
 
   if (params.resourceAttributeFilters) {
     for (const rf of params.resourceAttributeFilters) {
-      clauses.push(buildAttrFilterSQL(rf, useTraceListMv, "ResourceAttributes", TRACE_LIST_MV_RESOURCE_MAP))
+      clauses.push(attrFilter(rf, useTraceListMv, "ResourceAttributes", TRACE_LIST_MV_RESOURCE_MAP))
     }
   }
 
-  return clauses.join("\n          AND ")
+  return clauses
 }
 
 // ---------------------------------------------------------------------------
@@ -390,19 +399,19 @@ export function buildTracesTimeseriesSQL(params: BuildTracesTimeseriesSQLParams)
   const apdexThresholdMs = params.apdexThresholdMs ?? 500
   const useTraceListMv = canUseTraceListMv(params)
   const tableName = useTraceListMv ? "trace_list_mv" : "traces"
-  const selectCols = buildSelectColumns(params.metric, params.needsSampling, apdexThresholdMs)
-  const groupNameExpr = buildGroupNameExpression(params.groupBy, params.groupByAttributeKeys, useTraceListMv)
-  const where = buildWhereClause(params, useTraceListMv)
 
-  return `SELECT
-          toStartOfInterval(Timestamp, INTERVAL ${escInt(params.bucketSeconds)} SECOND) AS bucket,
-          ${groupNameExpr},
-          ${selectCols.join(",\n          ")}
-        FROM ${tableName}
-        WHERE ${where}
-        GROUP BY bucket, groupName
-        ORDER BY bucket ASC, groupName ASC
-        FORMAT JSON`
+  return compileQuery({
+    select: [
+      as_(toStartOfInterval("Timestamp", params.bucketSeconds), "bucket"),
+      groupNameFragment(params.groupBy, params.groupByAttributeKeys, useTraceListMv),
+      ...metricSelectFragments(params.metric, params.needsSampling, apdexThresholdMs),
+    ],
+    from: ident(tableName),
+    where: buildWhereFragments(params, useTraceListMv),
+    groupBy: [raw("bucket, groupName")],
+    orderBy: [raw("bucket ASC, groupName ASC")],
+    format: "JSON",
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -428,84 +437,22 @@ export interface BuildTracesBreakdownSQLParams {
   apdexThresholdMs?: number
 }
 
-function buildBreakdownGroupExpression(groupBy: string, groupByAttributeKey?: string): string {
-  switch (groupBy) {
-    case "service":
-      return "ServiceName AS name"
-    case "span_name":
-      return "SpanName AS name"
-    case "status_code":
-      return "StatusCode AS name"
-    case "http_method":
-      return "SpanAttributes['http.method'] AS name"
-    case "attribute":
-      return groupByAttributeKey
-        ? `SpanAttributes[${esc(groupByAttributeKey)}] AS name`
-        : "ServiceName AS name"
-    default:
-      return "ServiceName AS name"
-  }
-}
-
-function buildBreakdownSelectColumns(
-  metric: TracesMetric,
-  apdexThresholdMs: number,
-): string[] {
-  const needs = new Set(METRIC_NEEDS[metric])
-  const cols: string[] = ["count() AS count"]
-
-  if (needs.has("avg_duration")) {
-    cols.push("avg(Duration) / 1000000 AS avgDuration")
-  } else {
-    cols.push("0 AS avgDuration")
-  }
-
-  if (needs.has("quantiles")) {
-    cols.push(
-      "quantile(0.5)(Duration) / 1000000 AS p50Duration",
-      "quantile(0.95)(Duration) / 1000000 AS p95Duration",
-      "quantile(0.99)(Duration) / 1000000 AS p99Duration",
-    )
-  } else {
-    cols.push("0 AS p50Duration", "0 AS p95Duration", "0 AS p99Duration")
-  }
-
-  if (needs.has("error_rate")) {
-    cols.push("if(count() > 0, countIf(StatusCode = 'Error') * 100.0 / count(), 0) AS errorRate")
-  } else {
-    cols.push("0 AS errorRate")
-  }
-
-  const t = String(apdexThresholdMs)
-  if (needs.has("apdex")) {
-    cols.push(
-      `countIf(Duration / 1000000 < ${t}) AS satisfiedCount`,
-      `countIf(Duration / 1000000 >= ${t} AND Duration / 1000000 < ${t} * 4) AS toleratingCount`,
-      `if(count() > 0, round((countIf(Duration / 1000000 < ${t}) + countIf(Duration / 1000000 >= ${t} AND Duration / 1000000 < ${t} * 4) * 0.5) / count(), 4), 0) AS apdexScore`,
-    )
-  } else {
-    cols.push("0 AS satisfiedCount", "0 AS toleratingCount", "0 AS apdexScore")
-  }
-
-  return cols
-}
-
 export function buildTracesBreakdownSQL(params: BuildTracesBreakdownSQLParams): string {
   const apdexThresholdMs = params.apdexThresholdMs ?? 500
   const limit = params.limit ?? 10
   const useTraceListMv = canUseTraceListMv(params)
   const tableName = useTraceListMv ? "trace_list_mv" : "traces"
-  const selectCols = buildBreakdownSelectColumns(params.metric, apdexThresholdMs)
-  const groupExpr = buildBreakdownGroupExpression(params.groupBy, params.groupByAttributeKey)
-  const where = buildWhereClause(params, useTraceListMv)
 
-  return `SELECT
-          ${groupExpr},
-          ${selectCols.join(",\n          ")}
-        FROM ${tableName}
-        WHERE ${where}
-        GROUP BY name
-        ORDER BY count DESC
-        LIMIT ${escInt(limit)}
-        FORMAT JSON`
+  return compileQuery({
+    select: [
+      breakdownGroupFragment(params.groupBy, params.groupByAttributeKey),
+      ...breakdownMetricSelectFragments(params.metric, apdexThresholdMs),
+    ],
+    from: ident(tableName),
+    where: buildWhereFragments(params, useTraceListMv),
+    groupBy: [ident("name")],
+    orderBy: [raw("count DESC")],
+    limit: raw(String(Math.round(limit))),
+    format: "JSON",
+  })
 }
