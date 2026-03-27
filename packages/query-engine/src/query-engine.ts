@@ -35,7 +35,7 @@ export type MetricType = Schema.Schema.Type<typeof MetricType>
 export const AttributeFilter = Schema.Struct({
   key: Schema.String,
   value: Schema.optional(Schema.String),
-  mode: Schema.Literals(["equals", "exists"]),
+  mode: Schema.Literals(["equals", "exists", "gt", "gte", "lt", "lte", "contains"]),
 })
 export type AttributeFilter = Schema.Schema.Type<typeof AttributeFilter>
 

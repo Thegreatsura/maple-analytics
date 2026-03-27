@@ -127,6 +127,7 @@ function buildSelectColumns(
 function buildGroupNameExpression(
   groupBy: readonly string[] | undefined,
   groupByAttributeKeys: readonly string[] | undefined,
+  useTraceListMv: boolean,
 ): string {
   if (!groupBy || groupBy.length === 0) {
     return "'all' AS groupName"
@@ -145,11 +146,18 @@ function buildGroupNameExpression(
         parts.push("toString(StatusCode)")
         break
       case "http_method":
-        parts.push("toString(SpanAttributes['http.method'])")
+        if (useTraceListMv) {
+          parts.push("toString(HttpMethod)")
+        } else {
+          parts.push("toString(SpanAttributes['http.method'])")
+        }
         break
       case "attribute":
         if (groupByAttributeKeys?.length) {
-          const keys = groupByAttributeKeys.map((k) => `toString(SpanAttributes[${esc(k)}])`)
+          const keys = groupByAttributeKeys.map((k) => {
+            const mvCol = useTraceListMv ? TRACE_LIST_MV_ATTR_MAP[k] : undefined
+            return mvCol ? `toString(${mvCol})` : `toString(SpanAttributes[${esc(k)}])`
+          })
           parts.push(`arrayStringConcat([${keys.join(", ")}], ' · ')`)
         }
         break
@@ -170,10 +178,118 @@ function buildGroupNameExpression(
 }
 
 // ---------------------------------------------------------------------------
+// trace_list_mv column mapping (pre-extracted HTTP attributes)
+// ---------------------------------------------------------------------------
+
+const TRACE_LIST_MV_ATTR_MAP: Record<string, string> = {
+  "http.method": "HttpMethod",
+  "http.request.method": "HttpMethod",
+  "http.route": "HttpRoute",
+  "url.path": "HttpRoute",
+  "http.target": "HttpRoute",
+  "http.status_code": "HttpStatusCode",
+  "http.response.status_code": "HttpStatusCode",
+}
+
+const TRACE_LIST_MV_RESOURCE_MAP: Record<string, string> = {
+  "deployment.environment": "DeploymentEnv",
+}
+
+/** Numeric columns in trace_list_mv that need casting from string for comparisons */
+const NUMERIC_MV_COLUMNS = new Set(["HttpStatusCode"])
+
+function canUseTraceListMv(params: {
+  rootOnly?: boolean
+  attributeFilters?: readonly AttributeFilter[]
+  resourceAttributeFilters?: readonly AttributeFilter[]
+  commitShas?: readonly string[]
+  groupBy?: readonly string[] | string
+  groupByAttributeKeys?: readonly string[]
+  groupByAttributeKey?: string
+}): boolean {
+  if (!params.rootOnly) return false
+
+  // trace_list_mv doesn't have CommitSha
+  if (params.commitShas?.length) return false
+
+  // Check all attribute filters map to pre-extracted columns
+  if (params.attributeFilters) {
+    for (const af of params.attributeFilters) {
+      if (!TRACE_LIST_MV_ATTR_MAP[af.key]) return false
+    }
+  }
+
+  // Check all resource filters map to pre-extracted columns
+  if (params.resourceAttributeFilters) {
+    for (const rf of params.resourceAttributeFilters) {
+      if (!TRACE_LIST_MV_RESOURCE_MAP[rf.key]) return false
+    }
+  }
+
+  // Check groupBy doesn't use unmapped custom attributes
+  const groupByArray = Array.isArray(params.groupBy) ? params.groupBy : params.groupBy ? [params.groupBy] : []
+  if (groupByArray.includes("attribute")) {
+    const attrKeys = params.groupByAttributeKeys ?? (params.groupByAttributeKey ? [params.groupByAttributeKey] : [])
+    for (const key of attrKeys) {
+      if (!TRACE_LIST_MV_ATTR_MAP[key]) return false
+    }
+  }
+
+  return true
+}
+
+// ---------------------------------------------------------------------------
+// Comparison SQL helpers
+// ---------------------------------------------------------------------------
+
+const MODE_TO_OPERATOR: Record<string, string> = {
+  gt: ">",
+  gte: ">=",
+  lt: "<",
+  lte: "<=",
+}
+
+function buildAttrFilterSQL(
+  af: AttributeFilter,
+  useTraceListMv: boolean,
+  mapName: "SpanAttributes" | "ResourceAttributes",
+  mvMap: Record<string, string>,
+): string {
+  const mvColumn = useTraceListMv ? mvMap[af.key] : undefined
+
+  if (af.mode === "exists") {
+    return mvColumn
+      ? `${mvColumn} != ''`
+      : `mapContains(${mapName}, ${esc(af.key)})`
+  }
+
+  if (af.mode === "contains") {
+    const col = mvColumn ?? `${mapName}[${esc(af.key)}]`
+    return `positionCaseInsensitive(${col}, ${esc(af.value ?? "")}) > 0`
+  }
+
+  const op = MODE_TO_OPERATOR[af.mode]
+  if (op) {
+    // Comparison operator — need numeric cast for string columns
+    if (mvColumn) {
+      const cast = NUMERIC_MV_COLUMNS.has(mvColumn) ? `toUInt16OrZero(${mvColumn})` : mvColumn
+      return `${cast} ${op} ${esc(af.value ?? "")}`
+    }
+    return `toFloat64OrZero(${mapName}[${esc(af.key)}]) ${op} ${escapeClickHouseString(af.value ?? "")}`
+  }
+
+  // equals (default)
+  if (mvColumn) {
+    return `${mvColumn} = ${esc(af.value ?? "")}`
+  }
+  return `${mapName}[${esc(af.key)}] = ${esc(af.value ?? "")}`
+}
+
+// ---------------------------------------------------------------------------
 // WHERE clause builder
 // ---------------------------------------------------------------------------
 
-function buildWhereClause(params: {
+interface WhereClauseParams {
   orgId: string
   startTime: string
   endTime: string
@@ -185,8 +301,9 @@ function buildWhereClause(params: {
   commitShas?: readonly string[]
   attributeFilters?: readonly AttributeFilter[]
   resourceAttributeFilters?: readonly AttributeFilter[]
-}): string {
-  // Order: sorting key prefix first (OrgId, ServiceName, SpanName), then time, then filters
+}
+
+function buildWhereClause(params: WhereClauseParams, useTraceListMv: boolean): string {
   const clauses: string[] = [
     `OrgId = ${esc(params.orgId)}`,
   ]
@@ -203,38 +320,42 @@ function buildWhereClause(params: {
     `Timestamp <= ${esc(params.endTime)}`,
   )
 
-  if (params.rootOnly) {
+  // trace_list_mv only has root spans, so skip the ParentSpanId filter
+  if (params.rootOnly && !useTraceListMv) {
     clauses.push("ParentSpanId = ''")
   }
   if (params.errorsOnly) {
-    clauses.push("StatusCode = 'Error'")
+    if (useTraceListMv) {
+      clauses.push("HasError = 1")
+    } else {
+      clauses.push("StatusCode = 'Error'")
+    }
   }
   if (params.environments?.length) {
-    const envList = params.environments.map(esc).join(", ")
-    clauses.push(`ResourceAttributes['deployment.environment'] IN (${envList})`)
+    if (useTraceListMv) {
+      const envList = params.environments.map(esc).join(", ")
+      clauses.push(`DeploymentEnv IN (${envList})`)
+    } else {
+      const envList = params.environments.map(esc).join(", ")
+      clauses.push(`ResourceAttributes['deployment.environment'] IN (${envList})`)
+    }
   }
   if (params.commitShas?.length) {
+    // trace_list_mv doesn't have CommitSha — if we're here with useTraceListMv=true,
+    // canUseTraceListMv should have returned false. Fall back to raw traces pattern.
     const shaList = params.commitShas.map(esc).join(", ")
     clauses.push(`ResourceAttributes['deployment.commit_sha'] IN (${shaList})`)
   }
 
   if (params.attributeFilters) {
     for (const af of params.attributeFilters) {
-      if (af.mode === "exists") {
-        clauses.push(`mapContains(SpanAttributes, ${esc(af.key)})`)
-      } else {
-        clauses.push(`SpanAttributes[${esc(af.key)}] = ${esc(af.value ?? "")}`)
-      }
+      clauses.push(buildAttrFilterSQL(af, useTraceListMv, "SpanAttributes", TRACE_LIST_MV_ATTR_MAP))
     }
   }
 
   if (params.resourceAttributeFilters) {
     for (const rf of params.resourceAttributeFilters) {
-      if (rf.mode === "exists") {
-        clauses.push(`mapContains(ResourceAttributes, ${esc(rf.key)})`)
-      } else {
-        clauses.push(`ResourceAttributes[${esc(rf.key)}] = ${esc(rf.value ?? "")}`)
-      }
+      clauses.push(buildAttrFilterSQL(rf, useTraceListMv, "ResourceAttributes", TRACE_LIST_MV_RESOURCE_MAP))
     }
   }
 
@@ -267,15 +388,17 @@ export interface BuildTracesTimeseriesSQLParams {
 
 export function buildTracesTimeseriesSQL(params: BuildTracesTimeseriesSQLParams): string {
   const apdexThresholdMs = params.apdexThresholdMs ?? 500
+  const useTraceListMv = canUseTraceListMv(params)
+  const tableName = useTraceListMv ? "trace_list_mv" : "traces"
   const selectCols = buildSelectColumns(params.metric, params.needsSampling, apdexThresholdMs)
-  const groupNameExpr = buildGroupNameExpression(params.groupBy, params.groupByAttributeKeys)
-  const where = buildWhereClause(params)
+  const groupNameExpr = buildGroupNameExpression(params.groupBy, params.groupByAttributeKeys, useTraceListMv)
+  const where = buildWhereClause(params, useTraceListMv)
 
   return `SELECT
           toStartOfInterval(Timestamp, INTERVAL ${escInt(params.bucketSeconds)} SECOND) AS bucket,
           ${groupNameExpr},
           ${selectCols.join(",\n          ")}
-        FROM traces
+        FROM ${tableName}
         WHERE ${where}
         GROUP BY bucket, groupName
         ORDER BY bucket ASC, groupName ASC
@@ -370,14 +493,16 @@ function buildBreakdownSelectColumns(
 export function buildTracesBreakdownSQL(params: BuildTracesBreakdownSQLParams): string {
   const apdexThresholdMs = params.apdexThresholdMs ?? 500
   const limit = params.limit ?? 10
+  const useTraceListMv = canUseTraceListMv(params)
+  const tableName = useTraceListMv ? "trace_list_mv" : "traces"
   const selectCols = buildBreakdownSelectColumns(params.metric, apdexThresholdMs)
   const groupExpr = buildBreakdownGroupExpression(params.groupBy, params.groupByAttributeKey)
-  const where = buildWhereClause(params)
+  const where = buildWhereClause(params, useTraceListMv)
 
   return `SELECT
           ${groupExpr},
           ${selectCols.join(",\n          ")}
-        FROM traces
+        FROM ${tableName}
         WHERE ${where}
         GROUP BY name
         ORDER BY count DESC

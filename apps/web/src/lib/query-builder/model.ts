@@ -216,7 +216,7 @@ function parseBucketSeconds(raw: string): number | undefined {
 interface AccumulatedAttributeFilter {
   key: string
   value?: string
-  mode: "equals" | "exists"
+  mode: "equals" | "exists" | "gt" | "gte" | "lt" | "lte" | "contains"
 }
 
 interface TracesFilterAccumulator {
@@ -229,6 +229,20 @@ interface TracesFilterAccumulator {
   attributeFilters: AccumulatedAttributeFilter[]
   groupByAttributeKeys?: string[]
   resourceAttributeFilters: AccumulatedAttributeFilter[]
+}
+
+function operatorToFilterMode(
+  operator: string,
+): AccumulatedAttributeFilter["mode"] {
+  switch (operator) {
+    case "exists": return "exists"
+    case ">": return "gt"
+    case ">=": return "gte"
+    case "<": return "lt"
+    case "<=": return "lte"
+    case "contains": return "contains"
+    default: return "equals"
+  }
 }
 
 function applyTracesClause(
@@ -251,7 +265,7 @@ function applyTracesClause(
         ...filters.attributeFilters,
         {
           key: attributeKey,
-          mode: clause.operator === "exists" ? "exists" as const : "equals" as const,
+          mode: operatorToFilterMode(clause.operator),
           ...(clause.operator !== "exists" ? { value: clause.value } : {}),
         },
       ],
@@ -270,7 +284,7 @@ function applyTracesClause(
         ...filters.resourceAttributeFilters,
         {
           key: resourceKey,
-          mode: clause.operator === "exists" ? "exists" as const : "equals" as const,
+          mode: operatorToFilterMode(clause.operator),
           ...(clause.operator !== "exists" ? { value: clause.value } : {}),
         },
       ],
@@ -654,6 +668,29 @@ export function buildBreakdownQuerySpec(
   }
 }
 
+const FILTER_MODE_TO_DISPLAY: Record<string, string> = {
+  equals: "=",
+  gt: ">",
+  gte: ">=",
+  lt: "<",
+  lte: "<=",
+  contains: "contains",
+}
+
+function formatAttrFilterClause(
+  prefix: string,
+  af: { key: string; value?: string; mode: string },
+): string {
+  if (af.mode === "exists") {
+    return `${prefix}.${af.key} exists`
+  }
+  const op = FILTER_MODE_TO_DISPLAY[af.mode] ?? "="
+  if (af.mode === "contains") {
+    return `${prefix}.${af.key} contains "${af.value ?? ""}"`
+  }
+  return `${prefix}.${af.key} ${op} "${af.value ?? ""}"`
+}
+
 export function formatFiltersAsWhereClause(
   params: Record<string, unknown>
 ): string {
@@ -702,21 +739,13 @@ export function formatFiltersAsWhereClause(
 
   if (Array.isArray(filters.attributeFilters)) {
     for (const af of filters.attributeFilters as Array<{ key: string; value?: string; mode: string }>) {
-      if (af.mode === "exists") {
-        clauses.push(`attr.${af.key} exists`)
-      } else if (af.value != null) {
-        clauses.push(`attr.${af.key} = "${af.value}"`)
-      }
+      clauses.push(formatAttrFilterClause("attr", af))
     }
   }
 
   if (Array.isArray(filters.resourceAttributeFilters)) {
     for (const rf of filters.resourceAttributeFilters as Array<{ key: string; value?: string; mode: string }>) {
-      if (rf.mode === "exists") {
-        clauses.push(`resource.${rf.key} exists`)
-      } else if (rf.value != null) {
-        clauses.push(`resource.${rf.key} = "${rf.value}"`)
-      }
+      clauses.push(formatAttrFilterClause("resource", rf))
     }
   }
 
