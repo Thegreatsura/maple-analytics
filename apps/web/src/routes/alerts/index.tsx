@@ -665,7 +665,12 @@ function AlertsPage() {
                           <TableCell>
                             {rule.serviceNames?.length > 0
                               ? <div className="flex flex-wrap gap-1">{rule.serviceNames.map((s) => <Badge key={s} variant="outline" className="text-xs">{s}</Badge>)}</div>
-                              : <span className="font-mono text-muted-foreground text-sm">all</span>}
+                              : <span className="font-mono text-muted-foreground text-sm">{rule.groupBy === "service" ? "all (per service)" : "all"}</span>}
+                            {rule.excludeServiceNames?.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-0.5">
+                                {rule.excludeServiceNames.map((s) => <Badge key={s} variant="outline" className="text-xs text-muted-foreground line-through">{s}</Badge>)}
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell>
                             <span className="font-mono text-sm">

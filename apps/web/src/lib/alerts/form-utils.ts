@@ -25,6 +25,7 @@ export type RuleFormState = {
   enabled: boolean
   severity: AlertSeverity
   serviceNames: string[]
+  excludeServiceNames: string[]
   groupBy: "service" | null
   signalType: AlertSignalType
   comparator: AlertComparator
@@ -141,6 +142,7 @@ export function defaultRuleForm(serviceName?: string): RuleFormState {
     enabled: true,
     severity: "warning",
     serviceNames: serviceName ? [serviceName] : [],
+    excludeServiceNames: [],
     groupBy: null,
     signalType: "error_rate",
     comparator: "gt",
@@ -167,6 +169,7 @@ export function ruleToFormState(rule: AlertRuleDocument): RuleFormState {
     enabled: rule.enabled,
     severity: rule.severity,
     serviceNames: rule.serviceNames?.length > 0 ? [...rule.serviceNames] : (rule.serviceName ? [rule.serviceName] : []),
+    excludeServiceNames: rule.excludeServiceNames?.length > 0 ? [...rule.excludeServiceNames] : [],
     groupBy: rule.groupBy ?? null,
     signalType: rule.signalType,
     comparator: rule.comparator,
@@ -194,6 +197,7 @@ export function buildRuleRequest(form: RuleFormState): AlertRuleUpsertRequest {
     enabled: form.enabled,
     severity: form.severity,
     serviceNames: form.serviceNames.filter((s) => s.trim().length > 0),
+    excludeServiceNames: form.excludeServiceNames.filter((s) => s.trim().length > 0),
     serviceName: form.serviceNames.length === 1 ? form.serviceNames[0] : null,
     groupBy: form.groupBy,
     signalType,
@@ -392,6 +396,7 @@ export function buildRuleToggleRequest(rule: AlertRuleDocument): AlertRuleUpsert
     enabled: !rule.enabled,
     serviceName: rule.serviceName ?? null,
     serviceNames: rule.serviceNames?.length > 0 ? [...rule.serviceNames] : undefined,
+    excludeServiceNames: rule.excludeServiceNames?.length > 0 ? [...rule.excludeServiceNames] : undefined,
     metricName: rule.metricName ?? null,
     metricType: rule.metricType ?? null,
     metricAggregation: rule.metricAggregation ?? null,

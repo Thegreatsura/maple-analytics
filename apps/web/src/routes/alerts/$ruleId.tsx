@@ -156,7 +156,7 @@ function RuleDetailPage() {
   }
 
   const isFiring = ruleIncidents.some((i) => i.status === "open")
-  const subtitle = `${signalLabels[rule.signalType]} ${comparatorLabels[rule.comparator]} ${formatSignalValue(rule.signalType, rule.threshold)} over ${rule.windowMinutes}min${rule.serviceNames?.length > 0 ? ` on ${rule.serviceNames.join(", ")}` : ""}`
+  const subtitle = `${signalLabels[rule.signalType]} ${comparatorLabels[rule.comparator]} ${formatSignalValue(rule.signalType, rule.threshold)} over ${rule.windowMinutes}min${rule.serviceNames?.length > 0 ? ` on ${rule.serviceNames.join(", ")}` : ""}${rule.excludeServiceNames?.length > 0 ? ` (excl. ${rule.excludeServiceNames.join(", ")})` : ""}`
 
   const tabBar = (
     <Tabs
@@ -267,6 +267,14 @@ function RuleDetailPage() {
                       : <span className="font-mono font-medium">{rule.groupBy === "service" ? "all (per service)" : "all"}</span>}
                   </dd>
                 </div>
+                {rule.excludeServiceNames?.length > 0 && (
+                  <div className="flex justify-between">
+                    <dt className="text-muted-foreground">Excluded</dt>
+                    <dd className="flex flex-wrap gap-1 justify-end">
+                      {rule.excludeServiceNames.map((s) => <Badge key={s} variant="outline" className="text-xs line-through">{s}</Badge>)}
+                    </dd>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground">Condition</dt>
                   <dd className="font-mono font-medium">

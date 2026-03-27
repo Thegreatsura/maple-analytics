@@ -71,6 +71,13 @@
       "when": 1774100000000,
       "tag": "0009_alert_system",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1774400000000,
+      "tag": "0010_exclude_service_names",
+      "breakpoints": true
     }
   ]
 }

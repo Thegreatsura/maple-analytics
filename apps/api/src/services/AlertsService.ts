@@ -117,6 +117,7 @@ interface NormalizedRule {
   readonly severity: AlertSeverity
   readonly serviceName: string | null
   readonly serviceNames: ReadonlyArray<string>
+  readonly excludeServiceNames: ReadonlyArray<string>
   readonly groupBy: AlertGroupBy | null
   readonly signalType: AlertSignalType
   readonly comparator: AlertComparator
@@ -652,6 +653,11 @@ const serviceNamesFromRow = (row: AlertRuleRow): ReadonlyArray<string> =>
       ? [row.serviceName]
       : []
 
+const excludeServiceNamesFromRow = (row: AlertRuleRow): ReadonlyArray<string> =>
+  row.excludeServiceNamesJson
+    ? safeParseStringArray(row.excludeServiceNamesJson)
+    : []
+
 const rowToRuleDocument = (row: AlertRuleRow, destinationIds: ReadonlyArray<string>) => {
   const serviceNames = serviceNamesFromRow(row)
   return new AlertRuleDocument({
@@ -661,6 +667,7 @@ const rowToRuleDocument = (row: AlertRuleRow, destinationIds: ReadonlyArray<stri
     severity: decodeAlertSeveritySync(row.severity),
     serviceName: serviceNames.length === 1 ? serviceNames[0] : row.serviceName,
     serviceNames: [...serviceNames],
+    excludeServiceNames: [...excludeServiceNamesFromRow(row)],
     groupBy: row.groupBy != null ? decodeAlertGroupBySync(row.groupBy) : null,
     signalType: decodeAlertSignalTypeSync(row.signalType),
     comparator: decodeAlertComparatorSync(row.comparator),
@@ -938,6 +945,7 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
           severity: decodeAlertSeveritySync(row.severity),
           serviceName: serviceNames.length === 1 ? serviceNames[0] : row.serviceName,
           serviceNames,
+          excludeServiceNames: excludeServiceNamesFromRow(row),
           groupBy: row.groupBy != null ? decodeAlertGroupBySync(row.groupBy) : null,
           signalType: decodeAlertSignalTypeSync(row.signalType),
           comparator: decodeAlertComparatorSync(row.comparator),
@@ -970,6 +978,9 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
           ? request.serviceNames.map((s) => s.trim()).filter((s) => s.length > 0)
           : request.serviceName?.trim() ? [request.serviceName.trim()] : []
         const serviceName = serviceNames.length === 1 ? serviceNames[0] : (serviceNames.length === 0 ? null : null)
+        const excludeServiceNames = request.excludeServiceNames
+          ? request.excludeServiceNames.map((s) => s.trim()).filter((s) => s.length > 0)
+          : []
         const metricName = normalizeOptionalString(request.metricName)
         const destinationIds = request.destinationIds.map((id) => id as string)
 
@@ -1011,6 +1022,9 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
         if (groupBy != null && serviceNames.length > 0) {
           details.push("groupBy is only supported when no service is specified")
         }
+        if (excludeServiceNames.length > 0 && serviceNames.length > 0) {
+          details.push("excludeServiceNames is only supported when no specific services are selected")
+        }
 
         if (details.length > 0) {
           return yield* Effect.fail(
@@ -1025,6 +1039,7 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
           severity: request.severity,
           serviceName,
           serviceNames,
+          excludeServiceNames,
           groupBy,
           signalType: request.signalType,
           comparator: request.comparator,
@@ -1747,6 +1762,7 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
           severity: normalized.severity,
           serviceName: normalized.serviceName,
           serviceNamesJson: normalized.serviceNames.length > 0 ? JSON.stringify(normalized.serviceNames) : null,
+          excludeServiceNamesJson: normalized.excludeServiceNames.length > 0 ? JSON.stringify(normalized.excludeServiceNames) : null,
           groupBy: normalized.groupBy,
           signalType: normalized.signalType,
           comparator: normalized.comparator,
@@ -1867,7 +1883,9 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
 
         let evaluation: EvaluatedRule
         if (normalized.groupBy != null && normalized.serviceNames.length === 0) {
-          const results = yield* evaluateGroupedRule(orgId, normalized)
+          const allResults = yield* evaluateGroupedRule(orgId, normalized)
+          const excludeSet = new Set(normalized.excludeServiceNames)
+          const results = allResults.filter((r) => !excludeSet.has(r.groupKey))
           const breached = results.find((r) => r.evaluation.status === "breached")
           evaluation = breached?.evaluation ?? results[0]?.evaluation ?? {
             status: "skipped" as const,
@@ -2539,7 +2557,9 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
 
                 if (normalized.groupBy != null && normalized.serviceNames.length === 0) {
                   const results = yield* evaluateGroupedRule(row.orgId as OrgId, normalized)
+                  const excludeSet = new Set(normalized.excludeServiceNames)
                   for (const { evaluation, groupKey } of results) {
+                    if (excludeSet.has(groupKey)) continue
                     yield* processEvaluation(
                       row,
                       normalized,

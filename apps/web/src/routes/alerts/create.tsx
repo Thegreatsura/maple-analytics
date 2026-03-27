@@ -549,18 +549,32 @@ function AlertCreatePage() {
                   ...c,
                   serviceNames: values,
                   groupBy: values.length > 0 ? null : c.groupBy,
+                  excludeServiceNames: values.length > 0 ? [] : c.excludeServiceNames,
                 }))}
               />
               {ruleForm.serviceNames.length === 0 && (
-                <div className="flex items-center gap-2 mt-1">
-                  <Switch
-                    checked={ruleForm.groupBy === "service"}
-                    onCheckedChange={(checked) =>
-                      setRuleForm((c) => ({ ...c, groupBy: checked ? "service" : null }))
-                    }
-                  />
-                  <span className="text-sm">Evaluate each service independently</span>
-                </div>
+                <>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Switch
+                      checked={ruleForm.groupBy === "service"}
+                      onCheckedChange={(checked) =>
+                        setRuleForm((c) => ({ ...c, groupBy: checked ? "service" : null }))
+                      }
+                    />
+                    <span className="text-sm">Evaluate each service independently</span>
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    <Label className="text-sm text-muted-foreground">Exclude services</Label>
+                    <ServiceCombobox
+                      serviceNames={ruleForm.excludeServiceNames}
+                      options={serviceNameOptions}
+                      onChange={(values) => setRuleForm((c) => ({
+                        ...c,
+                        excludeServiceNames: values,
+                      }))}
+                    />
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -742,6 +756,14 @@ function AlertCreatePage() {
                         : <span className="font-mono font-medium">{ruleForm.groupBy === "service" ? "all (per service)" : "all"}</span>}
                     </dd>
                   </div>
+                  {ruleForm.excludeServiceNames.length > 0 && (
+                    <div className="flex justify-between">
+                      <dt className="text-muted-foreground">Exclude</dt>
+                      <dd className="flex flex-wrap gap-1 justify-end">
+                        {ruleForm.excludeServiceNames.map((s) => <Badge key={s} variant="outline" className="text-xs line-through">{s}</Badge>)}
+                      </dd>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <dt className="text-muted-foreground">Severity</dt>
                     <dd className={cn(
