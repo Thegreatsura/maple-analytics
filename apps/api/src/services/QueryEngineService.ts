@@ -8,6 +8,10 @@ import {
   type QueryEngineSampleCountStrategy,
   type QuerySpec,
   type TimeseriesPoint,
+  buildTracesTimeseriesSQL,
+  buildTracesBreakdownSQL,
+  type TracesTimeseriesRow,
+  type TracesBreakdownRow,
 } from "@maple/query-engine"
 import {
   QueryEngineExecutionError,
@@ -394,13 +398,12 @@ const mapTinybirdError = <A, R>(
 
 type QueryEngineTinybird = Pick<
   TinybirdServiceShape,
-  | "customTracesTimeseriesQuery"
+  | "sqlQuery"
   | "customLogsTimeseriesQuery"
   | "metricTimeSeriesSumQuery"
   | "metricTimeSeriesGaugeQuery"
   | "metricTimeSeriesHistogramQuery"
   | "metricTimeSeriesExpHistogramQuery"
-  | "customTracesBreakdownQuery"
   | "customLogsBreakdownQuery"
   | "customMetricsBreakdownQuery"
   | "alertTracesAggregateQuery"
@@ -527,39 +530,39 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
       : undefined
 
     if (request.query.source === "traces" && request.query.kind === "timeseries") {
+      const sql = buildTracesTimeseriesSQL({
+        orgId: tenant.orgId,
+        startTime: request.startTime,
+        endTime: request.endTime,
+        bucketSeconds: bucketSeconds!,
+        metric: request.query.metric,
+        needsSampling: false,
+        serviceName: request.query.filters?.serviceName,
+        spanName: request.query.filters?.spanName,
+        rootOnly: request.query.filters?.rootSpansOnly,
+        errorsOnly: request.query.filters?.errorsOnly,
+        groupBy: request.query.groupBy as string[] | undefined,
+        groupByAttributeKeys: request.query.filters?.groupByAttributeKeys as string[] | undefined,
+        environments: request.query.filters?.environments as string[] | undefined,
+        commitShas: request.query.filters?.commitShas as string[] | undefined,
+        attributeFilters: request.query.filters?.attributeFilters as Array<{ key: string; value?: string; mode: "equals" | "exists" }> | undefined,
+        resourceAttributeFilters: request.query.filters?.resourceAttributeFilters as Array<{ key: string; value?: string; mode: "equals" | "exists" }> | undefined,
+        apdexThresholdMs: request.query.metric === "apdex" ? request.query.apdexThresholdMs : undefined,
+      })
+
       const result = yield* mapTinybirdError(
-        tinybird.customTracesTimeseriesQuery(tenant, {
-          start_time: request.startTime,
-          end_time: request.endTime,
-          bucket_seconds: bucketSeconds,
-          service_name: request.query.filters?.serviceName,
-          span_name: request.query.filters?.spanName,
-          root_only: request.query.filters?.rootSpansOnly ? "1" : undefined,
-          errors_only: request.query.filters?.errorsOnly ? "1" : undefined,
-          environments: request.query.filters?.environments?.join(","),
-          commit_shas: request.query.filters?.commitShas?.join(","),
-          group_by_service: request.query.groupBy?.includes("service") ? "1" : undefined,
-          group_by_span_name: request.query.groupBy?.includes("span_name") ? "1" : undefined,
-          group_by_status_code: request.query.groupBy?.includes("status_code") ? "1" : undefined,
-          group_by_http_method: request.query.groupBy?.includes("http_method") ? "1" : undefined,
-          group_by_attributes:
-            request.query.groupBy?.includes("attribute") && request.query.filters?.groupByAttributeKeys?.length
-              ? request.query.filters.groupByAttributeKeys.join(",")
-              : undefined,
-          ...buildAttributeFilterParams(request.query.filters),
-          apdex_threshold_ms:
-            request.query.metric === "apdex" ? request.query.apdexThresholdMs : undefined,
-        }),
+        tinybird.sqlQuery(tenant, sql),
         "Failed to execute traces timeseries query",
       )
 
       const field = tracesMetricFieldMap[request.query.metric]
+      const rows = result as unknown as ReadonlyArray<TracesTimeseriesRow>
 
       return new QueryEngineExecuteResponse({
         result: {
           kind: "timeseries",
           source: "traces",
-          data: groupTimeSeriesRows(result, (row) => Number(row[field]), fillOptions),
+          data: groupTimeSeriesRows(rows, (row) => Number(row[field]), fillOptions),
         },
       })
     }
@@ -641,39 +644,41 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
     }
 
     if (request.query.source === "traces" && request.query.kind === "breakdown") {
+      const sql = buildTracesBreakdownSQL({
+        orgId: tenant.orgId,
+        startTime: request.startTime,
+        endTime: request.endTime,
+        metric: request.query.metric,
+        groupBy: request.query.groupBy,
+        groupByAttributeKey:
+          request.query.groupBy === "attribute"
+            ? (request.query.filters?.groupByAttributeKeys as string[] | undefined)?.[0]
+            : undefined,
+        limit: request.query.limit,
+        serviceName: request.query.filters?.serviceName,
+        spanName: request.query.filters?.spanName,
+        rootOnly: request.query.filters?.rootSpansOnly,
+        errorsOnly: request.query.filters?.errorsOnly,
+        environments: request.query.filters?.environments as string[] | undefined,
+        commitShas: request.query.filters?.commitShas as string[] | undefined,
+        attributeFilters: request.query.filters?.attributeFilters as Array<{ key: string; value?: string; mode: "equals" | "exists" }> | undefined,
+        resourceAttributeFilters: request.query.filters?.resourceAttributeFilters as Array<{ key: string; value?: string; mode: "equals" | "exists" }> | undefined,
+        apdexThresholdMs: request.query.metric === "apdex" ? request.query.apdexThresholdMs : undefined,
+      })
+
       const result = yield* mapTinybirdError(
-        tinybird.customTracesBreakdownQuery(tenant, {
-          start_time: request.startTime,
-          end_time: request.endTime,
-          service_name: request.query.filters?.serviceName,
-          span_name: request.query.filters?.spanName,
-          limit: request.query.limit,
-          root_only: request.query.filters?.rootSpansOnly ? "1" : undefined,
-          errors_only: request.query.filters?.errorsOnly ? "1" : undefined,
-          environments: request.query.filters?.environments?.join(","),
-          commit_shas: request.query.filters?.commitShas?.join(","),
-          group_by_service: request.query.groupBy === "service" ? "1" : undefined,
-          group_by_span_name: request.query.groupBy === "span_name" ? "1" : undefined,
-          group_by_status_code: request.query.groupBy === "status_code" ? "1" : undefined,
-          group_by_http_method: request.query.groupBy === "http_method" ? "1" : undefined,
-          group_by_attribute:
-            request.query.groupBy === "attribute"
-              ? request.query.filters?.groupByAttributeKeys?.[0]
-              : undefined,
-          ...buildAttributeFilterParams(request.query.filters),
-          apdex_threshold_ms:
-            request.query.metric === "apdex" ? request.query.apdexThresholdMs : undefined,
-        }),
+        tinybird.sqlQuery(tenant, sql),
         "Failed to execute traces breakdown query",
       )
 
       const field = tracesMetricFieldMap[request.query.metric]
+      const rows = result as unknown as ReadonlyArray<TracesBreakdownRow>
 
       return new QueryEngineExecuteResponse({
         result: {
           kind: "breakdown",
           source: "traces",
-          data: result.map((row) => ({
+          data: rows.map((row) => ({
             name: row.name,
             value: Number(row[field]),
           })),

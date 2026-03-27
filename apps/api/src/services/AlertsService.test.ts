@@ -83,8 +83,7 @@ function makeTinybirdStub(state: {
   return {
     query: (_tenant, payload) =>
       Effect.fail(new Error(`Unexpected pipe ${payload.pipe}`)) as never,
-    customTracesTimeseriesQuery: () => succeedRows(emptyTinybirdRows),
-    customTracesBreakdownQuery: () => succeedRows(emptyTinybirdRows),
+    sqlQuery: () => succeedRows(emptyTinybirdRows),
     customLogsTimeseriesQuery: () => succeedRows(emptyTinybirdRows),
     customLogsBreakdownQuery: () => succeedRows(emptyTinybirdRows),
     customMetricsBreakdownQuery: () => succeedRows(emptyTinybirdRows),

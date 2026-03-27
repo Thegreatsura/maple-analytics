@@ -65,13 +65,12 @@ function makeTinybirdStub(overrides: Partial<Parameters<typeof makeQueryEngineEx
       )
 
   return {
-    customTracesTimeseriesQuery: unexpected("customTracesTimeseriesQuery"),
+    sqlQuery: unexpected("sqlQuery"),
     customLogsTimeseriesQuery: unexpected("customLogsTimeseriesQuery"),
     metricTimeSeriesSumQuery: unexpected("metricTimeSeriesSumQuery"),
     metricTimeSeriesGaugeQuery: unexpected("metricTimeSeriesGaugeQuery"),
     metricTimeSeriesHistogramQuery: unexpected("metricTimeSeriesHistogramQuery"),
     metricTimeSeriesExpHistogramQuery: unexpected("metricTimeSeriesExpHistogramQuery"),
-    customTracesBreakdownQuery: unexpected("customTracesBreakdownQuery"),
     customLogsBreakdownQuery: unexpected("customLogsBreakdownQuery"),
     customMetricsBreakdownQuery: unexpected("customMetricsBreakdownQuery"),
     alertTracesAggregateQuery: unexpected("alertTracesAggregateQuery"),
@@ -91,7 +90,7 @@ describe("makeQueryEngineExecute", () => {
   it("fills missing buckets while preserving existing traces values", async () => {
     const execute = makeQueryEngineExecute(
       makeTinybirdStub({
-        customTracesTimeseriesQuery: () =>
+        sqlQuery: () =>
           Effect.succeed([
             makeTraceTimeseriesRow({ count: 2 }),
             makeTraceTimeseriesRow({
@@ -140,7 +139,7 @@ describe("makeQueryEngineExecute", () => {
   it("preserves traces series when Tinybird buckets are datetime strings", async () => {
     const execute = makeQueryEngineExecute(
       makeTinybirdStub({
-        customTracesTimeseriesQuery: () =>
+        sqlQuery: () =>
           Effect.succeed([
             makeTraceTimeseriesRow({ count: 2 }),
             makeTraceTimeseriesRow({
@@ -233,12 +232,12 @@ describe("makeQueryEngineExecute", () => {
   })
 
   it("forwards http method grouping for traces timeseries", async () => {
-    let receivedParams: Record<string, unknown> | undefined
+    let receivedSql: string | undefined
 
     const execute = makeQueryEngineExecute(
       makeTinybirdStub({
-        customTracesTimeseriesQuery: (_tenant, params) => {
-          receivedParams = params as Record<string, unknown>
+        sqlQuery: (_tenant: unknown, sql: unknown) => {
+          receivedSql = sql as string
           return Effect.succeed([
             makeTraceTimeseriesRow({
               groupName: "GET",
@@ -263,9 +262,7 @@ describe("makeQueryEngineExecute", () => {
 
     const response = await Effect.runPromise(execute(tenant, request))
 
-    expect(receivedParams).toMatchObject({
-      group_by_http_method: "1",
-    })
+    expect(receivedSql).toContain("http.method")
     expect(response.result).toEqual({
       kind: "timeseries",
       source: "traces",
@@ -283,12 +280,12 @@ describe("makeQueryEngineExecute", () => {
   })
 
   it("maps apdex traces execution and forwards the apdex threshold", async () => {
-    let receivedParams: Record<string, unknown> | undefined
+    let receivedSql: string | undefined
 
     const execute = makeQueryEngineExecute(
       makeTinybirdStub({
-        customTracesTimeseriesQuery: (_tenant, params) => {
-          receivedParams = params as Record<string, unknown>
+        sqlQuery: (_tenant: unknown, sql: unknown) => {
+          receivedSql = sql as string
           return Effect.succeed([
             makeTraceTimeseriesRow({
               count: 20,
@@ -314,9 +311,8 @@ describe("makeQueryEngineExecute", () => {
       },
     }))
 
-    expect(receivedParams).toMatchObject({
-      apdex_threshold_ms: 300,
-    })
+    expect(receivedSql).toContain("300")
+    expect(receivedSql).toContain("apdexScore")
     expect(response.result).toEqual({
       kind: "timeseries",
       source: "traces",

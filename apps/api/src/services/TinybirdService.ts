@@ -23,14 +23,10 @@ export interface TinybirdServiceShape {
     tenant: TenantContext,
     payload: TinybirdQueryRequest,
   ) => Effect.Effect<TinybirdQueryResponse, TinybirdQueryError>
-  readonly customTracesTimeseriesQuery: (
+  readonly sqlQuery: (
     tenant: TenantContext,
-    params: Omit<CustomTracesTimeseriesParams, "org_id">,
-  ) => Effect.Effect<ReadonlyArray<CustomTracesTimeseriesOutput>, TinybirdQueryError>
-  readonly customTracesBreakdownQuery: (
-    tenant: TenantContext,
-    params: Omit<CustomTracesBreakdownParams, "org_id">,
-  ) => Effect.Effect<ReadonlyArray<CustomTracesBreakdownOutput>, TinybirdQueryError>
+    sql: string,
+  ) => Effect.Effect<ReadonlyArray<Record<string, unknown>>, TinybirdQueryError>
   readonly customLogsTimeseriesQuery: (
     tenant: TenantContext,
     params: Omit<CustomLogsTimeseriesParams, "org_id">,
@@ -382,30 +378,6 @@ export class TinybirdService extends ServiceMap.Service<TinybirdService, Tinybir
       })
     })
 
-    const customTracesTimeseriesQuery = Effect.fn("TinybirdService.customTracesTimeseriesQuery")(function* (
-      tenant: TenantContext,
-      params: Omit<CustomTracesTimeseriesParams, "org_id">,
-    ) {
-      const client = yield* resolveClient(tenant, "custom_traces_timeseries")
-      return yield* runPipe<
-        "custom_traces_timeseries",
-        Omit<CustomTracesTimeseriesParams, "org_id">,
-        CustomTracesTimeseriesOutput
-      >("custom_traces_timeseries", tenant, params, client.custom_traces_timeseries.query)
-    })
-
-    const customTracesBreakdownQuery = Effect.fn("TinybirdService.customTracesBreakdownQuery")(function* (
-      tenant: TenantContext,
-      params: Omit<CustomTracesBreakdownParams, "org_id">,
-    ) {
-      const client = yield* resolveClient(tenant, "custom_traces_breakdown")
-      return yield* runPipe<
-        "custom_traces_breakdown",
-        Omit<CustomTracesBreakdownParams, "org_id">,
-        CustomTracesBreakdownOutput
-      >("custom_traces_breakdown", tenant, params, client.custom_traces_breakdown.query)
-    })
-
     const customLogsTimeseriesQuery = Effect.fn("TinybirdService.customLogsTimeseriesQuery")(function* (
       tenant: TenantContext,
       params: Omit<CustomLogsTimeseriesParams, "org_id">,
@@ -571,10 +543,26 @@ export class TinybirdService extends ServiceMap.Service<TinybirdService, Tinybir
       >("alert_logs_aggregate_by_service", tenant, params, client.alert_logs_aggregate_by_service.query)
     })
 
+    const sqlQuery = Effect.fn("TinybirdService.sqlQuery")(function* (
+      tenant: TenantContext,
+      sql: string,
+    ) {
+      // Use "custom_traces_timeseries" as the pipe identifier for client resolution / error context
+      const client = yield* resolveClient(tenant, "custom_traces_timeseries")
+      const result = yield* Effect.tryPromise({
+        try: () => (client as unknown as { sql: (sql: string) => Promise<{ data: ReadonlyArray<Record<string, unknown>> }> }).sql(sql),
+        catch: (error) => toTinybirdQueryError("custom_traces_timeseries", error),
+      }).pipe(
+        Effect.tapError((error) =>
+          Effect.logError("TinybirdService.sqlQuery failed", { error: String(error) })
+        ),
+      )
+      return result.data
+    })
+
     return {
       query,
-      customTracesTimeseriesQuery,
-      customTracesBreakdownQuery,
+      sqlQuery,
       customLogsTimeseriesQuery,
       customLogsBreakdownQuery,
       customMetricsBreakdownQuery,
