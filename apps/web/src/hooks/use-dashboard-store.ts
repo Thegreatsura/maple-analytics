@@ -1,5 +1,5 @@
 import { Result, useAtomSet, useAtomValue } from "@/lib/effect-atom"
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useState } from "react"
 import { Exit, Schema } from "effect"
 import {
   DashboardCreateRequest,
@@ -186,10 +186,7 @@ export function useDashboardStore() {
     [persistUpsert, readOnly],
   )
 
-  const prevListResultRef = useRef(listResult)
-  if (!isHydrated && !Result.isInitial(listResult) && listResult !== prevListResultRef.current) {
-    prevListResultRef.current = listResult
-
+  if (!isHydrated && !Result.isInitial(listResult)) {
     if (Result.isSuccess(listResult)) {
       const nextDashboards = listResult.value.dashboards
         .map((dashboard) => ensureDashboard(dashboard))
