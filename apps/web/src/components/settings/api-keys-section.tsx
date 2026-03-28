@@ -167,7 +167,15 @@ export function ApiKeysSection() {
             <div className="space-y-1">
               <CardTitle>API Keys</CardTitle>
               <CardDescription>
-                Manage keys for programmatic access to the Maple API.
+                Manage keys for programmatic access to the Maple API.{" "}
+                <a
+                  href="https://api.maple.dev/docs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-foreground underline underline-offset-2 hover:no-underline"
+                >
+                  View API docs
+                </a>
               </CardDescription>
             </div>
             <Button onClick={() => setCreateOpen(true)} size="sm">
