@@ -489,11 +489,18 @@ export function WidgetQueryBuilderPage({
   const [collapsedQueries, setCollapsedQueries] = React.useState<Set<string>>(new Set())
   const [activeAttributeKey, setActiveAttributeKey] = React.useState<string | null>(null)
   const [activeResourceAttributeKey, setActiveResourceAttributeKey] = React.useState<string | null>(null)
+  const [metricSearch, setMetricSearch] = React.useState("")
+  const [debouncedMetricSearch, setDebouncedMetricSearch] = React.useState("")
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDebouncedMetricSearch(metricSearch), 250)
+    return () => clearTimeout(timer)
+  }, [metricSearch])
 
   const { state: { resolvedTimeRange: resolvedTime } } = useDashboardTimeRange()
 
   const metricsResult = useAtomValue(
-    listMetricsResultAtom({ data: { limit: 300 } }),
+    listMetricsResultAtom({ data: { limit: 100, search: debouncedMetricSearch || undefined } }),
   )
 
   const tracesFacetsResult = useAtomValue(
@@ -913,6 +920,7 @@ export function WidgetQueryBuilderPage({
                     collapsed={collapsedQueries.has(query.id)}
                     canRemove={state.queries.length > 1}
                     metricSelectionOptions={metricSelectionOptions}
+                    onMetricSearch={setMetricSearch}
                     autocompleteValues={autocompleteValuesBySource}
                     onActiveAttributeKey={setActiveAttributeKey}
                     onActiveResourceAttributeKey={setActiveResourceAttributeKey}

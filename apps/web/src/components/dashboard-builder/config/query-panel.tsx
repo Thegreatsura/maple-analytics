@@ -11,6 +11,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@maple/ui/components/ui/select"
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@maple/ui/components/ui/combobox"
 import { cn } from "@maple/ui/utils"
 import { WhereClauseEditor } from "@/components/query-builder/where-clause-editor"
 import type { WhereClauseAutocompleteValues } from "@/lib/query-builder/where-clause-autocomplete"
@@ -46,6 +53,7 @@ interface QueryPanelProps {
   collapsed: boolean
   canRemove: boolean
   metricSelectionOptions: MetricSelectionOption[]
+  onMetricSearch?: (search: string) => void
   autocompleteValues: AutocompleteValues
   onActiveAttributeKey?: (key: string | null) => void
   onActiveResourceAttributeKey?: (key: string | null) => void
@@ -267,6 +275,7 @@ export function QueryPanel({
   collapsed,
   canRemove,
   metricSelectionOptions,
+  onMetricSearch,
   autocompleteValues,
   onActiveAttributeKey,
   onActiveResourceAttributeKey,
@@ -361,6 +370,7 @@ export function QueryPanel({
               aggregateOptions={aggregateOptions}
               metricValue={metricValue}
               metricSelectionOptions={metricSelectionOptions}
+              onMetricSearch={onMetricSearch}
               autocompleteValues={autocompleteValues}
               onActiveAttributeKey={onActiveAttributeKey}
               onActiveResourceAttributeKey={onActiveResourceAttributeKey}
@@ -542,6 +552,7 @@ function MetricsBody({
   aggregateOptions,
   metricValue,
   metricSelectionOptions,
+  onMetricSearch,
   autocompleteValues,
   onActiveAttributeKey,
   onActiveResourceAttributeKey,
@@ -551,6 +562,7 @@ function MetricsBody({
   aggregateOptions: Array<{ label: string; value: string }>
   metricValue: string | undefined
   metricSelectionOptions: MetricSelectionOption[]
+  onMetricSearch?: (search: string) => void
   autocompleteValues: AutocompleteValues
   onActiveAttributeKey?: (key: string | null) => void
   onActiveResourceAttributeKey?: (key: string | null) => void
@@ -563,13 +575,14 @@ function MetricsBody({
       ? "Everything (no breakdown)"
       : query.groupBy.join(", ")
 
+
   return (
     <>
       {/* Row 1: Metric type + name */}
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground shrink-0">Metric</span>
-        <Select
-          value={metricValue}
+        <Combobox
+          value={metricValue ?? null}
           onValueChange={(value) => {
             const parsed = value ? parseMetricSelection(value) : null
             if (!parsed) return
@@ -580,23 +593,27 @@ function MetricsBody({
             }))
           }}
         >
-          <SelectTrigger className="h-8 flex-1 text-xs">
-            <SelectValue placeholder="Select metric" />
-          </SelectTrigger>
-          <SelectContent>
+          <ComboboxInput
+            placeholder="Search metrics..."
+            className="h-8 flex-1 text-xs"
+            onChange={(e) => onMetricSearch?.(e.target.value)}
+          />
+          <ComboboxContent>
             {metricSelectionOptions.length === 0 ? (
-              <SelectItem value="__none__" disabled>
-                No metrics available
-              </SelectItem>
+              <div className="py-4 text-center text-xs text-muted-foreground">
+                No metrics found.
+              </div>
             ) : (
-              metricSelectionOptions.map((metric) => (
-                <SelectItem key={metric.value} value={metric.value}>
-                  {metric.label}
-                </SelectItem>
-              ))
+              <ComboboxList>
+                {metricSelectionOptions.map((metric) => (
+                  <ComboboxItem key={metric.value} value={metric.value}>
+                    {metric.label}
+                  </ComboboxItem>
+                ))}
+              </ComboboxList>
             )}
-          </SelectContent>
-        </Select>
+          </ComboboxContent>
+        </Combobox>
       </div>
 
       {/* Row 2: Where clause */}
