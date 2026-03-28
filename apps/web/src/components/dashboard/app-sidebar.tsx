@@ -49,10 +49,8 @@ import {
 } from "@maple/ui/components/ui/collapsible"
 import { isClerkAuthEnabled } from "@/lib/services/common/auth-mode"
 import { clearSelfHostedSessionToken } from "@/lib/services/common/self-hosted-auth"
-import { useTrialStatus } from "@/hooks/use-trial-status"
 import { useDashboardStore } from "@/hooks/use-dashboard-store"
 import { Badge } from "@maple/ui/components/ui/badge"
-import { ClockIcon } from "@/components/icons"
 
 const mainNavItems = [
   {
@@ -255,34 +253,6 @@ function GuestMenu() {
   )
 }
 
-function PlanBadge() {
-  const { isTrialing, daysRemaining, planName, planStatus, isLoading } = useTrialStatus()
-
-  if (isLoading || !planStatus) return null
-
-  const label = isTrialing ? `${planName} Trial` : planName
-
-  return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        render={<Link to="/settings" search={{ tab: "billing" }} />}
-        tooltip={isTrialing ? `${label} · ${daysRemaining}d left` : label ?? "Plan"}
-        size="sm"
-        className="text-muted-foreground"
-      >
-        <ClockIcon size={16} />
-        <span className="truncate text-xs">{label}</span>
-      </SidebarMenuButton>
-      {isTrialing && daysRemaining != null && (
-        <SidebarMenuBadge>
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-medium">
-            {daysRemaining}d left
-          </Badge>
-        </SidebarMenuBadge>
-      )}
-    </SidebarMenuItem>
-  )
-}
 
 export function AppSidebar() {
   const routerState = useRouterState()
@@ -426,7 +396,6 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
-          {isClerkAuthEnabled && <PlanBadge />}
           <SidebarMenuItem>
             {isClerkAuthEnabled ? <UserMenu /> : <GuestMenu />}
           </SidebarMenuItem>
