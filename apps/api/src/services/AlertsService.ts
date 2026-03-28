@@ -72,11 +72,13 @@ import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm"
 import {
   Effect,
   Layer,
+  Metric,
   Option,
   Redacted,
   Schema,
   ServiceMap,
 } from "effect"
+import * as AlertingMetrics from "./AlertingMetrics"
 import type { TenantContext } from "./AuthService"
 import {
   decryptAes256Gcm,
@@ -2163,16 +2165,19 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
           if (claimed.rowsAffected === 0) return
 
           processedCount += 1
+          yield* Metric.update(AlertingMetrics.deliveriesAttemptedTotal, 1)
 
           const destinationRow = destinationMap.get(row.destinationId)
           if (!destinationRow) {
             failureCount += 1
+            yield* Metric.update(AlertingMetrics.deliveriesFailedTotal, 1)
             yield* recordDeliveryFailure(row, currentTime, { message: "Destination not found", kind: "destination", retryable: false })
             return
           }
 
           if (destinationRow.enabled !== 1) {
             failureCount += 1
+            yield* Metric.update(AlertingMetrics.deliveriesFailedTotal, 1)
             yield* recordDeliveryFailure(row, currentTime, { message: "Destination disabled", kind: "destination", retryable: false })
             return
           }
@@ -2185,6 +2190,7 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
           const ruleRow = ruleMap.get(row.ruleId) ?? null
           const payloadRule = payload.rule
 
+          const deliveryStart = now()
           const result = yield* dispatchDelivery(
             {
               deliveryKey: row.deliveryKey,
@@ -2208,6 +2214,8 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
             },
             row.payloadJson,
           )
+          yield* Metric.update(AlertingMetrics.deliveryAttemptDurationMs, now() - deliveryStart)
+          yield* Metric.update(AlertingMetrics.deliveriesSucceededTotal, 1)
 
           yield* finalizeClaimedDelivery(row.id, currentTime, {
             status: "success",
@@ -2248,6 +2256,7 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
               const failure = toDeliveryAttemptFailure(error)
               failureCount += 1
               return Effect.gen(function* () {
+                yield* Metric.update(AlertingMetrics.deliveriesFailedTotal, 1)
                 yield* finalizeClaimedDelivery(row.id, currentTime, {
                   status: "failed",
                   attemptedAt: currentTime,
@@ -2301,6 +2310,7 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
       ) {
         const stateConflictTarget: [typeof alertRuleStates.orgId, typeof alertRuleStates.ruleId, typeof alertRuleStates.groupKey] = [alertRuleStates.orgId, alertRuleStates.ruleId, alertRuleStates.groupKey]
 
+        let incidentAction = "none" as string
         yield* dbExecute((db) =>
           db.transaction(async (tx) => {
             const state =
@@ -2436,6 +2446,7 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
                 "trigger",
                 timestamp,
               )
+              incidentAction = "opened"
               return
             }
 
@@ -2513,9 +2524,12 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
                 "resolve",
                 timestamp,
               )
+              incidentAction = "resolved"
             }
           }),
         )
+        if (incidentAction === "opened") yield* Metric.update(AlertingMetrics.incidentsOpenedTotal, 1)
+        if (incidentAction === "resolved") yield* Metric.update(AlertingMetrics.incidentsResolvedTotal, 1)
       })
 
       const SCHEDULER_LOCK_TTL_MS = 30_000
@@ -2533,7 +2547,16 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
             ),
         )
 
+      const recordEvaluationStatus = (evaluation: EvaluatedRule) => {
+        switch (evaluation.status) {
+          case "breached": return Metric.update(AlertingMetrics.rulesBreachedTotal, 1)
+          case "healthy": return Metric.update(AlertingMetrics.rulesHealthyTotal, 1)
+          case "skipped": return Metric.update(AlertingMetrics.rulesSkippedTotal, 1)
+        }
+      }
+
       const runSchedulerTick = Effect.fn("AlertsService.runSchedulerTick")(function* () {
+        const tickStart = now()
         const rows = yield* dbExecute((db) =>
           db
             .select()
@@ -2541,6 +2564,7 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
             .where(eq(alertRules.enabled, 1))
             .orderBy(asc(alertRules.updatedAt)),
         )
+        yield* Metric.update(AlertingMetrics.activeRulesGauge, rows.length)
 
         let evaluationFailureCount = 0
 
@@ -2553,6 +2577,7 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
               if (claimed.rowsAffected === 0) return
 
               yield* Effect.gen(function* () {
+                const ruleStart = now()
                 const normalized = yield* normalizeRuleRow(row)
 
                 if (normalized.groupBy != null && normalized.serviceNames.length === 0) {
@@ -2560,6 +2585,7 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
                   const excludeSet = new Set(normalized.excludeServiceNames)
                   for (const { evaluation, groupKey } of results) {
                     if (excludeSet.has(groupKey)) continue
+                    yield* recordEvaluationStatus(evaluation)
                     yield* processEvaluation(
                       row,
                       normalized,
@@ -2569,6 +2595,7 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
                       timestamp,
                     )
                   }
+                  yield* Metric.update(AlertingMetrics.ruleEvaluationDurationMs, now() - ruleStart)
                   return
                 }
 
@@ -2584,6 +2611,7 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
                       compiledPlan: perServicePlan,
                     }
                     const evaluation = yield* evaluateRule(row.orgId as OrgId, perService)
+                    yield* recordEvaluationStatus(evaluation)
                     yield* processEvaluation(
                       row,
                       normalized,
@@ -2593,10 +2621,12 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
                       timestamp,
                     )
                   }
+                  yield* Metric.update(AlertingMetrics.ruleEvaluationDurationMs, now() - ruleStart)
                   return
                 }
 
                 const evaluation = yield* evaluateRule(row.orgId as OrgId, normalized)
+                yield* recordEvaluationStatus(evaluation)
                 yield* processEvaluation(
                   row,
                   normalized,
@@ -2605,24 +2635,28 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
                   normalized.serviceName,
                   timestamp,
                 )
+                yield* Metric.update(AlertingMetrics.ruleEvaluationDurationMs, now() - ruleStart)
               }).pipe(
                 Effect.catch((error) => {
                   evaluationFailureCount += 1
-                  return Effect.logError("Alert rule evaluation failed").pipe(
-                    Effect.annotateLogs({
-                      workerId,
-                      ruleId: row.id,
-                      orgId: row.orgId,
-                      failureCategory:
-                        error instanceof AlertValidationError
-                          ? "validation"
-                          : error instanceof AlertDeliveryError
-                            ? "evaluation"
-                            : "unknown",
-                      errorMessage:
-                        error instanceof Error ? error.message : "Alert rule evaluation failed",
-                    }),
-                  )
+                  return Effect.gen(function* () {
+                    yield* Metric.update(AlertingMetrics.evaluationFailuresTotal, 1)
+                    yield* Effect.logError("Alert rule evaluation failed").pipe(
+                      Effect.annotateLogs({
+                        workerId,
+                        ruleId: row.id,
+                        orgId: row.orgId,
+                        failureCategory:
+                          error instanceof AlertValidationError
+                            ? "validation"
+                            : error instanceof AlertDeliveryError
+                              ? "evaluation"
+                              : "unknown",
+                        errorMessage:
+                          error instanceof Error ? error.message : "Alert rule evaluation failed",
+                      }),
+                    )
+                  })
                 }),
               )
             }),
@@ -2630,6 +2664,8 @@ export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServi
         )
 
         const deliveryResult = yield* processQueuedDeliveries()
+        yield* Metric.update(AlertingMetrics.rulesEvaluatedTotal, rows.length)
+        yield* Metric.update(AlertingMetrics.tickDurationMs, now() - tickStart)
         return {
           evaluatedCount: rows.length,
           processedCount: deliveryResult.processedCount,

@@ -1,5 +1,5 @@
 import { BunRuntime } from "@effect/platform-bun"
-import { AlertRuntime, AlertsService, Database, Env, OrgTinybirdSettingsService, QueryEngineService, TinybirdService } from "@maple/api/alerting"
+import { AlertRuntime, AlertsService, Database, Env, makeTelemetryLayer, OrgTinybirdSettingsService, QueryEngineService, TinybirdService } from "@maple/api/alerting"
 import { Cause, Duration, Effect, Layer, Schedule } from "effect"
 
 const DatabaseLive = Database.Default.pipe(
@@ -38,6 +38,8 @@ const AlertsServiceLive = AlertsService.Live.pipe(
   Layer.provide(AlertsDependenciesLive),
 )
 
+const TelemetryLive = makeTelemetryLayer("alerting")
+
 const program = Effect.gen(function* () {
   const alerts = yield* AlertsService
 
@@ -67,6 +69,7 @@ const program = Effect.gen(function* () {
   )
 }).pipe(
   Effect.provide(AlertsServiceLive),
+  Effect.provide(TelemetryLive),
 )
 
 BunRuntime.runMain(program)
