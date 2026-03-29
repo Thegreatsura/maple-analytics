@@ -25,6 +25,8 @@ import {
   AGGREGATIONS_BY_SOURCE,
   GROUP_BY_OPTIONS,
   QUERY_BUILDER_METRIC_TYPES,
+  getMetricsAggregations,
+  resetAggregationForMetricType,
   queryBadgeColor,
   type QueryBuilderAddOnKey,
   type QueryBuilderDataSource,
@@ -39,6 +41,7 @@ import {
 interface MetricSelectionOption {
   value: string
   label: string
+  isMonotonic: boolean
 }
 
 interface AutocompleteValues {
@@ -286,7 +289,9 @@ export function QueryPanel({
   onDataSourceChange,
 }: QueryPanelProps) {
   const badgeColor = queryBadgeColor(index)
-  const aggregateOptions = AGGREGATIONS_BY_SOURCE[query.dataSource]
+  const aggregateOptions = query.dataSource === "metrics"
+    ? getMetricsAggregations(query.metricType || "gauge", query.isMonotonic)
+    : AGGREGATIONS_BY_SOURCE[query.dataSource]
 
   const metricValue =
     query.metricName && query.metricType
@@ -331,6 +336,7 @@ export function QueryPanel({
         </Badge>
 
         <Select
+          items={{ traces: "Traces", logs: "Logs", metrics: "Metrics" }}
           value={query.dataSource}
           onValueChange={(value) =>
             onDataSourceChange(value as QueryBuilderDataSource)
@@ -467,6 +473,7 @@ function TracesLogsBody({
         />
         {query.dataSource === "traces" && (
           <Select
+            items={{ all: "All Spans", root: "Root Spans" }}
             value={
               query.whereClause.includes("root_only = true")
                 ? "root"
@@ -503,6 +510,7 @@ function TracesLogsBody({
       {/* Row 2: Aggregation + interval */}
       <div className="flex items-center gap-2 flex-wrap">
         <Select
+          items={aggregateOptions}
           value={query.aggregation}
           onValueChange={(value) =>
             onUpdate((current) => ({
@@ -586,10 +594,18 @@ function MetricsBody({
           onValueChange={(value) => {
             const parsed = value ? parseMetricSelection(value) : null
             if (!parsed) return
+            const selectedOption = metricSelectionOptions.find((o) => o.value === value)
+            const isMonotonic = selectedOption?.isMonotonic ?? (parsed.metricType === "sum")
             onUpdate((current) => ({
               ...current,
               metricName: parsed.metricName,
               metricType: parsed.metricType,
+              isMonotonic,
+              aggregation: resetAggregationForMetricType(
+                current.aggregation,
+                parsed.metricType,
+                isMonotonic,
+              ),
             }))
           }}
         >
@@ -641,6 +657,7 @@ function MetricsBody({
           Aggregate within time series
         </span>
         <Select
+          items={aggregateOptions}
           value={query.aggregation}
           onValueChange={(value) =>
             onUpdate((current) => ({
@@ -685,6 +702,7 @@ function MetricsBody({
         </span>
 
         <Select
+          items={aggregateOptions}
           value={query.aggregation}
           onValueChange={(value) =>
             onUpdate((current) => ({
@@ -730,6 +748,9 @@ function MetricsBody({
           <SelectContent>
             <SelectItem value="__none__">Everything (no breakdown)</SelectItem>
             <SelectItem value="service.name">ServiceName</SelectItem>
+            {(autocompleteValues.metrics?.attributeKeys ?? []).map((key) => (
+              <SelectItem key={key} value={`attr.${key}`}>attr.{key}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

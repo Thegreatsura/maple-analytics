@@ -266,6 +266,7 @@ export function ListConfigPanel({
                 className="text-xs h-8 w-28"
               />
               <Select
+                items={UNIT_OPTIONS}
                 value={col.unit ?? "none"}
                 onValueChange={(value) =>
                   updateColumn(i, { unit: value === "none" ? undefined : (value as ValueUnit) })
@@ -283,6 +284,7 @@ export function ListConfigPanel({
                 </SelectContent>
               </Select>
               <Select
+                items={{ left: "Left", center: "Center", right: "Right" }}
                 value={col.align ?? "left"}
                 onValueChange={(value) =>
                   updateColumn(i, { align: value as "left" | "center" | "right" })

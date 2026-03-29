@@ -113,6 +113,7 @@ export function WidgetSettingsBar({
             Chart Style
           </p>
           <Select
+            items={Object.fromEntries(chartStyleOptions.map((c) => [c.id, c.name]))}
             value={chartId}
             onValueChange={(value) => onChange({ chartId: value })}
           >
@@ -204,6 +205,7 @@ export function WidgetSettingsBar({
             Comparison
           </p>
           <Select
+            items={{ none: "None", previous_period: "Previous period" }}
             value={comparisonMode}
             onValueChange={(value) =>
               onChange({
@@ -230,6 +232,7 @@ export function WidgetSettingsBar({
               Aggregate
             </p>
             <Select
+              items={{ first: "first", sum: "sum", count: "count", avg: "avg", max: "max", min: "min" }}
               value={statAggregate}
               onValueChange={(value) =>
                 onChange({ statAggregate: value as StatAggregate })
@@ -275,6 +278,7 @@ export function WidgetSettingsBar({
               Unit
             </p>
             <Select
+              items={UNIT_OPTIONS}
               value={unit}
               onValueChange={(value) =>
                 onChange({ unit: value as ValueUnit })

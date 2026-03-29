@@ -837,6 +837,7 @@ export function QueryBuilderLab({
                             Query {query.name}
                           </span>
                           <Select
+                            items={DATA_SOURCES}
                             value={query.dataSource}
                             onValueChange={(value) =>
                               updateQuery(query.id, (current) =>
@@ -908,6 +909,7 @@ export function QueryBuilderLab({
                                 Metric
                               </p>
                               <Select
+                                items={metricOptions}
                                 value={metricValue}
                                 onValueChange={(value) => {
                                   const parsed = value
@@ -949,6 +951,7 @@ export function QueryBuilderLab({
                                 Signal Source
                               </p>
                               <Select
+                                items={SIGNAL_SOURCES}
                                 value={query.signalSource}
                                 onValueChange={(value) =>
                                   updateQuery(query.id, (current) => ({
@@ -1033,6 +1036,7 @@ export function QueryBuilderLab({
                               Aggregation
                             </p>
                             <Select
+                              items={aggregateOptions}
                               value={query.aggregation}
                               onValueChange={(value) =>
                                 updateQuery(query.id, (current) => ({
@@ -1161,6 +1165,7 @@ export function QueryBuilderLab({
                                 Direction
                               </Label>
                               <Select
+                                items={{ desc: "desc", asc: "asc" }}
                                 value={query.orderByDirection}
                                 onValueChange={(value) =>
                                   updateQuery(query.id, (current) => ({

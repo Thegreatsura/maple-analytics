@@ -464,6 +464,7 @@ export function ScrapeTargetsSection() {
             <div className="space-y-2">
               <Label>Authentication</Label>
               <Select
+                items={{ none: "None", bearer: "Bearer Token", basic: "Basic Auth" }}
                 value={formAuthType}
                 onValueChange={(val: string | null) => {
                   setFormAuthType((val as ScrapeAuthType | null) ?? "none")

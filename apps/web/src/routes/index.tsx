@@ -225,6 +225,7 @@ function DashboardContent() {
       headerActions={
         <div className="flex items-center gap-2">
           <Select
+            items={environmentItems}
             value={selectedEnvironment}
             onValueChange={handleEnvironmentChange}
           >

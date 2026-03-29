@@ -348,6 +348,7 @@ function AlertCreatePage() {
                   : signalLabels[ruleForm.signalType]}
               </Badge>
               <Select
+                items={comparatorLabels}
                 value={ruleForm.comparator}
                 onValueChange={(value) => setRuleForm((c) => ({ ...c, comparator: value as AlertComparator }))}
               >
@@ -395,6 +396,7 @@ function AlertCreatePage() {
                 <div className="space-y-2">
                   <Label>Metric type</Label>
                   <Select
+                    items={metricTypeLabels}
                     value={ruleForm.metricType}
                     onValueChange={(value) => setRuleForm((c) => ({ ...c, metricType: value as AlertMetricType }))}
                   >
@@ -409,6 +411,7 @@ function AlertCreatePage() {
                 <div className="space-y-2">
                   <Label>Aggregation</Label>
                   <Select
+                    items={metricAggregationLabels}
                     value={ruleForm.metricAggregation}
                     onValueChange={(value) => setRuleForm((c) => ({ ...c, metricAggregation: value as AlertMetricAggregation }))}
                   >
@@ -472,6 +475,7 @@ function AlertCreatePage() {
                 <div className="space-y-2">
                   <Label>Aggregation</Label>
                   <Select
+                    items={AGGREGATIONS_BY_SOURCE[ruleForm.queryDataSource]}
                     value={ruleForm.queryAggregation}
                     onValueChange={(value) => { if (value) setRuleForm((c) => ({ ...c, queryAggregation: value })) }}
                   >

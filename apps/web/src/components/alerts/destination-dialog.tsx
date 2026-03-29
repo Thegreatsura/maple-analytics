@@ -54,6 +54,7 @@ export function DestinationDialog({
             <div className="space-y-2">
               <Label htmlFor="destination-type">Type</Label>
               <Select
+                items={{ slack: "Slack", pagerduty: "PagerDuty", webhook: "Webhook" }}
                 value={form.type}
                 onValueChange={(value) => {
                   if (!value) return
