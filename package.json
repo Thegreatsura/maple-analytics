@@ -8,9 +8,9 @@
   "scripts": {
     "dev": "turbo dev --ui=tui",
     "dev:alerting": "bun --filter=@maple/alerting dev",
-    "build": "turbo build",
-    "typecheck": "turbo typecheck",
-    "test": "turbo test",
+    "build": "vp run -r build",
+    "typecheck": "vp run -r typecheck",
+    "test": "vp run -r test",
     "tinybird:manifest": "bun run ./scripts/generate-tinybird-project-manifest.ts",
     "tinybird:manifest:check": "bun run ./scripts/generate-tinybird-project-manifest.ts --check",
     "deploy:prd": "bun scripts/deploy-stack.ts deploy prd",
