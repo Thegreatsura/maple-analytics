@@ -35,6 +35,7 @@ interface BucketFillOptions {
 interface MetricTimeseriesRow {
   readonly bucket: string | Date
   readonly serviceName: string
+  readonly attributeValue: string
   readonly avgValue: number
   readonly minValue: number
   readonly maxValue: number
@@ -645,7 +646,7 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
           ? groupTimeSeriesRows(
               result.map((row) => ({
                 bucket: row.bucket,
-                groupName: (row as any).attributeValue || "(empty)",
+                groupName: row.attributeValue || "(empty)",
                 value: Number(row[valueField]),
               })),
               (row) => row.value,

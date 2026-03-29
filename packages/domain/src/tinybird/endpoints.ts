@@ -786,6 +786,8 @@ export const metricTimeSeriesSum = defineEndpoint("metric_time_series_sum", {
           ServiceName AS serviceName,
           {% if defined(group_by_attribute_key) %}
             Attributes[{{String(group_by_attribute_key)}}] AS attributeValue,
+          {% else %}
+            '' AS attributeValue,
           {% end %}
           avg(Value) AS avgValue,
           min(Value) AS minValue,
@@ -818,7 +820,7 @@ export const metricTimeSeriesSum = defineEndpoint("metric_time_series_sum", {
   output: {
     bucket: t.dateTime(),
     serviceName: t.string(),
-    attributeValue: t.string().optional(),
+    attributeValue: t.string(),
     avgValue: t.float64(),
     minValue: t.float64(),
     maxValue: t.float64(),
@@ -855,6 +857,8 @@ export const metricTimeSeriesGauge = defineEndpoint("metric_time_series_gauge", 
           ServiceName AS serviceName,
           {% if defined(group_by_attribute_key) %}
             Attributes[{{String(group_by_attribute_key)}}] AS attributeValue,
+          {% else %}
+            '' AS attributeValue,
           {% end %}
           avg(Value) AS avgValue,
           min(Value) AS minValue,
@@ -887,7 +891,7 @@ export const metricTimeSeriesGauge = defineEndpoint("metric_time_series_gauge", 
   output: {
     bucket: t.dateTime(),
     serviceName: t.string(),
-    attributeValue: t.string().optional(),
+    attributeValue: t.string(),
     avgValue: t.float64(),
     minValue: t.float64(),
     maxValue: t.float64(),
@@ -924,6 +928,8 @@ export const metricTimeSeriesHistogram = defineEndpoint("metric_time_series_hist
           ServiceName AS serviceName,
           {% if defined(group_by_attribute_key) %}
             Attributes[{{String(group_by_attribute_key)}}] AS attributeValue,
+          {% else %}
+            '' AS attributeValue,
           {% end %}
           if(sum(Count) > 0, sum(Sum) / sum(Count), 0) AS avgValue,
           min(Min) AS minValue,
@@ -956,7 +962,7 @@ export const metricTimeSeriesHistogram = defineEndpoint("metric_time_series_hist
   output: {
     bucket: t.dateTime(),
     serviceName: t.string(),
-    attributeValue: t.string().optional(),
+    attributeValue: t.string(),
     avgValue: t.float64(),
     minValue: t.float64(),
     maxValue: t.float64(),
@@ -993,6 +999,8 @@ export const metricTimeSeriesExpHistogram = defineEndpoint("metric_time_series_e
           ServiceName AS serviceName,
           {% if defined(group_by_attribute_key) %}
             Attributes[{{String(group_by_attribute_key)}}] AS attributeValue,
+          {% else %}
+            '' AS attributeValue,
           {% end %}
           if(sum(Count) > 0, sum(Sum) / sum(Count), 0) AS avgValue,
           min(Min) AS minValue,
@@ -1025,7 +1033,7 @@ export const metricTimeSeriesExpHistogram = defineEndpoint("metric_time_series_e
   output: {
     bucket: t.dateTime(),
     serviceName: t.string(),
-    attributeValue: t.string().optional(),
+    attributeValue: t.string(),
     avgValue: t.float64(),
     minValue: t.float64(),
     maxValue: t.float64(),

@@ -337,6 +337,7 @@ describe("makeQueryEngineExecute", () => {
             {
               bucket: "2026-01-01 00:00:00",
               serviceName: "api",
+              attributeValue: "",
               avgValue: 10,
               minValue: 5,
               maxValue: 20,
@@ -346,6 +347,7 @@ describe("makeQueryEngineExecute", () => {
             {
               bucket: "2026-01-01 00:00:00",
               serviceName: "worker",
+              attributeValue: "",
               avgValue: 20,
               minValue: 10,
               maxValue: 40,
@@ -398,6 +400,7 @@ describe("makeQueryEngineExecute", () => {
             {
               bucket: "2026-01-01 00:00:00",
               serviceName: "api",
+              attributeValue: "",
               avgValue: 10,
               minValue: 10,
               maxValue: 10,
@@ -407,6 +410,7 @@ describe("makeQueryEngineExecute", () => {
             {
               bucket: "2026-01-01 00:00:00",
               serviceName: "worker",
+              attributeValue: "",
               avgValue: 20,
               minValue: 20,
               maxValue: 20,

@@ -42,7 +42,7 @@ export const queryDataArgsSchema = Schema.Struct({
     "Metric to compute. Traces: count, avg_duration, p50_duration, p95_duration, p99_duration, error_rate. Logs: count. Metrics: avg, sum, min, max, count.",
   ),
   group_by: optionalStringParam(
-    "Grouping dimension. Traces: service, span_name, status_code, http_method, attribute, none. Logs: service, severity, none. Metrics: service, none.",
+    "Grouping dimension. Traces: service, span_name, status_code, http_method, attribute, none. Logs: service, severity, none. Metrics: service, attribute, none.",
   ),
   bucket_seconds: optionalNumberParam("Bucket size in seconds (timeseries only, auto-computed if omitted)"),
   limit: optionalNumberParam("Max breakdown rows (breakdown only, default 10, max 100)"),
@@ -52,8 +52,8 @@ export const queryDataArgsSchema = Schema.Struct({
   root_spans_only: optionalBooleanParam("Only root spans (traces only)"),
   environments: optionalStringParam("Comma-separated environments (traces only)"),
   commit_shas: optionalStringParam("Comma-separated commit SHAs (traces only)"),
-  attribute_key: optionalStringParam("Attribute key for filtering or grouping (traces only)"),
-  attribute_value: optionalStringParam("Attribute value filter; requires attribute_key (traces only)"),
+  attribute_key: optionalStringParam("Attribute key for filtering or grouping (traces, metrics)"),
+  attribute_value: optionalStringParam("Attribute value filter; requires attribute_key (traces, metrics)"),
   severity: optionalStringParam("Filter by severity, e.g. ERROR, WARN, INFO (logs only)"),
   metric_name: optionalStringParam(
     "Metric name (required for metrics queries). Use list_metrics to discover available metrics.",
@@ -173,10 +173,20 @@ export function buildQuerySpec(args: QueryDataArgs): { spec: QuerySpecType } | {
     return { error: "`metric_name` and `metric_type` are required for metrics queries." }
   }
 
+  const metricsAttributeFilters: Array<{ key: string; value?: string; mode: "equals" | "exists" }> = []
+  if (args.group_by !== "attribute" && attributeKey) {
+    metricsAttributeFilters.push({
+      key: attributeKey,
+      ...(attributeValue ? { value: attributeValue, mode: "equals" as const } : { mode: "exists" as const }),
+    })
+  }
+
   const filters: MetricsFilters = {
     metricName: args.metric_name,
     metricType: args.metric_type as MetricsFilters["metricType"],
     ...(args.service_name && { serviceName: args.service_name }),
+    ...(args.group_by === "attribute" && attributeKey && { groupByAttributeKey: attributeKey }),
+    ...(metricsAttributeFilters.length > 0 && { attributeFilters: metricsAttributeFilters }),
   }
 
   if (args.kind === "timeseries") {

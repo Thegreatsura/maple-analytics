@@ -110,6 +110,7 @@ export type GetMetricTimeSeriesInput = Schema.Schema.Type<typeof GetMetricTimeSe
 export interface MetricTimeSeriesPoint {
   bucket: string
   serviceName: string
+  attributeValue: string
   avgValue: number
   minValue: number
   maxValue: number
@@ -125,6 +126,7 @@ function transformTimeSeriesPoint(raw: MetricTimeSeriesSumOutput): MetricTimeSer
   return {
     bucket: String(raw.bucket),
     serviceName: raw.serviceName,
+    attributeValue: raw.attributeValue,
     avgValue: raw.avgValue,
     minValue: raw.minValue,
     maxValue: raw.maxValue,
