@@ -1,5 +1,4 @@
 import path from "node:path";
-import type { PluginOption } from "vite-plus";
 import { defineConfig, loadEnv } from "vite-plus";
 import { devtools } from "@tanstack/devtools-vite";
 import tanstackRouter from "@tanstack/router-plugin/vite";
@@ -21,22 +20,17 @@ export default defineConfig(({ mode }) => {
     process.env.VITE_CLERK_PUBLISHABLE_KEY = env.CLERK_PUBLISHABLE_KEY?.trim() || "";
   }
 
-  const plugins: PluginOption[] = [
-    devtools(),
-    tanstackRouter({ target: "react", autoCodeSplitting: false }),
-    viteTsConfigPaths({
-      projects: ["./tsconfig.json"],
-    }),
-    tailwindcss(),
-    viteReact(),
-  ];
-
-  if (process.env.ALCHEMY_ROOT) {
-    plugins.push(alchemy({ configPath: "./wrangler.jsonc" }));
-  }
-
   return {
     envDir,
-    plugins,
+    plugins: [
+      devtools(),
+      tanstackRouter({ target: "react", autoCodeSplitting: false }),
+      viteTsConfigPaths({
+        projects: ["./tsconfig.json"],
+      }),
+      tailwindcss(),
+      viteReact(),
+      ...(process.env.ALCHEMY_ROOT ? [alchemy({ configPath: "./wrangler.jsonc" })] : []),
+    ],
   };
 });

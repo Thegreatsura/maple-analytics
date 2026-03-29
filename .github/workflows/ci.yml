@@ -17,16 +17,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: voidzero-dev/setup-vp@v1
+      - uses: oven-sh/setup-bun@v2
         with:
-          cache: true
+          bun-version: "1.3.8"
 
-      - run: vp install
+      - run: bun install --frozen-lockfile
 
       - run: |
-          vp run --filter '@maple/*' --filter '!@maple/ingest' typecheck
-          vp run --filter '@maple/*' --filter '!@maple/ingest' test
-          vp run --filter '@maple/*' --filter '!@maple/ingest' build
+          bunx vp run --filter '@maple/*' --filter '!@maple/ingest' typecheck
+          bunx vp run --filter '@maple/*' --filter '!@maple/ingest' test
+          bunx vp run --filter '@maple/*' --filter '!@maple/ingest' build
 
   rust:
     name: Rust (ingest)

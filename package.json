@@ -35,7 +35,7 @@
   "catalog": {
     "vite": "npm:@voidzero-dev/vite-plus-core@latest",
     "vitest": "npm:@voidzero-dev/vite-plus-test@latest",
-    "vite-plus": "latest"
+    "vite-plus": "0.1.15-alpha.5"
   },
   "catalogs": {
     "effect": {
