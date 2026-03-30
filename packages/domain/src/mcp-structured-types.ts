@@ -178,14 +178,6 @@ export interface ListMetricsData {
   metrics: MetricRow[]
 }
 
-export interface QueryDataResult {
-  kind: "timeseries"
-  data: Array<{ bucket: string; series: Record<string, number> }>
-} | {
-  kind: "breakdown"
-  data: Array<{ name: string; value: number }>
-}
-
 export interface QueryDataData {
   timeRange: { start: string; end: string }
   kind: string

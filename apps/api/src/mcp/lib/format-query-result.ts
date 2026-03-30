@@ -20,20 +20,17 @@ function capitalize(s: string): string {
 }
 
 function getNextSteps(
-  toolName: "query_data" | "chart_traces" | "chart_logs" | "chart_metrics",
   source: string,
   kind: string,
 ): string[] {
-  // Determine next steps based on data source
-  const effectiveSource = toolName === "query_data" ? source : toolName.replace("chart_", "")
 
-  if (effectiveSource === "traces") {
+  if (source === "traces") {
     if (kind === "timeseries") {
       return ["Use `inspect_trace` to drill into a specific trace"]
     }
     return ["Use `search_traces` to find specific traces matching a breakdown entry"]
   }
-  if (effectiveSource === "logs") {
+  if (source === "logs") {
     return ["Use `search_logs` to see individual log entries"]
   }
   // metrics
@@ -41,7 +38,7 @@ function getNextSteps(
 }
 
 export function formatQueryResult(
-  toolName: "query_data" | "chart_traces" | "chart_logs" | "chart_metrics",
+  toolName: "query_data",
   response: QueryEngineExecuteResponse,
   source: string,
   kind: string,
@@ -78,7 +75,7 @@ export function formatQueryResult(
 
     if (result.data.length === 0) {
       lines.push("", "No data points found.")
-      lines.push(formatNextSteps(getNextSteps(toolName, source, kind)))
+      lines.push(formatNextSteps(getNextSteps(source, kind)))
       return { content: createDualContent(lines.join("\n"), structuredData) }
     }
 
@@ -96,7 +93,7 @@ export function formatQueryResult(
     ])
 
     lines.push(formatTable(headers, rows))
-    lines.push(formatNextSteps(getNextSteps(toolName, source, kind)))
+    lines.push(formatNextSteps(getNextSteps(source, kind)))
     return { content: createDualContent(lines.join("\n"), structuredData) }
   }
 
@@ -120,7 +117,7 @@ export function formatQueryResult(
 
     if (result.data.length === 0) {
       lines.push("", "No data found.")
-      lines.push(formatNextSteps(getNextSteps(toolName, source, kind)))
+      lines.push(formatNextSteps(getNextSteps(source, kind)))
       return { content: createDualContent(lines.join("\n"), structuredData) }
     }
 
@@ -134,7 +131,7 @@ export function formatQueryResult(
     ])
 
     lines.push(formatTable(headers, rows))
-    lines.push(formatNextSteps(getNextSteps(toolName, source, kind)))
+    lines.push(formatNextSteps(getNextSteps(source, kind)))
     return { content: createDualContent(lines.join("\n"), structuredData) }
   }
 
