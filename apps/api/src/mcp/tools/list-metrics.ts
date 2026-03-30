@@ -4,7 +4,7 @@ import {
   type McpToolRegistrar,
 } from "./types"
 import { queryTinybird } from "../lib/query-tinybird"
-import { defaultTimeRange } from "../lib/time"
+import { resolveTimeRange } from "../lib/time"
 import { formatNumber, formatTable } from "../lib/format"
 import { Effect, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
@@ -23,9 +23,7 @@ export function registerListMetricsTool(server: McpToolRegistrar) {
     }),
     ({ start_time, end_time, service, search, metric_type, limit }) =>
       Effect.gen(function* () {
-        const { startTime, endTime } = defaultTimeRange(1)
-        const st = start_time ?? startTime
-        const et = end_time ?? endTime
+        const { st, et } = resolveTimeRange(start_time, end_time)
 
         const [metricsResult, summaryResult] = yield* Effect.all(
           [

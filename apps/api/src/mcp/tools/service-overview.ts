@@ -3,7 +3,7 @@ import {
   type McpToolRegistrar,
 } from "./types"
 import { queryTinybird } from "../lib/query-tinybird"
-import { defaultTimeRange } from "../lib/time"
+import { resolveTimeRange } from "../lib/time"
 import { formatDurationFromMs, formatPercent, formatNumber, formatTable } from "../lib/format"
 import { Effect, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
@@ -18,9 +18,7 @@ export function registerServiceOverviewTool(server: McpToolRegistrar) {
     }),
     ({ start_time, end_time }) =>
       Effect.gen(function* () {
-        const { startTime, endTime } = defaultTimeRange(1)
-        const st = start_time ?? startTime
-        const et = end_time ?? endTime
+        const { st, et } = resolveTimeRange(start_time, end_time)
 
         const [servicesResult, usageResult] = yield* Effect.all(
           [

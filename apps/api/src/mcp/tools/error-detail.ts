@@ -6,7 +6,7 @@ import {
 } from "./types"
 import { queryTinybird } from "../lib/query-tinybird"
 import { getSpamPatternsParam } from "@/lib/spam-patterns"
-import { defaultTimeRange } from "../lib/time"
+import { resolveTimeRange } from "../lib/time"
 import { formatDurationMs, truncate } from "../lib/format"
 import { Effect, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
@@ -24,9 +24,7 @@ export function registerErrorDetailTool(server: McpToolRegistrar) {
     }),
     ({ error_type, start_time, end_time, service, limit }) =>
       Effect.gen(function* () {
-        const { startTime, endTime } = defaultTimeRange(1)
-        const st = start_time ?? startTime
-        const et = end_time ?? endTime
+        const { st, et } = resolveTimeRange(start_time, end_time)
         const lim = limit ?? 5
 
         const tracesResult = yield* queryTinybird("error_detail_traces", {

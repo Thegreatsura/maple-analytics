@@ -5,7 +5,7 @@ import {
   type McpToolRegistrar,
 } from "./types"
 import { queryTinybird } from "../lib/query-tinybird"
-import { defaultTimeRange } from "../lib/time"
+import { resolveTimeRange } from "../lib/time"
 import { formatDurationMs, formatTable } from "../lib/format"
 import { Effect, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
@@ -27,9 +27,7 @@ export function registerSearchTracesTool(server: McpToolRegistrar) {
     }),
     (params) =>
       Effect.gen(function* () {
-        const { startTime, endTime } = defaultTimeRange(1)
-        const st = params.start_time ?? startTime
-        const et = params.end_time ?? endTime
+        const { st, et } = resolveTimeRange(params.start_time, params.end_time)
 
         const result = yield* queryTinybird("list_traces", {
           start_time: st,
