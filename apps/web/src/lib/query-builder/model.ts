@@ -507,6 +507,17 @@ function buildTracesSpecFilters(acc: TracesFilterAccumulator): Record<string, un
   return Object.keys(filters).length > 0 ? filters : undefined
 }
 
+function dedupeGroupByKeys<T extends string>(keys: readonly T[]): T[] {
+  const seen = new Set<T>()
+  const result: T[] = []
+  for (const key of keys) {
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(key)
+  }
+  return result
+}
+
 // ---------------------------------------------------------------------------
 // Query spec builders
 // ---------------------------------------------------------------------------
@@ -556,7 +567,7 @@ export function buildTimeseriesQuerySpec(
       }
     }
 
-    const groupBy = groupByKeys.length > 0 ? groupByKeys : undefined
+    const groupBy = groupByKeys.length > 0 ? dedupeGroupByKeys(groupByKeys) : undefined
 
     if (groupByKeys.includes("attribute") && !filters.groupByAttributeKeys?.length) {
       return {
@@ -612,7 +623,7 @@ export function buildTimeseriesQuerySpec(
       }
     }
 
-    const groupBy = logsGroupByKeys.length > 0 ? logsGroupByKeys : undefined
+    const groupBy = logsGroupByKeys.length > 0 ? dedupeGroupByKeys(logsGroupByKeys) : undefined
 
     return {
       query: {
@@ -662,7 +673,7 @@ export function buildTimeseriesQuerySpec(
       if (resolved) metricsGroupByKeys.push(resolved)
     }
   }
-  const groupBy = metricsGroupByKeys.length > 0 ? metricsGroupByKeys : undefined
+  const groupBy = metricsGroupByKeys.length > 0 ? dedupeGroupByKeys(metricsGroupByKeys) : undefined
 
   return {
     query: {

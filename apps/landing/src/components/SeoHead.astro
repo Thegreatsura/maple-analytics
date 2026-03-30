@@ -5,9 +5,10 @@ interface Props {
     type?: "SoftwareApplication" | "WebPage";
     url?: string;
     includeOrganization?: boolean;
+    competitorName?: string;
 }
 
-const { title, description, type = "WebPage", url, includeOrganization = false } = Astro.props;
+const { title, description, type = "WebPage", url, includeOrganization = false, competitorName } = Astro.props;
 
 const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://maple.dev';
 const resolvedUrl =
@@ -28,6 +29,22 @@ const jsonLd = {
                   price: "0",
                   priceCurrency: "USD",
               },
+          }
+        : {}),
+    ...(competitorName
+        ? {
+              about: [
+                  {
+                      "@type": "SoftwareApplication",
+                      name: "Maple",
+                      applicationCategory: "DeveloperApplication",
+                  },
+                  {
+                      "@type": "SoftwareApplication",
+                      name: competitorName,
+                      applicationCategory: "DeveloperApplication",
+                  },
+              ],
           }
         : {}),
 };

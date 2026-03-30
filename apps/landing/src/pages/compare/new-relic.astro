@@ -2,33 +2,45 @@
 import Layout from "../../layouts/Layout.astro";
 import Nav from "../../components/Nav.astro";
 import FeatureHero from "../../components/FeatureHero.astro";
+import StatsBanner from "../../components/StatsBanner.astro";
 import ComparisonTable from "../../components/ComparisonTable.astro";
+import PainPoints from "../../components/PainPoints.astro";
 import FeatureDetailGrid from "../../components/FeatureDetailGrid.astro";
+import MigrationSteps from "../../components/MigrationSteps.astro";
+import FAQ from "../../components/FAQ.astro";
+import RelatedComparisons from "../../components/RelatedComparisons.astro";
 import BottomCTA from "../../components/BottomCTA.astro";
 import Footer from "../../components/Footer.astro";
 import SeoHead from "../../components/SeoHead.astro";
 import Breadcrumb from "../../components/Breadcrumb.astro";
-import { competitors, featureOrder } from "../../lib/competitors";
+import { competitors, featureCategories } from "../../lib/competitors";
 
 const competitor = competitors["new-relic"];
 const pageTitle = `New Relic Alternative (Open Source) — Maple vs New Relic`;
-const pageDescription = `Compare Maple and New Relic for observability. Maple offers no per-seat pricing, full open source transparency, and native OpenTelemetry support.`;
+const pageDescription = `Compare Maple and New Relic for observability. Maple offers unlimited team seats, no per-seat pricing, full open source transparency, and native OpenTelemetry support.`;
 ---
 
 <Layout title={pageTitle} description={pageDescription} ogType="article">
-    <SeoHead title={pageTitle} description={pageDescription} />
+    <SeoHead title={pageTitle} description={pageDescription} competitorName="New Relic" />
     <Nav />
-    <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Compare" }, { label: "New Relic" }]} />
+    <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Compare", href: "/compare/new-relic" }, { label: "New Relic" }]} />
     <FeatureHero
         label="Compare"
         title="Maple vs New Relic"
-        subtitle="New Relic charges per seat and per GB, and its core platform is closed source. Maple gives you the same full-stack observability with transparent usage-based pricing, no per-seat fees, and a fully open-source codebase you can inspect, modify, and self-host."
+        subtitle="New Relic charges per seat and per GB, locking observability access behind per-user pricing. Its core platform is closed source, and switching away means rewriting your instrumentation. Maple gives you the same full-stack observability with transparent usage-based pricing, unlimited seats, and a fully open-source codebase you can self-host."
     />
+
+    <StatsBanner stats={competitor.stats} />
 
     <ComparisonTable
         competitorName={competitor.name}
         features={competitor.features}
-        featureOrder={featureOrder}
+        featureCategories={featureCategories}
+    />
+
+    <PainPoints
+        competitorName={competitor.name}
+        painPoints={competitor.painPoints}
     />
 
     <!-- Why choose Maple -->
@@ -51,6 +63,19 @@ const pageDescription = `Compare Maple and New Relic for observability. Maple of
             ]} />
         </div>
     </section>
+
+    <MigrationSteps
+        competitorName={competitor.name}
+        steps={competitor.migrationSteps}
+    />
+
+    <FAQ items={competitor.faqs} />
+
+    <RelatedComparisons
+        currentSlug={competitor.slug}
+        competitors={competitors}
+    />
+
     <BottomCTA />
     <Footer />
 </Layout>

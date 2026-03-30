@@ -186,7 +186,10 @@ export function useDashboardStore() {
     [persistUpsert, readOnly],
   )
 
-  if (!isHydrated && !Result.isInitial(listResult)) {
+  const [prevListResult, setPrevListResult] = useState<Result.Result<any, any> | null>(null)
+
+  if (listResult !== prevListResult && !Result.isInitial(listResult)) {
+    setPrevListResult(listResult)
     if (Result.isSuccess(listResult)) {
       const nextDashboards = listResult.value.dashboards
         .map((dashboard) => ensureDashboard(dashboard))
@@ -195,11 +198,10 @@ export function useDashboardStore() {
       setDashboards(nextDashboards)
       setReadOnly(false)
       setPersistenceError(null)
-      setIsHydrated(true)
     } else {
       setPersistenceFailure(listResult)
-      setIsHydrated(true)
     }
+    setIsHydrated(true)
   }
 
   const isLoading = !isHydrated && Result.isInitial(listResult)

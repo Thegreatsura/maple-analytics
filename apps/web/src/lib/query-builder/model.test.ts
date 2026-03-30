@@ -62,4 +62,35 @@ describe("query-builder model bucket parsing", () => {
       built.warnings.some((warning) => warning.includes("Invalid step interval ignored")),
     ).toBe(true);
   });
+
+  it("dedupes repeated attribute group-by keys while preserving selected attributes", () => {
+    const query = {
+      ...createQueryDraft(0),
+      dataSource: "traces" as const,
+      aggregation: "count",
+      whereClause: 'service.name = "openrev-integrations" AND root_only = true',
+      groupBy: ["attr.http.response.status_code", "attr.http.request.header.integration_id"],
+      addOns: {
+        groupBy: true,
+        having: false,
+        orderBy: false,
+        limit: false,
+        legend: false,
+      },
+    };
+
+    const built = buildTimeseriesQuerySpec(query);
+    expect(built.error).toBeNull();
+    expect(built.query?.kind).toBe("timeseries");
+    if (built.query?.kind !== "timeseries" || built.query.source !== "traces") {
+      return;
+    }
+
+    expect(built.query.groupBy).toEqual(["attribute"]);
+    expect(built.query.filters?.rootSpansOnly).toBe(true);
+    expect(built.query.filters?.groupByAttributeKeys).toEqual([
+      "http.response.status_code",
+      "http.request.header.integration_id",
+    ]);
+  });
 });

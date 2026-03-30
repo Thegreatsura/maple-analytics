@@ -380,4 +380,3 @@ export function tracesListQuery(
     .format("JSON")
     .withParams<{ orgId: string; startTime: string; endTime: string }>()
 }
-
