@@ -1,7 +1,7 @@
 import { AIChatAgent } from "@cloudflare/ai-chat"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createMCPClient } from "@ai-sdk/mcp"
-import { convertToModelMessages, streamText, stepCountIs, tool, type StreamTextOnFinishCallback } from "ai"
+import { convertToModelMessages, streamText, stepCountIs, tool, createUIMessageStream, createUIMessageStreamResponse, type StreamTextOnFinishCallback } from "ai"
 import { routeAgentRequest } from "agents"
 import { z } from "zod"
 import type { Env } from "./lib/types"
@@ -408,6 +408,15 @@ function createDashboardBuilderTools(mcpTools: McpToolSet) {
   }
 }
 
+function createErrorResponse(errorMessage: string): Response {
+  const stream = createUIMessageStream({
+    execute: ({ writer }) => {
+      writer.write({ type: "error", errorText: errorMessage })
+    },
+  })
+  return createUIMessageStreamResponse({ stream })
+}
+
 export { ChatAgent }
 
 class ChatAgent extends AIChatAgent<Env> {
@@ -418,72 +427,79 @@ class ChatAgent extends AIChatAgent<Env> {
     const body = options?.body as Record<string, unknown> | undefined
     const orgId = body?.orgId as string | undefined
     if (!orgId) {
-      throw new Error("orgId is required in the request body")
+      return createErrorResponse("orgId is required in the request body")
     }
 
     const mode = (body?.mode as string) ?? "default"
     const dashboardContext = body?.dashboardContext as DashboardContext | undefined
 
-    const mcpUrl = `${this.env.MAPLE_API_URL}/mcp`
-    console.log(`[chat-agent] Connecting to MCP server at ${mcpUrl} for org ${orgId} (mode: ${mode})`)
+    let mcpClient: Awaited<ReturnType<typeof createMCPClient>> | undefined
 
-    const mcpClient = await createMCPClient({
-      transport: {
-        type: "http",
-        url: mcpUrl,
-        headers: {
-          Authorization: `Bearer maple_svc_${this.env.INTERNAL_SERVICE_TOKEN}`,
-          "X-Org-Id": orgId,
-        },
-      },
-      onUncaughtError: (error) => {
-        console.error("[chat-agent] MCP uncaught error:", error)
-      },
-    })
-
-    let mcpTools: Awaited<ReturnType<typeof mcpClient.tools>>
     try {
-      mcpTools = await mcpClient.tools()
+      const mcpUrl = `${this.env.MAPLE_API_URL}/mcp`
+      console.log(`[chat-agent] Connecting to MCP server at ${mcpUrl} for org ${orgId} (mode: ${mode})`)
+
+      mcpClient = await createMCPClient({
+        transport: {
+          type: "http",
+          url: mcpUrl,
+          headers: {
+            Authorization: `Bearer maple_svc_${this.env.INTERNAL_SERVICE_TOKEN}`,
+            "X-Org-Id": orgId,
+          },
+        },
+        onUncaughtError: (error) => {
+          console.error("[chat-agent] MCP uncaught error:", error)
+        },
+      })
+
+      const mcpTools = await mcpClient.tools()
       console.log(`[chat-agent] Loaded ${Object.keys(mcpTools).length} tools from MCP server`)
+
+      const isDashboardMode = mode === "dashboard_builder"
+
+      let systemPrompt = isDashboardMode ? DASHBOARD_BUILDER_SYSTEM_PROMPT : SYSTEM_PROMPT
+      if (isDashboardMode && dashboardContext) {
+        const widgetList = dashboardContext.existingWidgets.length > 0
+          ? dashboardContext.existingWidgets.map((w) => `- "${w.title}" (${w.visualization})`).join("\n")
+          : "(none)"
+        systemPrompt += `\n\n## Current Dashboard Context\nDashboard: "${dashboardContext.dashboardName}"\nExisting widgets:\n${widgetList}`
+      }
+
+      const allTools = isDashboardMode
+        ? { ...mcpTools, ...createDashboardBuilderTools(mcpTools as unknown as McpToolSet) }
+        : mcpTools
+
+      const openrouter = createOpenAICompatible({
+        name: "openrouter",
+        baseURL: "https://openrouter.ai/api/v1",
+        apiKey: this.env.OPENROUTER_API_KEY,
+      })
+
+      const result = streamText({
+        model: openrouter.chatModel("moonshotai/kimi-k2.5:nitro"),
+        system: systemPrompt,
+        messages: await convertToModelMessages(this.messages),
+        tools: allTools,
+        stopWhen: stepCountIs(20),
+        abortSignal: options?.abortSignal,
+        onFinish: async (event) => {
+          await mcpClient?.close()
+          await (onFinish as unknown as StreamTextOnFinishCallback<typeof allTools>)(event)
+        },
+      })
+
+      return result.toUIMessageStreamResponse()
     } catch (error) {
-      await mcpClient.close()
-      console.error("[chat-agent] Error loading tools:", error)
-      throw error
+      if (mcpClient) {
+        try { await mcpClient.close() } catch { /* ignore cleanup errors */ }
+      }
+
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      console.error("[chat-agent] Error in onChatMessage:", errorMessage)
+
+      return createErrorResponse(errorMessage)
     }
-
-    const isDashboardMode = mode === "dashboard_builder"
-
-    let systemPrompt = isDashboardMode ? DASHBOARD_BUILDER_SYSTEM_PROMPT : SYSTEM_PROMPT
-    if (isDashboardMode && dashboardContext) {
-      const widgetList = dashboardContext.existingWidgets.length > 0
-        ? dashboardContext.existingWidgets.map((w) => `- "${w.title}" (${w.visualization})`).join("\n")
-        : "(none)"
-      systemPrompt += `\n\n## Current Dashboard Context\nDashboard: "${dashboardContext.dashboardName}"\nExisting widgets:\n${widgetList}`
-    }
-
-    const allTools = isDashboardMode
-      ? { ...mcpTools, ...createDashboardBuilderTools(mcpTools as unknown as McpToolSet) }
-      : mcpTools
-
-    const openrouter = createOpenAICompatible({
-      name: "openrouter",
-      baseURL: "https://openrouter.ai/api/v1",
-      apiKey: this.env.OPENROUTER_API_KEY,
-    })
-
-    const result = streamText({
-      model: openrouter.chatModel("moonshotai/kimi-k2.5:nitro"),
-      system: systemPrompt,
-      messages: await convertToModelMessages(this.messages),
-      tools: allTools,
-      stopWhen: stepCountIs(20),
-      onFinish: async (event) => {
-        await mcpClient.close()
-        ;(onFinish as unknown as StreamTextOnFinishCallback<typeof allTools>)(event)
-      },
-    })
-
-    return result.toUIMessageStreamResponse()
   }
 }
 
