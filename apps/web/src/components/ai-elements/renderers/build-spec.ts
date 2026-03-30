@@ -330,5 +330,68 @@ export function buildSpec(output: StructuredToolOutput): Spec {
       })
       return { root, elements }
     }
+
+    case "compare_periods": {
+      const d = output.data
+      const children: string[] = []
+
+      children.push(
+        addElement(elements, "StatCards", {
+          cards: [
+            { label: "Current Spans", value: d.overall.current.totalSpans, format: "number" },
+            { label: "Previous Spans", value: d.overall.previous.totalSpans, format: "number" },
+            { label: "Current Error Rate", value: d.overall.current.errorRate, format: "percent" },
+            { label: "Previous Error Rate", value: d.overall.previous.errorRate, format: "percent" },
+          ],
+        })
+      )
+
+      if (d.services.length > 0) {
+        const headers = ["Service", "Prev Throughput", "Curr Throughput", "Prev Error Rate", "Curr Error Rate"]
+        const rows = d.services.map((s) => [
+          s.name,
+          String(s.previous.throughput),
+          String(s.current.throughput),
+          `${s.previous.errorRate.toFixed(2)}%`,
+          `${s.current.errorRate.toFixed(2)}%`,
+        ])
+        children.push(
+          addElement(elements, "DataTable", { headers, rows, title: "Per-Service Comparison" })
+        )
+      }
+
+      const root = buildStack(elements, children)
+      return { root, elements }
+    }
+
+    case "explore_attributes": {
+      const d = output.data
+      if (d.values && d.values.length > 0) {
+        const headers = ["Value", "Count"]
+        const rows = d.values.map((v) => [v.value, String(v.count)])
+        const root = addElement(elements, "DataTable", {
+          headers,
+          rows,
+          title: `Attribute Values: ${d.key ?? ""}`,
+        })
+        return { root, elements }
+      }
+
+      if (d.keys && d.keys.length > 0) {
+        const headers = ["Key", "Count"]
+        const rows = d.keys.map((k) => [k.key, String(k.count)])
+        const root = addElement(elements, "DataTable", {
+          headers,
+          rows,
+          title: `Attribute Keys (${d.source})`,
+        })
+        return { root, elements }
+      }
+
+      const root = addElement(elements, "StatCards", {
+        cards: [{ label: "Source", value: d.source, format: "text" }],
+      })
+      return { root, elements }
+    }
   }
 }

@@ -18,6 +18,8 @@ import { registerCreateAlertRuleTool } from "./tools/create-alert-rule"
 import { registerListDashboardsTool } from "./tools/list-dashboards"
 import { registerGetDashboardTool } from "./tools/get-dashboard"
 import { registerCreateDashboardTool } from "./tools/create-dashboard"
+import { registerComparePeriodsTool } from "./tools/compare-periods"
+import { registerExploreAttributesTool } from "./tools/explore-attributes"
 import type { McpToolError, McpToolRegistrar, McpToolResult } from "./tools/types"
 
 interface ToolDefinition {
@@ -91,6 +93,10 @@ const collectToolDefinitions = (): ReadonlyArray<ToolDefinition> => {
   registerListDashboardsTool(registrar)
   registerGetDashboardTool(registrar)
   registerCreateDashboardTool(registrar)
+
+  // Workflow tools
+  registerComparePeriodsTool(registrar)
+  registerExploreAttributesTool(registrar)
 
   return definitions
 }

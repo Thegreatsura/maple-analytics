@@ -289,6 +289,37 @@ export interface CreateDashboardData {
   dashboard: DashboardRow
 }
 
+// ---------------------------------------------------------------------------
+// Compare periods types
+// ---------------------------------------------------------------------------
+
+export interface ComparePeriodsData {
+  currentPeriod: { start: string; end: string }
+  previousPeriod: { start: string; end: string }
+  overall: {
+    current: { totalSpans: number; totalErrors: number; errorRate: number }
+    previous: { totalSpans: number; totalErrors: number; errorRate: number }
+  }
+  services: Array<{
+    name: string
+    current: { throughput: number; errorRate: number; p95Ms: number }
+    previous: { throughput: number; errorRate: number; p95Ms: number }
+  }>
+}
+
+// ---------------------------------------------------------------------------
+// Explore attributes types
+// ---------------------------------------------------------------------------
+
+export interface ExploreAttributesData {
+  source: string
+  scope?: string
+  key?: string
+  timeRange: { start: string; end: string }
+  keys?: Array<{ key: string; count: number }>
+  values?: Array<{ value: string; count: number }>
+}
+
 export type StructuredToolOutput =
   | { tool: "system_health"; data: SystemHealthData }
   | { tool: "search_traces"; data: SearchTracesData }
@@ -308,3 +339,5 @@ export type StructuredToolOutput =
   | { tool: "list_dashboards"; data: ListDashboardsData }
   | { tool: "get_dashboard"; data: GetDashboardData }
   | { tool: "create_dashboard"; data: CreateDashboardData }
+  | { tool: "compare_periods"; data: ComparePeriodsData }
+  | { tool: "explore_attributes"; data: ExploreAttributesData }
