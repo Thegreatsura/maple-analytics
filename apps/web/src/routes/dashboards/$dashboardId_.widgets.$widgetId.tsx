@@ -1,7 +1,6 @@
 import * as React from "react";
 import { createFileRoute, useNavigate, useBlocker } from "@tanstack/react-router";
 
-import { Atom, useAtom } from "@/lib/effect-atom";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
   WidgetQueryBuilderPage,
@@ -9,6 +8,7 @@ import {
 } from "@/components/dashboard-builder/config/widget-query-builder-page";
 import { DashboardTimeRangeWrapper } from "@/components/dashboard-builder/dashboard-providers";
 import type {
+  TimeRange,
   VisualizationType,
   WidgetDataSource,
   WidgetDisplayConfig,
@@ -27,10 +27,11 @@ function WidgetConfigurePage() {
   const { dashboards, readOnly, updateWidget, updateDashboardTimeRange } = useDashboardStore();
 
   const builderRef = React.useRef<WidgetQueryBuilderPageHandle>(null);
-  const isDirtyAtom = React.useMemo(() => Atom.make(false), []);
-  const [isDirty, setIsDirty] = useAtom(isDirtyAtom);
-  const isSavingAtom = React.useMemo(() => Atom.make(false), []);
-  const [isSaving, setIsSaving] = useAtom(isSavingAtom);
+  const [isSaving, setIsSaving] = React.useState(false);
+  // Stabilize time range reference — only update when the value actually changes,
+  // not when the dashboard object is rebuilt (e.g. from widget save optimistic update).
+  // Without this, DashboardTimeRangeSync fires spurious mutations that overwrite concurrent saves.
+  const timeRangeRef = React.useRef<TimeRange | null>(null);
 
   const activeDashboard = dashboards.find((d) => d.id === dashboardId);
   const configureWidget = activeDashboard?.widgets.find((w) => w.id === widgetId);
@@ -52,7 +53,6 @@ function WidgetConfigurePage() {
     setIsSaving(true);
     try {
       await updateWidget(dashboardId, widgetId, updates);
-      setIsDirty(false);
       navigateBack();
     } finally {
       setIsSaving(false);
@@ -61,7 +61,7 @@ function WidgetConfigurePage() {
 
   // Block navigation when there are unsaved changes
   const { proceed, reset, status } = useBlocker({
-    shouldBlockFn: () => isDirty && !isSaving,
+    shouldBlockFn: () => !isSaving && (builderRef.current?.isDirty() ?? false),
     withResolver: true,
   });
 
@@ -80,9 +80,13 @@ function WidgetConfigurePage() {
     return null;
   }
 
+  if (timeRangeRef.current === null || JSON.stringify(timeRangeRef.current) !== JSON.stringify(activeDashboard.timeRange)) {
+    timeRangeRef.current = activeDashboard.timeRange;
+  }
+
   return (
     <DashboardTimeRangeWrapper
-      initialTimeRange={activeDashboard.timeRange}
+      initialTimeRange={timeRangeRef.current}
       onTimeRangeChange={(timeRange) => updateDashboardTimeRange(activeDashboard.id, timeRange)}
     >
       <DashboardLayout
@@ -112,7 +116,6 @@ function WidgetConfigurePage() {
           ref={builderRef}
           widget={configureWidget}
           onApply={handleApply}
-          onDirtyChange={setIsDirty}
         />
       </DashboardLayout>
 

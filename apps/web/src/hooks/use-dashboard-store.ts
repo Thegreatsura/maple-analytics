@@ -135,8 +135,13 @@ export function useDashboardStore() {
 
   const readOnly = persistenceError !== null
 
-  // Sync server data → local atom. Runs on mount and after every refetch.
+  // Sync server data → local atom. Only apply when listResult actually changes
+  // (from a refetch), not on re-mount with the same stale result. Without this guard,
+  // navigating between routes re-applies the old listResult and overwrites optimistic updates.
+  const lastSyncedListResult = useRef(listResult)
   useEffect(() => {
+    if (listResult === lastSyncedListResult.current) return
+    lastSyncedListResult.current = listResult
     if (Result.isSuccess(listResult)) {
       setDashboards(parseDashboards(listResult.value.dashboards))
       setPersistenceError(null)
@@ -169,6 +174,10 @@ export function useDashboardStore() {
       if (index < 0) return
 
       const updated = updater(snapshot[index])
+
+      // Skip no-op mutations (e.g. layout change on mount with same values)
+      if (updated === snapshot[index]) return
+
       const next = [...snapshot]
       next[index] = updated
 
@@ -422,12 +431,19 @@ export function useDashboardStore() {
       dashboardId: string,
       layouts: Array<{ i: string; x: number; y: number; w: number; h: number }>,
     ) => {
-      mutateDashboard(dashboardId, (dashboard) => ({
-        ...dashboard,
-        widgets: dashboard.widgets.map((widget) => {
+      mutateDashboard(dashboardId, (dashboard) => {
+        let changed = false
+        const widgets = dashboard.widgets.map((widget) => {
           const layout = layouts.find((item) => item.i === widget.id)
           if (!layout) return widget
+          if (
+            widget.layout.x === layout.x &&
+            widget.layout.y === layout.y &&
+            widget.layout.w === layout.w &&
+            widget.layout.h === layout.h
+          ) return widget
 
+          changed = true
           return {
             ...widget,
             layout: {
@@ -438,9 +454,12 @@ export function useDashboardStore() {
               h: layout.h,
             },
           }
-        }),
-        updatedAt: new Date().toISOString(),
-      }))
+        })
+
+        // Return same reference if nothing changed — mutateDashboard skips no-ops
+        if (!changed) return dashboard
+        return { ...dashboard, widgets, updatedAt: new Date().toISOString() }
+      })
     },
     [mutateDashboard],
   )

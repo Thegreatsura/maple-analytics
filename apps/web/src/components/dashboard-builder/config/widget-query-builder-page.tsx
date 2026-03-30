@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Atom, Result, useAtom, useAtomValue } from "@/lib/effect-atom"
+import { Result, useAtomValue } from "@/lib/effect-atom"
 
 import { Button } from "@maple/ui/components/ui/button"
 import { ChartWidget } from "@/components/dashboard-builder/widgets/chart-widget"
@@ -60,6 +60,7 @@ type StatAggregate = "sum" | "first" | "count" | "avg" | "max" | "min"
 
 export interface WidgetQueryBuilderPageHandle {
   apply: () => void
+  isDirty: () => boolean
 }
 
 interface WidgetQueryBuilderPageProps {
@@ -69,7 +70,6 @@ interface WidgetQueryBuilderPageProps {
     dataSource: WidgetDataSource
     display: WidgetDisplayConfig
   }) => void
-  onDirtyChange?: (dirty: boolean) => void
 }
 
 export interface QueryBuilderWidgetState {
@@ -491,43 +491,27 @@ const WidgetPreview = React.memo(function WidgetPreview({ widget }: { widget: Da
 export function WidgetQueryBuilderPage({
   widget,
   onApply,
-  onDirtyChange,
   ref,
 }: WidgetQueryBuilderPageProps & { ref?: React.Ref<WidgetQueryBuilderPageHandle> }) {
-  // Core form state — single atom, no staged/cloned copy
-  const stateAtom = React.useMemo(() => Atom.make<QueryBuilderWidgetState>(toInitialState(widget)), [widget])
-  const [state, setState] = useAtom(stateAtom)
-  const initialRef = React.useRef(toInitialState(widget))
+  // Core form state — useState initializer runs once on mount.
+  // Component remounts on route change, so this is correct.
+  // Using useState (not Atom) prevents dashboard mutations from resetting form state.
+  const [state, setState] = React.useState<QueryBuilderWidgetState>(() => toInitialState(widget))
+  const initialJsonRef = React.useRef(JSON.stringify(toInitialState(widget)))
 
-  // Dirty = structurally different from initial
-  const isDirty = JSON.stringify(state) !== JSON.stringify(initialRef.current)
-  React.useEffect(() => {
-    onDirtyChange?.(isDirty)
-  }, [isDirty, onDirtyChange])
+  // Derived — no state needed
+  const validationError = React.useMemo(() => validateQueries(state), [state])
 
-  const validationErrorAtom = React.useMemo(() => Atom.make<string | null>(null), [])
-  const [validationError, setValidationError] = useAtom(validationErrorAtom)
+  const [activeAttributeKey, setActiveAttributeKey] = React.useState<string | null>(null)
+  const [activeResourceAttributeKey, setActiveResourceAttributeKey] = React.useState<string | null>(null)
 
-  // Collapsed queries tracked as Record (avoids Set type issues with atoms)
-  const collapsedAtom = React.useMemo(() => Atom.make<Record<string, true>>({}), [])
-  const [collapsed, setCollapsed] = useAtom(collapsedAtom)
-
-  const activeAttributeKeyAtom = React.useMemo(() => Atom.make<string | null>(null), [])
-  const [activeAttributeKey, setActiveAttributeKey] = useAtom(activeAttributeKeyAtom)
-
-  const activeResourceAttributeKeyAtom = React.useMemo(() => Atom.make<string | null>(null), [])
-  const [activeResourceAttributeKey, setActiveResourceAttributeKey] = useAtom(activeResourceAttributeKeyAtom)
-
-  // Metric search with built-in debounce — no manual setTimeout
-  const metricSearchAtom = React.useMemo(() => Atom.make(""), [])
-  const setMetricSearch = useAtom(metricSearchAtom)[1]
-  const debouncedMetricSearchAtom = React.useMemo(() => Atom.debounce(metricSearchAtom, 250), [metricSearchAtom])
-  const debouncedMetricSearch = useAtomValue(debouncedMetricSearchAtom)
+  const [metricSearch, setMetricSearch] = React.useState("")
+  const deferredMetricSearch = React.useDeferredValue(metricSearch)
 
   const { state: { resolvedTimeRange: resolvedTime } } = useDashboardTimeRange()
 
   const metricsResult = useAtomValue(
-    listMetricsResultAtom({ data: { limit: 100, search: debouncedMetricSearch || undefined } }),
+    listMetricsResultAtom({ data: { limit: 100, search: deferredMetricSearch || undefined } }),
   )
 
   const tracesFacetsResult = useAtomValue(
@@ -763,16 +747,8 @@ export function WidgetQueryBuilderPage({
     }
   }, [state, widget])
 
-  const runPreview = () => {
-    const error = validateQueries(state)
-    if (error) { setValidationError(error); return }
-    setValidationError(null)
-  }
-
   const applyChanges = () => {
-    const error = validateQueries(state)
-    if (error) { setValidationError(error); return }
-    setValidationError(null)
+    if (validationError) return
     onApply({
       visualization: state.visualization,
       dataSource: buildWidgetDataSource(widget, state, seriesFieldOptions),
@@ -780,7 +756,10 @@ export function WidgetQueryBuilderPage({
     })
   }
 
-  React.useImperativeHandle(ref, () => ({ apply: applyChanges }))
+  React.useImperativeHandle(ref, () => ({
+    apply: applyChanges,
+    isDirty: () => JSON.stringify(state) !== initialJsonRef.current,
+  }))
 
   const updateQuery = (
     id: string,
@@ -824,10 +803,6 @@ export function WidgetQueryBuilderPage({
           .map((query, index) => ({ ...query, name: queryLabel(index) })),
       }
     })
-    setCollapsed((prev) => {
-      const { [id]: _, ...rest } = prev
-      return rest
-    })
   }
 
   const addFormula = () => {
@@ -857,12 +832,6 @@ export function WidgetQueryBuilderPage({
       ...current,
       formulas: current.formulas.map((f) => (f.id === id ? updater(f) : f)),
     }))
-  }
-
-  const toggleCollapse = (id: string) => {
-    setCollapsed((prev) =>
-      prev[id] ? (({ [id]: _, ...rest }) => rest)(prev) : { ...prev, [id]: true as const },
-    )
   }
 
   return (
@@ -896,11 +865,6 @@ export function WidgetQueryBuilderPage({
                   setState((current) => ({ ...current, ...updates }))
                 }
               />
-              <div className="flex items-center gap-3 border-t pt-4">
-                <Button size="sm" onClick={runPreview}>
-                  Run Preview
-                </Button>
-              </div>
             </>
           ) : (
             <>
@@ -911,7 +875,6 @@ export function WidgetQueryBuilderPage({
                     key={query.id}
                     query={query}
                     index={index}
-                    collapsed={!!collapsed[query.id]}
                     canRemove={state.queries.length > 1}
                     metricSelectionOptions={metricSelectionOptions}
                     onMetricSearch={setMetricSearch}
@@ -921,7 +884,6 @@ export function WidgetQueryBuilderPage({
                     onUpdate={(updater) => updateQuery(query.id, updater)}
                     onClone={() => cloneQuery(query.id)}
                     onRemove={() => removeQuery(query.id)}
-                    onToggleCollapse={() => toggleCollapse(query.id)}
                     onDataSourceChange={(ds) =>
                       updateQuery(query.id, (current) =>
                         resetQueryForDataSource(current, ds)
@@ -952,9 +914,6 @@ export function WidgetQueryBuilderPage({
                 </Button>
                 <Button variant="outline" size="sm" onClick={addFormula}>
                   + Formula
-                </Button>
-                <Button size="sm" onClick={runPreview}>
-                  Run Preview
                 </Button>
                 <span className="text-[11px] text-muted-foreground ml-auto">
                   {state.queries.map((q) => q.name).join(", ")}
