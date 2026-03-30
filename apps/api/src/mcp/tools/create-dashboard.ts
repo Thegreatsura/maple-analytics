@@ -77,7 +77,7 @@ export function registerCreateDashboardTool(server: McpToolRegistrar) {
           )
 
         const lines: string[] = [
-          `=== Dashboard Created ===`,
+          `## Dashboard Created`,
           `ID: ${dashboard.id}`,
           `Name: ${dashboard.name}`,
           `Widgets: ${dashboard.widgets.length}`,

@@ -227,7 +227,7 @@ export function registerCreateAlertRuleTool(server: McpToolRegistrar) {
           )
 
         const lines: string[] = [
-          `=== Alert Rule Created ===`,
+          `## Alert Rule Created`,
           `ID: ${rule.id}`,
           `Name: ${rule.name}`,
           `Severity: ${rule.severity}`,
