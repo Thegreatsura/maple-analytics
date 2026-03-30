@@ -267,7 +267,7 @@ function formatQueryResult(
 
     if (result.data.length === 0) {
       lines.push("", "No data points found.")
-      return { content: createDualContent(lines.join("\n"), structuredData) }
+      return { content: createDualContent(lines.join("\n"), structuredData as any) }
     }
 
     const seriesKeys = [...new Set(result.data.flatMap((point) => Object.keys(point.series)))]
@@ -284,7 +284,7 @@ function formatQueryResult(
     ])
 
     lines.push(formatTable(headers, rows))
-    return { content: createDualContent(lines.join("\n"), structuredData) }
+    return { content: createDualContent(lines.join("\n"), structuredData as any) }
   }
 
   if (result.kind === "breakdown") {
@@ -308,7 +308,7 @@ function formatQueryResult(
 
     if (result.data.length === 0) {
       lines.push("", "No data found.")
-      return { content: createDualContent(lines.join("\n"), structuredData) }
+      return { content: createDualContent(lines.join("\n"), structuredData as any) }
     }
 
     if (groupBy) lines.push(`Grouped by: ${groupBy}`)
@@ -321,7 +321,7 @@ function formatQueryResult(
     ])
 
     lines.push(formatTable(headers, rows))
-    return { content: createDualContent(lines.join("\n"), structuredData) }
+    return { content: createDualContent(lines.join("\n"), structuredData as any) }
   }
 
   // list results

@@ -58,9 +58,19 @@ const MCP_TOOLS = [
       "Discover available metrics with type, service, description, and data point counts.",
   },
   {
-    name: "query_data",
+    name: "chart_traces",
     description:
-      "Execute supported structured queries across traces, logs, and metrics. Use list_metrics first for metric_name and metric_type; metrics breakdown supports avg, sum, and count grouped by service.",
+      "Generate timeseries or breakdown charts from trace data. Metrics: count, avg_duration, p50_duration, p95_duration, p99_duration, error_rate. Group by: service, span_name, status_code, http_method, attribute, or none.",
+  },
+  {
+    name: "chart_logs",
+    description:
+      "Generate timeseries or breakdown charts from log data. Metric is always count. Group by: service, severity, or none.",
+  },
+  {
+    name: "chart_metrics",
+    description:
+      "Generate timeseries or breakdown charts from custom metrics. Requires metric_name and metric_type. Aggregations: avg, sum, min, max, count. Group by: service, attribute, or none.",
   },
 ] as const
 

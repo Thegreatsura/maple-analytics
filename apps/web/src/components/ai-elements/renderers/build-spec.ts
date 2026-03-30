@@ -207,9 +207,12 @@ export function buildSpec(output: StructuredToolOutput): Spec {
       return { root, elements }
     }
 
-    case "query_data": {
+    case "chart_traces":
+    case "chart_logs":
+    case "chart_metrics": {
       const d = output.data
       const result = d.result
+      const sourceLabel = output.tool.replace("chart_", "")
 
       if (result.kind === "timeseries") {
         const allKeys = new Set<string>()
@@ -219,25 +222,25 @@ export function buildSpec(output: StructuredToolOutput): Spec {
           }
         }
         const headers = ["bucket", ...Array.from(allKeys)]
-        const rows = result.data.map((row) => [
+        const rows = result.data.map((row: { bucket: string; series: Record<string, number> }) => [
           row.bucket,
           ...Array.from(allKeys).map((k) => String(row.series[k] ?? 0)),
         ])
         const root = addElement(elements, "DataTable", {
           headers,
           rows,
-          title: `${d.metric} (${d.source})`,
+          title: `${d.metric} (${sourceLabel})`,
         })
         return { root, elements }
       }
 
       // breakdown
       const headers = ["Name", "Value"]
-      const rows = result.data.map((row) => [row.name, String(row.value)])
+      const rows = result.data.map((row: { name: string; value: number }) => [row.name, String(row.value)])
       const root = addElement(elements, "DataTable", {
         headers,
         rows,
-        title: `${d.metric} (${d.source})`,
+        title: `${d.metric} (${sourceLabel})`,
       })
       return { root, elements }
     }

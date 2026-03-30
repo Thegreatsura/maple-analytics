@@ -182,21 +182,34 @@ export interface ListMetricsData {
   metrics: MetricRow[]
 }
 
-export interface QueryDataData {
+export interface ChartTracesData {
   timeRange: { start: string; end: string }
-  source: string
   kind: string
   metric: string
   groupBy?: string
   result:
-    | {
-        kind: "timeseries"
-        data: Array<{ bucket: string; series: Record<string, number> }>
-      }
-    | {
-        kind: "breakdown"
-        data: Array<{ name: string; value: number }>
-      }
+    | { kind: "timeseries"; data: Array<{ bucket: string; series: Record<string, number> }> }
+    | { kind: "breakdown"; data: Array<{ name: string; value: number }> }
+}
+
+export interface ChartLogsData {
+  timeRange: { start: string; end: string }
+  kind: string
+  metric: string
+  groupBy?: string
+  result:
+    | { kind: "timeseries"; data: Array<{ bucket: string; series: Record<string, number> }> }
+    | { kind: "breakdown"; data: Array<{ name: string; value: number }> }
+}
+
+export interface ChartMetricsData {
+  timeRange: { start: string; end: string }
+  kind: string
+  metric: string
+  groupBy?: string
+  result:
+    | { kind: "timeseries"; data: Array<{ bucket: string; series: Record<string, number> }> }
+    | { kind: "breakdown"; data: Array<{ name: string; value: number }> }
 }
 
 // ---------------------------------------------------------------------------
@@ -291,7 +304,9 @@ export type StructuredToolOutput =
   | { tool: "search_logs"; data: SearchLogsData }
   | { tool: "diagnose_service"; data: DiagnoseServiceData }
   | { tool: "list_metrics"; data: ListMetricsData }
-  | { tool: "query_data"; data: QueryDataData }
+  | { tool: "chart_traces"; data: ChartTracesData }
+  | { tool: "chart_logs"; data: ChartLogsData }
+  | { tool: "chart_metrics"; data: ChartMetricsData }
   | { tool: "list_alert_rules"; data: ListAlertRulesData }
   | { tool: "list_alert_incidents"; data: ListAlertIncidentsData }
   | { tool: "create_alert_rule"; data: CreateAlertRuleData }

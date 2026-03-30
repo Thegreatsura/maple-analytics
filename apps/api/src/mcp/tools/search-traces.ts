@@ -7,13 +7,14 @@ import {
 import { queryTinybird } from "../lib/query-tinybird"
 import { resolveTimeRange } from "../lib/time"
 import { formatDurationMs, formatTable } from "../lib/format"
+import { formatNextSteps } from "../lib/next-steps"
 import { Effect, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
 
 export function registerSearchTracesTool(server: McpToolRegistrar) {
   server.tool(
     "search_traces",
-    "Search and filter traces by service, duration, error status, HTTP method, and more.",
+    "Search traces by service, duration, error status, HTTP method, or span name. Use inspect_trace on interesting trace_ids.",
     Schema.Struct({
       start_time: optionalStringParam("Start of time range (YYYY-MM-DD HH:mm:ss)"),
       end_time: optionalStringParam("End of time range (YYYY-MM-DD HH:mm:ss)"),
@@ -47,7 +48,7 @@ export function registerSearchTracesTool(server: McpToolRegistrar) {
         }
 
         const lines: string[] = [
-          `=== Traces (showing ${traces.length}) ===`,
+          `## Traces (showing ${traces.length})`,
           `Time range: ${st} — ${et}`,
           ``,
         ]
@@ -63,6 +64,11 @@ export function registerSearchTracesTool(server: McpToolRegistrar) {
         ])
 
         lines.push(formatTable(headers, rows))
+
+        const nextSteps = traces.slice(0, 3).map((t) =>
+          `\`inspect_trace trace_id="${t.traceId}"\` — full span tree`
+        )
+        lines.push(formatNextSteps(nextSteps))
 
         return {
           content: createDualContent(lines.join("\n"), {

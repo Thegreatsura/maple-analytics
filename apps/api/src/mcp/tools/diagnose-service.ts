@@ -7,13 +7,14 @@ import { queryTinybird } from "../lib/query-tinybird"
 import { getSpamPatternsParam } from "@/lib/spam-patterns"
 import { resolveTimeRange } from "../lib/time"
 import { formatDurationFromMs, formatPercent, formatNumber, truncate } from "../lib/format"
+import { formatNextSteps } from "../lib/next-steps"
 import { Effect, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
 
 export function registerDiagnoseServiceTool(server: McpToolRegistrar) {
   server.tool(
     "diagnose_service",
-    "Deep investigation of a single service: health metrics, top errors, recent logs, slow traces, and Apdex score.",
+    "Deep investigation of one service: health metrics, Apdex, top errors, recent traces and logs. Use after system_health identifies a problem service.",
     Schema.Struct({
       service_name: requiredStringParam("The service name to diagnose"),
       start_time: optionalStringParam("Start of time range (YYYY-MM-DD HH:mm:ss)"),
@@ -89,7 +90,7 @@ export function registerDiagnoseServiceTool(server: McpToolRegistrar) {
             : 0
 
         const lines: string[] = [
-          `=== Diagnosis: ${service_name} ===`,
+          `## Diagnosis: ${service_name}`,
           `Time range: ${st} — ${et}`,
           ``,
           `Health Metrics:`,
@@ -135,6 +136,18 @@ export function registerDiagnoseServiceTool(server: McpToolRegistrar) {
             lines.push(`  ${time} [${sev}] ${truncate(log.body, 100)}`)
           }
         }
+
+        const nextSteps: string[] = []
+        if (errorsResult.data.length > 0) {
+          nextSteps.push(`\`find_errors service="${service_name}"\` — see all error types`)
+        }
+        if (p95 > 500) {
+          nextSteps.push(`\`find_slow_traces service="${service_name}"\` — find slow traces`)
+        }
+        for (const t of tracesResult.data.filter((t) => Number(t.hasError)).slice(0, 2)) {
+          nextSteps.push(`\`inspect_trace trace_id="${t.traceId}"\` — inspect error trace`)
+        }
+        lines.push(formatNextSteps(nextSteps))
 
         return {
           content: createDualContent(lines.join("\n"), {

@@ -8,13 +8,14 @@ import { queryTinybird } from "../lib/query-tinybird"
 import { getSpamPatternsParam } from "@/lib/spam-patterns"
 import { resolveTimeRange } from "../lib/time"
 import { formatDurationMs, truncate } from "../lib/format"
+import { formatNextSteps } from "../lib/next-steps"
 import { Effect, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
 
 export function registerErrorDetailTool(server: McpToolRegistrar) {
   server.tool(
     "error_detail",
-    "Investigate a specific error type: shows sample traces with their metadata and correlated logs.",
+    "Get sample traces and correlated logs for a specific error type. Use inspect_trace on a trace_id for the full span tree.",
     Schema.Struct({
       error_type: requiredStringParam("The error type / StatusMessage to investigate"),
       start_time: optionalStringParam("Start of time range (YYYY-MM-DD HH:mm:ss)"),
@@ -51,7 +52,7 @@ export function registerErrorDetailTool(server: McpToolRegistrar) {
         )
 
         const lines: string[] = [
-          `=== Error Detail: "${truncate(error_type, 80)}" ===`,
+          `## Error Detail: "${truncate(error_type, 80)}"`,
           `Time range: ${st} — ${et}`,
           `Sample traces: ${traces.length}`,
           ``,
@@ -61,7 +62,7 @@ export function registerErrorDetailTool(server: McpToolRegistrar) {
           const t = traces[i]!
           const dur = formatDurationMs(t.durationMicros)
           lines.push(
-            `--- Trace ${i + 1}: ${t.traceId.slice(0, 16)}... ---`,
+            `### Trace ${i + 1}: ${t.traceId.slice(0, 16)}...`,
             `  Root span: ${t.rootSpanName}`,
             `  Duration: ${dur}`,
             `  Spans: ${Number(t.spanCount)}`,
@@ -92,6 +93,11 @@ export function registerErrorDetailTool(server: McpToolRegistrar) {
 
           lines.push(``)
         }
+
+        const nextSteps = traces.slice(0, 3).map((t) =>
+          `\`inspect_trace trace_id="${t.traceId}"\` — full span tree`
+        )
+        lines.push(formatNextSteps(nextSteps))
 
         return {
           content: createDualContent(lines.join("\n"), {

@@ -7,13 +7,14 @@ import { queryTinybird } from "../lib/query-tinybird"
 import { getSpamPatternsParam } from "@/lib/spam-patterns"
 import { resolveTimeRange } from "../lib/time"
 import { formatNumber, formatTable } from "../lib/format"
+import { formatNextSteps } from "../lib/next-steps"
 import { Effect, Schema } from "effect"
 import { createDualContent } from "../lib/structured-output"
 
 export function registerFindErrorsTool(server: McpToolRegistrar) {
   server.tool(
     "find_errors",
-    "Find and categorize errors by type, with counts, affected services, and timestamps.",
+    "Find and categorize errors by type with counts and affected services. Use error_detail to see sample traces for a specific error type.",
     Schema.Struct({
       start_time: optionalStringParam("Start of time range (YYYY-MM-DD HH:mm:ss)"),
       end_time: optionalStringParam("End of time range (YYYY-MM-DD HH:mm:ss)"),
@@ -37,7 +38,7 @@ export function registerFindErrorsTool(server: McpToolRegistrar) {
         }
 
         const lines: string[] = [
-          `=== Errors by Type (${st} — ${et}) ===`,
+          `## Errors by Type`,
           ``,
         ]
 
@@ -51,6 +52,13 @@ export function registerFindErrorsTool(server: McpToolRegistrar) {
 
         lines.push(formatTable(headers, rows))
         lines.push(``, `Total: ${result.data.length} error types`)
+
+        const nextSteps: string[] = []
+        for (const e of result.data.slice(0, 3)) {
+          const errorTypeShort = e.errorType.length > 50 ? e.errorType.slice(0, 47) + "..." : e.errorType
+          nextSteps.push(`\`error_detail error_type="${errorTypeShort}"\` — see sample traces and logs`)
+        }
+        lines.push(formatNextSteps(nextSteps))
 
         return {
           content: createDualContent(lines.join("\n"), {
