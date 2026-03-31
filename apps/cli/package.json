@@ -6,7 +6,7 @@
     "maple": "./src/bin.ts"
   },
   "scripts": {
-    "dev": "bun run src/bin.ts",
+    "start": "bun run src/bin.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
