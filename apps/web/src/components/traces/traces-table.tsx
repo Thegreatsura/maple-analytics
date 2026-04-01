@@ -150,7 +150,7 @@ function TracesTableContent({
         id: "rootSpan",
         header: "Root Span",
         cell: ({ row }) => (
-          <div className="flex flex-col">
+          <div className="flex flex-col min-w-0">
             <HttpSpanLabel
               spanName={row.original.rootSpan.name || row.original.rootSpanName || "Unknown"}
               spanAttributes={row.original.rootSpan.attributes}
@@ -330,7 +330,7 @@ function TracesTableContent({
                       key={cell.id}
                       className={`p-2 align-middle [&:has([role=checkbox])]:pr-0 ${
                         cell.column.id === "services" ? "hidden md:table-cell" : ""
-                      }`}
+                      }${cell.column.id === "rootSpan" ? " max-w-0" : ""}`}
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
