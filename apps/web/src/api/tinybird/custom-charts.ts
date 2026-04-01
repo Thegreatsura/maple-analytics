@@ -2,7 +2,6 @@ import { QueryEngineExecuteRequest, type MetricsMetric, type QuerySpec, type Tra
 import { Effect, Schema } from "effect"
 
 import { getTinybird } from "@/lib/tinybird"
-import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import {
   buildBucketTimeline,
   computeBucketSeconds,
@@ -10,8 +9,8 @@ import {
 } from "@/api/tinybird/timeseries-utils"
 import {
   TinybirdDateTimeString,
-  TinybirdApiError,
   decodeInput,
+  executeQueryEngine,
   invalidTinybirdInput,
   runTinybirdQuery,
 } from "@/api/tinybird/effect-utils"
@@ -38,6 +37,7 @@ function querySpanMetricsCalls(
   return Effect.gen(function* () {
     for (const metricName of SPANMETRICS_CALLS_CANDIDATES) {
       const response = yield* executeQueryEngine(
+        "queryEngine.spanMetricsCalls",
         new QueryEngineExecuteRequest({
           startTime: params.start_time ?? "2020-01-01 00:00:00",
           endTime: params.end_time ?? "2099-12-31 23:59:59",
@@ -78,9 +78,6 @@ function querySpanMetricsCalls(
   })
 }
 
-function toMessage(cause: unknown, fallback: string): string {
-  return cause instanceof Error ? cause.message : fallback
-}
 
 function sortByBucket<T extends { bucket: string }>(rows: T[]): T[] {
   return [...rows].sort((left, right) => left.bucket.localeCompare(right.bucket))
@@ -214,30 +211,6 @@ const tracesMetrics = new Set<TracesMetric>([
 const metricsMetrics = new Set<MetricsMetric>(["avg", "sum", "min", "max", "count", "rate", "increase"])
 const metricsBreakdownMetrics = new Set<"avg" | "sum" | "count">(["avg", "sum", "count"])
 
-function executeQueryEngine(payload: QueryEngineExecuteRequest) {
-  return executeQueryEngineEffect(payload).pipe(
-    Effect.provide(MapleApiAtomClient.layer),
-    Effect.mapError(
-      (cause) =>
-        new TinybirdApiError({
-          operation: "queryEngine.execute",
-          stage: "query",
-          message: toMessage(cause, "Query engine request failed"),
-          cause,
-        }),
-    ),
-  )
-}
-
-const executeQueryEngineEffect = Effect.fn("Tinybird.executeQueryEngine")(
-  function* (payload: QueryEngineExecuteRequest) {
-    const client = yield* MapleApiAtomClient
-    return yield* client.queryEngine.execute({
-      payload: new QueryEngineExecuteRequest(payload),
-    })
-  },
-)
-
 function buildTimeseriesQuerySpec(data: CustomChartTimeSeriesInput): QuerySpec | string {
   if (data.source === "traces") {
     if (!tracesMetrics.has(data.metric as TracesMetric)) {
@@ -353,7 +326,7 @@ const getCustomChartTimeSeriesEffect = Effect.fn("Tinybird.getCustomChartTimeSer
       "getCustomChartTimeSeries.request",
     )
 
-    const response = yield* executeQueryEngine(request)
+    const response = yield* executeQueryEngine("queryEngine.customChartTimeSeries", request)
     if (response.result.kind !== "timeseries") {
       return yield* invalidTinybirdInput(
         "getCustomChartTimeSeries",
@@ -509,7 +482,7 @@ const getCustomChartBreakdownEffect = Effect.fn("Tinybird.getCustomChartBreakdow
       "getCustomChartBreakdown.request",
     )
 
-    const response = yield* executeQueryEngine(request)
+    const response = yield* executeQueryEngine("queryEngine.customChartBreakdown", request)
     if (response.result.kind !== "breakdown") {
       return yield* invalidTinybirdInput(
         "getCustomChartBreakdown",

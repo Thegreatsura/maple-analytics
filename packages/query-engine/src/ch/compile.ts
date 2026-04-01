@@ -62,6 +62,7 @@ export function compileCH<
     groupBy: state.groupByKeys.map((k) => raw(k)),
     orderBy: state.orderBySpecs.map(([k, dir]) => raw(`${k} ${dir.toUpperCase()}`)),
     limit: state.limitValue != null ? raw(String(Math.round(state.limitValue))) : undefined,
+    offset: state.offsetValue != null ? raw(String(Math.round(state.offsetValue))) : undefined,
     format: state.formatValue,
   }
 

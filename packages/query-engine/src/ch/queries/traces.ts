@@ -170,14 +170,31 @@ function buildWhereConditions(
   opts: TracesQueryOpts,
   useTraceListMv: boolean,
 ): Array<CH.Condition | undefined> {
+  const mm = opts.matchModes
   const conditions: Array<CH.Condition | undefined> = [
     $.OrgId.eq(param.string("orgId")),
     $.Timestamp.gte(param.dateTime("startTime")),
     $.Timestamp.lte(param.dateTime("endTime")),
-    CH.when(opts.serviceName, (v: string) => $.ServiceName.eq(v)),
-    CH.when(opts.spanName, (v: string) => $.SpanName.eq(v)),
+    CH.when(opts.serviceName, (v: string) =>
+      mm?.serviceName === "contains"
+        ? CH.rawCond(`positionCaseInsensitive(ServiceName, ${compile(str(v))}) > 0`)
+        : $.ServiceName.eq(v),
+    ),
+    CH.when(opts.spanName, (v: string) =>
+      mm?.spanName === "contains"
+        ? CH.rawCond(`positionCaseInsensitive(SpanName, ${compile(str(v))}) > 0`)
+        : $.SpanName.eq(v),
+    ),
     CH.whenTrue(!!opts.rootOnly && !useTraceListMv, () => CH.rawCond("ParentSpanId = ''")),
   ]
+
+  // Duration filters (Duration column is nanoseconds in both MV and raw table)
+  if (opts.minDurationMs != null) {
+    conditions.push(CH.rawCond(`Duration >= ${opts.minDurationMs} * 1000000`))
+  }
+  if (opts.maxDurationMs != null) {
+    conditions.push(CH.rawCond(`Duration <= ${opts.maxDurationMs} * 1000000`))
+  }
 
   if (opts.errorsOnly) {
     if (useTraceListMv) {
@@ -188,7 +205,10 @@ function buildWhereConditions(
   }
 
   if (opts.environments?.length) {
-    if (useTraceListMv) {
+    if (mm?.deploymentEnv === "contains" && opts.environments.length === 1) {
+      const envCol = useTraceListMv ? "DeploymentEnv" : "ResourceAttributes['deployment.environment']"
+      conditions.push(CH.rawCond(`positionCaseInsensitive(${envCol}, ${compile(str(opts.environments[0]))}) > 0`))
+    } else if (useTraceListMv) {
       conditions.push(CH.inList(CH.rawExpr<string>("DeploymentEnv"), opts.environments))
     } else {
       conditions.push(CH.inList(CH.rawExpr<string>("ResourceAttributes['deployment.environment']"), opts.environments))
@@ -218,6 +238,12 @@ function buildWhereConditions(
 // Shared options interface
 // ---------------------------------------------------------------------------
 
+interface TracesMatchModes {
+  serviceName?: "contains"
+  spanName?: "contains"
+  deploymentEnv?: "contains"
+}
+
 interface TracesQueryOpts {
   serviceName?: string
   spanName?: string
@@ -225,6 +251,9 @@ interface TracesQueryOpts {
   errorsOnly?: boolean
   environments?: readonly string[]
   commitShas?: readonly string[]
+  minDurationMs?: number
+  maxDurationMs?: number
+  matchModes?: TracesMatchModes
   attributeFilters?: readonly AttributeFilter[]
   resourceAttributeFilters?: readonly AttributeFilter[]
 }
@@ -338,6 +367,7 @@ export function tracesBreakdownQuery(
 
 export interface TracesListOpts extends TracesQueryOpts {
   limit?: number
+  offset?: number
 }
 
 export interface TracesListOutput {
@@ -358,9 +388,10 @@ export function tracesListQuery(
   opts: TracesListOpts,
 ): CHQuery<any, TracesListOutput, { orgId: string; startTime: string; endTime: string }> {
   const limit = opts.limit ?? 100
+  const offset = opts.offset ?? 0
 
   // List queries always use the raw traces table for full attributes
-  return from(Traces)
+  let q = from(Traces)
     .select(($) => ({
       traceId: $.TraceId,
       timestamp: $.Timestamp,
@@ -379,4 +410,80 @@ export function tracesListQuery(
     .limit(limit)
     .format("JSON")
     .withParams<{ orgId: string; startTime: string; endTime: string }>()
+
+  if (offset > 0) {
+    q = q.offset(offset)
+  }
+
+  return q
+}
+
+// ---------------------------------------------------------------------------
+// Root trace list query (aggregated root-span-level, for trace list UI)
+// ---------------------------------------------------------------------------
+
+export interface TracesRootListOpts extends TracesQueryOpts {
+  limit?: number
+  offset?: number
+}
+
+export interface TracesRootListOutput {
+  readonly traceId: string
+  readonly startTime: string
+  readonly endTime: string
+  readonly durationMicros: number
+  readonly spanCount: number
+  readonly services: string[]
+  readonly rootSpanName: string
+  readonly rootSpanKind: string
+  readonly rootSpanStatusCode: string
+  readonly rootHttpMethod: string
+  readonly rootHttpRoute: string
+  readonly rootHttpStatusCode: string
+  readonly hasError: number
+}
+
+export function tracesRootListQuery(
+  opts: TracesRootListOpts,
+): CHQuery<any, TracesRootListOutput, { orgId: string; startTime: string; endTime: string }> {
+  const limit = opts.limit ?? 100
+  const offset = opts.offset ?? 0
+  const useTraceListMv = canUseTraceListMv({ ...opts, rootOnly: true })
+  const tbl = useTraceListMv ? TraceListMv : Traces
+
+  let q = from(tbl as typeof Traces)
+    .select(($) => ({
+      traceId: $.TraceId,
+      startTime: $.Timestamp,
+      endTime: $.Timestamp,
+      durationMicros: CH.rawExpr<number>("intDiv(Duration, 1000)"),
+      spanCount: CH.rawExpr<number>("toUInt64(1)"),
+      services: CH.rawExpr<string[]>("[ServiceName]"),
+      rootSpanName: $.SpanName,
+      rootSpanKind: $.SpanKind,
+      rootSpanStatusCode: $.StatusCode,
+      rootHttpMethod: useTraceListMv
+        ? CH.rawExpr<string>("HttpMethod")
+        : CH.rawExpr<string>("SpanAttributes['http.method']"),
+      rootHttpRoute: useTraceListMv
+        ? CH.rawExpr<string>("HttpRoute")
+        : CH.rawExpr<string>("SpanAttributes['http.route']"),
+      rootHttpStatusCode: useTraceListMv
+        ? CH.rawExpr<string>("HttpStatusCode")
+        : CH.rawExpr<string>("SpanAttributes['http.status_code']"),
+      hasError: useTraceListMv
+        ? CH.rawExpr<number>("HasError")
+        : CH.rawExpr<number>("if(StatusCode = 'Error', 1, 0)"),
+    }))
+    .where(($) => buildWhereConditions($, { ...opts, rootOnly: true }, useTraceListMv))
+    .orderBy(["startTime", "desc"])
+    .limit(limit)
+    .format("JSON")
+    .withParams<{ orgId: string; startTime: string; endTime: string }>()
+
+  if (offset > 0) {
+    q = q.offset(offset)
+  }
+
+  return q
 }

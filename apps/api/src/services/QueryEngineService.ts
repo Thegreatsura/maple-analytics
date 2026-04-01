@@ -828,20 +828,62 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
     }
 
     if (request.query.source === "traces" && request.query.kind === "list") {
+      type AttrFilterArray = Array<{ key: string; value?: string; mode: "equals" | "exists" | "gt" | "gte" | "lt" | "lte" | "contains" }>
+      const filters = request.query.filters
+      const sharedOpts = {
+        limit: request.query.limit,
+        offset: request.query.offset,
+        serviceName: filters?.serviceName,
+        spanName: filters?.spanName,
+        rootOnly: filters?.rootSpansOnly,
+        errorsOnly: filters?.errorsOnly,
+        environments: filters?.environments as string[] | undefined,
+        commitShas: filters?.commitShas as string[] | undefined,
+        minDurationMs: filters?.minDurationMs,
+        maxDurationMs: filters?.maxDurationMs,
+        matchModes: filters?.matchModes as { serviceName?: "contains"; spanName?: "contains"; deploymentEnv?: "contains" } | undefined,
+        attributeFilters: filters?.attributeFilters as AttrFilterArray | undefined,
+        resourceAttributeFilters: filters?.resourceAttributeFilters as AttrFilterArray | undefined,
+      }
+
+      // Root-aggregated query for trace list UI
+      if (filters?.rootSpansOnly) {
+        const rows = yield* executeCHQuery(
+          tinybird,
+          tenant,
+          CH.tracesRootListQuery(sharedOpts),
+          { orgId: tenant.orgId, startTime: request.startTime, endTime: request.endTime },
+          "Failed to execute traces root list query",
+        )
+
+        return new QueryEngineExecuteResponse({
+          result: {
+            kind: "list",
+            source: "traces",
+            data: rows.map((row) => ({
+              traceId: row.traceId,
+              startTime: String(row.startTime),
+              endTime: String(row.endTime),
+              durationMicros: Number(row.durationMicros),
+              spanCount: Number(row.spanCount),
+              services: row.services,
+              rootSpanName: row.rootSpanName,
+              rootSpanKind: row.rootSpanKind,
+              rootSpanStatusCode: row.rootSpanStatusCode,
+              rootHttpMethod: row.rootHttpMethod ?? "",
+              rootHttpRoute: row.rootHttpRoute ?? "",
+              rootHttpStatusCode: row.rootHttpStatusCode ?? "",
+              hasError: Number(row.hasError),
+            })),
+          },
+        })
+      }
+
+      // Span-level list query (existing behavior)
       const rows = yield* executeCHQuery(
         tinybird,
         tenant,
-        CH.tracesListQuery({
-          limit: request.query.limit,
-          serviceName: request.query.filters?.serviceName,
-          spanName: request.query.filters?.spanName,
-          rootOnly: request.query.filters?.rootSpansOnly,
-          errorsOnly: request.query.filters?.errorsOnly,
-          environments: request.query.filters?.environments as string[] | undefined,
-          commitShas: request.query.filters?.commitShas as string[] | undefined,
-          attributeFilters: request.query.filters?.attributeFilters as Array<{ key: string; value?: string; mode: "equals" | "exists" | "gt" | "gte" | "lt" | "lte" | "contains" }> | undefined,
-          resourceAttributeFilters: request.query.filters?.resourceAttributeFilters as Array<{ key: string; value?: string; mode: "equals" | "exists" | "gt" | "gte" | "lt" | "lte" | "contains" }> | undefined,
-        }),
+        CH.tracesListQuery(sharedOpts),
         { orgId: tenant.orgId, startTime: request.startTime, endTime: request.endTime },
         "Failed to execute traces list query",
       )

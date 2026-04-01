@@ -1,4 +1,4 @@
-import { TinybirdDateTime } from "@maple/query-engine"
+import { TinybirdDateTime, QueryEngineExecuteRequest } from "@maple/query-engine"
 import { Effect, Schema } from "effect"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 
@@ -65,5 +65,31 @@ export function invalidTinybirdInput(
       stage: "invalid",
       message,
     }),
+  )
+}
+
+const executeQueryEngineEffect = Effect.fn("QueryEngine.execute")(
+  function* (payload: QueryEngineExecuteRequest) {
+    const client = yield* MapleApiAtomClient
+    return yield* client.queryEngine.execute({
+      payload: new QueryEngineExecuteRequest(payload),
+    })
+  },
+)
+
+export function executeQueryEngine(operation: string, payload: QueryEngineExecuteRequest) {
+  return executeQueryEngineEffect(payload).pipe(
+    Effect.provide(MapleApiAtomClient.layer),
+    Effect.mapError(
+      (cause) =>
+        cause instanceof TinybirdApiError
+          ? cause
+          : new TinybirdApiError({
+              operation,
+              stage: "query",
+              message: toMessage(cause, "Query engine request failed"),
+              cause,
+            }),
+    ),
   )
 }

@@ -51,6 +51,7 @@ export interface CHQueryState {
   readonly groupByKeys: string[]
   readonly orderBySpecs: Array<[string, "asc" | "desc"]>
   readonly limitValue?: number
+  readonly offsetValue?: number
   readonly formatValue?: string
 }
 
@@ -81,6 +82,8 @@ export interface CHQuery<
   orderBy(...specs: Array<OrderBySpec<Output>>): CHQuery<Cols, Output, Params>
 
   limit(n: number): CHQuery<Cols, Output, Params>
+
+  offset(n: number): CHQuery<Cols, Output, Params>
 
   format(fmt: "JSON" | "JSONEachRow"): CHQuery<Cols, Output, Params>
 
@@ -141,6 +144,10 @@ function makeQuery<
 
     limit(n) {
       return makeQuery({ ...state, limitValue: n })
+    },
+
+    offset(n) {
+      return makeQuery({ ...state, offsetValue: n })
     },
 
     format(fmt) {

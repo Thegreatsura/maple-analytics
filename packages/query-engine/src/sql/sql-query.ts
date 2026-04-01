@@ -12,6 +12,7 @@ export interface SqlQuery {
   readonly groupBy: ReadonlyArray<SqlFragment>
   readonly orderBy: ReadonlyArray<SqlFragment>
   readonly limit?: SqlFragment
+  readonly offset?: SqlFragment
   readonly format?: string
 }
 
@@ -48,6 +49,11 @@ export function compileQuery(q: SqlQuery): string {
   // LIMIT
   if (q.limit) {
     parts.push(`LIMIT ${compile(q.limit)}`)
+  }
+
+  // OFFSET
+  if (q.offset) {
+    parts.push(`OFFSET ${compile(q.offset)}`)
   }
 
   // FORMAT

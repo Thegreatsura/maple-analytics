@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect"
+import { QueryEngineExecuteRequest, type AttributeFilter } from "@maple/query-engine"
 import {
   getTinybird,
   type ListTracesOutput,
@@ -8,7 +9,9 @@ import {
 } from "@/lib/tinybird"
 import {
   TinybirdDateTimeString,
+  TinybirdApiError,
   decodeInput,
+  executeQueryEngine,
   runTinybirdQuery,
 } from "@/api/tinybird/effect-utils"
 import { getHttpInfo, type HttpInfo } from "@maple/ui/lib/http"
@@ -166,6 +169,174 @@ const listTracesEffect = Effect.fn("Tinybird.listTraces")(function* ({
         offset,
       },
     }
+})
+
+// ---------------------------------------------------------------------------
+// Query Engine-based trace list
+// ---------------------------------------------------------------------------
+
+function buildAttributeFilters(input: ListTracesInput): AttributeFilter[] {
+  const filters: AttributeFilter[] = []
+
+  if (input.httpMethod) {
+    filters.push({ key: "http.method", value: input.httpMethod, mode: "equals" })
+  }
+  if (input.httpStatusCode) {
+    filters.push({ key: "http.status_code", value: input.httpStatusCode, mode: "equals" })
+  }
+  if (input.attributeKey && input.attributeValue) {
+    filters.push({
+      key: input.attributeKey,
+      value: input.attributeValue,
+      mode: input.attributeValueMatchMode === "contains" ? "contains" : "equals",
+    })
+  }
+
+  return filters
+}
+
+function buildResourceAttributeFilters(input: ListTracesInput): AttributeFilter[] {
+  const filters: AttributeFilter[] = []
+
+  if (input.resourceAttributeKey && input.resourceAttributeValue) {
+    filters.push({
+      key: input.resourceAttributeKey,
+      value: input.resourceAttributeValue,
+      mode: input.resourceAttributeValueMatchMode === "contains" ? "contains" : "equals",
+    })
+  }
+
+  return filters
+}
+
+/** Transform a root-level list row (from tracesRootListQuery / trace_list_mv) */
+function transformRootListRow(row: Record<string, unknown>): Trace {
+  const rootSpanAttributes: Record<string, string> = {}
+  if (row.rootHttpMethod) rootSpanAttributes["http.method"] = String(row.rootHttpMethod)
+  if (row.rootHttpRoute) rootSpanAttributes["http.route"] = String(row.rootHttpRoute)
+  if (row.rootHttpStatusCode) rootSpanAttributes["http.status_code"] = String(row.rootHttpStatusCode)
+
+  return {
+    traceId: String(row.traceId),
+    startTime: String(row.startTime),
+    endTime: String(row.endTime),
+    durationMs: Number(row.durationMicros) / 1000,
+    spanCount: Number(row.spanCount),
+    services: (row.services as string[]) ?? [],
+    rootSpan: {
+      name: String(row.rootSpanName),
+      kind: String(row.rootSpanKind),
+      statusCode: String(row.rootSpanStatusCode),
+      attributes: rootSpanAttributes,
+      http: getHttpInfo(String(row.rootSpanName), rootSpanAttributes),
+    },
+    rootSpanName: String(row.rootSpanName),
+    hasError: Number(row.hasError) === 1,
+  }
+}
+
+/** Transform a span-level list row (from tracesListQuery / raw traces table) */
+function transformSpanListRow(row: Record<string, unknown>): Trace {
+  const spanAttrs = (row.spanAttributes ?? {}) as Record<string, string>
+  const rootSpanAttributes: Record<string, string> = {}
+  if (spanAttrs["http.method"]) rootSpanAttributes["http.method"] = spanAttrs["http.method"]
+  if (spanAttrs["http.route"]) rootSpanAttributes["http.route"] = spanAttrs["http.route"]
+  if (spanAttrs["http.status_code"]) rootSpanAttributes["http.status_code"] = spanAttrs["http.status_code"]
+
+  const timestamp = String(row.timestamp)
+  return {
+    traceId: String(row.traceId),
+    startTime: timestamp,
+    endTime: timestamp,
+    durationMs: Number(row.durationMs),
+    spanCount: 1,
+    services: [String(row.serviceName)],
+    rootSpan: {
+      name: String(row.spanName),
+      kind: String(row.spanKind),
+      statusCode: String(row.statusCode),
+      attributes: rootSpanAttributes,
+      http: getHttpInfo(String(row.spanName), rootSpanAttributes),
+    },
+    rootSpanName: String(row.spanName),
+    hasError: row.hasError === true || row.hasError === 1,
+  }
+}
+
+export function listTracesViaQueryEngine({
+  data,
+}: {
+  data: ListTracesInput
+}) {
+  return listTracesViaQueryEngineEffect({ data })
+}
+
+const listTracesViaQueryEngineEffect = Effect.fn("QueryEngine.listTraces")(function* ({
+  data,
+}: {
+  data: ListTracesInput
+}) {
+  const input = yield* decodeInput(ListTracesInputSchema, data ?? {}, "listTracesViaQueryEngine")
+  const limit = input.limit ?? DEFAULT_LIMIT
+  const offset = input.offset ?? DEFAULT_OFFSET
+
+  const attributeFilters = buildAttributeFilters(input)
+  const resourceAttributeFilters = buildResourceAttributeFilters(input)
+
+  const matchModes: Record<string, string> = {}
+  if (input.serviceMatchMode === "contains") matchModes.serviceName = "contains"
+  if (input.spanNameMatchMode === "contains") matchModes.spanName = "contains"
+  if (input.deploymentEnvMatchMode === "contains") matchModes.deploymentEnv = "contains"
+
+  const rootOnly = input.rootOnly ?? true
+
+  if (input.service) yield* Effect.annotateCurrentSpan("service", input.service)
+  yield* Effect.annotateCurrentSpan("rootOnly", rootOnly)
+  yield* Effect.annotateCurrentSpan("limit", limit)
+
+  const request = new QueryEngineExecuteRequest({
+    startTime: input.startTime ?? "2020-01-01 00:00:00",
+    endTime: input.endTime ?? "2099-12-31 23:59:59",
+    query: {
+      kind: "list" as const,
+      source: "traces" as const,
+      limit,
+      offset,
+      filters: {
+        serviceName: input.service,
+        spanName: input.spanName,
+        rootSpansOnly: rootOnly,
+        errorsOnly: input.hasError,
+        environments: input.deploymentEnv ? [input.deploymentEnv] : undefined,
+        minDurationMs: input.minDurationMs,
+        maxDurationMs: input.maxDurationMs,
+        matchModes: Object.keys(matchModes).length > 0 ? matchModes : undefined,
+        attributeFilters: attributeFilters.length > 0 ? attributeFilters : undefined,
+        resourceAttributeFilters: resourceAttributeFilters.length > 0 ? resourceAttributeFilters : undefined,
+      },
+    },
+  })
+
+  const response = yield* executeQueryEngine("queryEngine.listTraces", request)
+
+  if (response.result.kind !== "list") {
+    return yield* Effect.fail(
+      new TinybirdApiError({
+        operation: "queryEngine.listTraces",
+        stage: "transform",
+        message: `Unexpected result kind from query engine: ${response.result.kind}`,
+      }),
+    )
+  }
+
+  const traces = rootOnly
+    ? response.result.data.map(transformRootListRow)
+    : response.result.data.map(transformSpanListRow)
+
+  return {
+    data: traces,
+    meta: { limit, offset },
+  }
 })
 
 export interface Span {

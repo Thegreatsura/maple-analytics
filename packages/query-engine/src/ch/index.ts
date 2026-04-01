@@ -74,12 +74,15 @@ export {
   tracesTimeseriesQuery,
   tracesBreakdownQuery,
   tracesListQuery,
+  tracesRootListQuery,
   type TracesTimeseriesOpts,
   type TracesBreakdownOpts,
   type TracesListOpts,
+  type TracesRootListOpts,
   type TracesTimeseriesOutput,
   type TracesBreakdownOutput,
   type TracesListOutput,
+  type TracesRootListOutput,
 } from "./queries/traces"
 
 // Queries — Metrics

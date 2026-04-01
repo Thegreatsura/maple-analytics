@@ -23,7 +23,7 @@ import {
   getServiceReleasesTimeline,
   getServicesFacets,
 } from "@/api/tinybird/services"
-import { getResourceAttributeKeys, getResourceAttributeValues, getSpanAttributeKeys, getSpanAttributeValues, getSpanHierarchy, getTracesFacets, listTraces } from "@/api/tinybird/traces"
+import { getResourceAttributeKeys, getResourceAttributeValues, getSpanAttributeKeys, getSpanAttributeValues, getSpanHierarchy, getTracesFacets, listTracesViaQueryEngine } from "@/api/tinybird/traces"
 import { getQueryBuilderTimeseries } from "@/api/tinybird/query-builder-timeseries"
 
 type QueryEffect<Input, Output> = (input: Input) => Effect.Effect<Output, unknown, unknown>
@@ -122,7 +122,7 @@ export const getCustomChartServiceSparklinesResultAtom = makeQueryAtomFamily(
   },
 )
 
-export const listTracesResultAtom = makeQueryAtomFamily(listTraces, {
+export const listTracesResultAtom = makeQueryAtomFamily(listTracesViaQueryEngine, {
   staleTime: 30_000,
 })
 

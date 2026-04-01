@@ -39,6 +39,13 @@ export const AttributeFilter = Schema.Struct({
 })
 export type AttributeFilter = Schema.Schema.Type<typeof AttributeFilter>
 
+export const TracesMatchModes = Schema.Struct({
+  serviceName: Schema.optional(Schema.Literals(["contains"])),
+  spanName: Schema.optional(Schema.Literals(["contains"])),
+  deploymentEnv: Schema.optional(Schema.Literals(["contains"])),
+})
+export type TracesMatchModes = Schema.Schema.Type<typeof TracesMatchModes>
+
 export const TracesFilters = Schema.Struct({
   serviceName: Schema.optional(Schema.String),
   spanName: Schema.optional(Schema.String),
@@ -47,6 +54,9 @@ export const TracesFilters = Schema.Struct({
   commitShas: Schema.optional(Schema.Array(Schema.String)),
   groupByAttributeKeys: Schema.optional(Schema.Array(Schema.String)),
   errorsOnly: Schema.optional(Schema.Boolean),
+  minDurationMs: Schema.optional(Schema.Number),
+  maxDurationMs: Schema.optional(Schema.Number),
+  matchModes: Schema.optional(TracesMatchModes),
   attributeFilters: Schema.optional(Schema.Array(AttributeFilter)),
   resourceAttributeFilters: Schema.optional(Schema.Array(AttributeFilter)),
 })
@@ -181,6 +191,12 @@ export const TracesListQuery = Schema.Struct({
       Schema.isInt(),
       Schema.isGreaterThan(0),
       Schema.isLessThanOrEqualTo(1000),
+    ),
+  ),
+  offset: Schema.optional(
+    Schema.Number.check(
+      Schema.isInt(),
+      Schema.isGreaterThanOrEqualTo(0),
     ),
   ),
 })
