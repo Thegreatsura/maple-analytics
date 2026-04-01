@@ -23,16 +23,17 @@ export function decodeInput<S extends Schema.Top & { readonly DecodingServices: 
   input: unknown,
   operation: string,
 ): Effect.Effect<S["Type"], TinybirdApiError> {
-  return Effect.try({
-    try: () => Schema.decodeUnknownSync(schema)(input),
-    catch: (cause) =>
-      new TinybirdApiError({
-        operation,
-        stage: "decode",
-        message: toMessage(cause, `Invalid input for ${operation}`),
-        cause,
-      }),
-  })
+  return Schema.decodeUnknownEffect(schema)(input).pipe(
+    Effect.mapError(
+      (cause) =>
+        new TinybirdApiError({
+          operation,
+          stage: "decode",
+          message: toMessage(cause, `Invalid input for ${operation}`),
+          cause,
+        }),
+    ),
+  )
 }
 
 export function runTinybirdQuery<A>(
@@ -40,6 +41,7 @@ export function runTinybirdQuery<A>(
   execute: () => Effect.Effect<A, unknown, MapleApiAtomClient>,
 ): Effect.Effect<A, TinybirdApiError> {
   return Effect.suspend(execute).pipe(
+    Effect.withSpan(operation),
     Effect.provide(MapleApiAtomClient.layer),
     Effect.mapError(
       (cause) =>
@@ -71,9 +73,7 @@ export function invalidTinybirdInput(
 const executeQueryEngineEffect = Effect.fn("QueryEngine.execute")(
   function* (payload: QueryEngineExecuteRequest) {
     const client = yield* MapleApiAtomClient
-    return yield* client.queryEngine.execute({
-      payload: new QueryEngineExecuteRequest(payload),
-    })
+    return yield* client.queryEngine.execute({ payload })
   },
 )
 

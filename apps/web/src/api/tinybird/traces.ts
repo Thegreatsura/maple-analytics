@@ -135,6 +135,11 @@ const listTracesEffect = Effect.fn("Tinybird.listTraces")(function* ({
     const limit = input.limit ?? DEFAULT_LIMIT
     const offset = input.offset ?? DEFAULT_OFFSET
 
+    yield* Effect.annotateCurrentSpan("limit", limit)
+    yield* Effect.annotateCurrentSpan("offset", offset)
+    if (input.service) yield* Effect.annotateCurrentSpan("service", input.service)
+    if (input.hasError) yield* Effect.annotateCurrentSpan("hasError", input.hasError)
+
     const tinybird = getTinybird()
     const result = yield* runTinybirdQuery("list_traces", () =>
       tinybird.query.list_traces({
@@ -376,8 +381,12 @@ export type GetSpanHierarchyInput = Schema.Schema.Type<typeof GetSpanHierarchyIn
 
 function parseAttributes(value: string | null | undefined): Record<string, string> {
   if (!value) return {}
-  const parsed = JSON.parse(value)
-  return parsed && typeof parsed === "object" ? (parsed as Record<string, string>) : {}
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, string>) : {}
+  } catch {
+    return {}
+  }
 }
 
 function transformSpan(raw: SpanHierarchyOutput): Span {
@@ -485,6 +494,10 @@ const getSpanHierarchyEffect = Effect.fn("Tinybird.getSpanHierarchy")(function* 
   data: GetSpanHierarchyInput
 }) {
     const input = yield* decodeInput(GetSpanHierarchyInputSchema, data, "getSpanHierarchy")
+
+    yield* Effect.annotateCurrentSpan("traceId", input.traceId)
+    if (input.spanId) yield* Effect.annotateCurrentSpan("spanId", input.spanId)
+
     const tinybird = getTinybird()
 
     const result = yield* runTinybirdQuery("span_hierarchy", () =>
@@ -567,36 +580,9 @@ function transformFacets(
   facetsData: TracesFacetsOutput[],
   durationStatsData: TracesDurationStatsOutput[],
 ): TracesFacets {
-  const services: FacetItem[] = []
-  const spanNames: FacetItem[] = []
-  const httpMethods: FacetItem[] = []
-  const httpStatusCodes: FacetItem[] = []
-  const deploymentEnvs: FacetItem[] = []
-  let errorCount = 0
-
-  for (const row of facetsData) {
-    const item = { name: row.name, count: Number(row.count) }
-    switch (row.facetType) {
-      case "service":
-        services.push(item)
-        break
-      case "spanName":
-        spanNames.push(item)
-        break
-      case "httpMethod":
-        httpMethods.push(item)
-        break
-      case "httpStatus":
-        httpStatusCodes.push(item)
-        break
-      case "deploymentEnv":
-        deploymentEnvs.push(item)
-        break
-      case "errorCount":
-        errorCount = Number(row.count)
-        break
-    }
-  }
+  const toItem = (row: TracesFacetsOutput): FacetItem => ({ name: row.name, count: Number(row.count) })
+  const byType = (type: string) => facetsData.filter((r) => r.facetType === type).map(toItem)
+  const errorRow = facetsData.find((r) => r.facetType === "errorCount")
 
   const durationStats = durationStatsData[0]
     ? {
@@ -608,12 +594,12 @@ function transformFacets(
     : { minDurationMs: 0, maxDurationMs: 0, p50DurationMs: 0, p95DurationMs: 0 }
 
   return {
-    services,
-    spanNames,
-    httpMethods,
-    httpStatusCodes,
-    deploymentEnvs,
-    errorCount,
+    services: byType("service"),
+    spanNames: byType("spanName"),
+    httpMethods: byType("httpMethod"),
+    httpStatusCodes: byType("httpStatus"),
+    deploymentEnvs: byType("deploymentEnv"),
+    errorCount: errorRow ? Number(errorRow.count) : 0,
     durationStats,
   }
 }
@@ -632,6 +618,9 @@ const getTracesFacetsEffect = Effect.fn("Tinybird.getTracesFacets")(function* ({
   data: GetTracesFacetsInput
 }) {
     const input = yield* decodeInput(GetTracesFacetsInputSchema, data ?? {}, "getTracesFacets")
+
+    if (input.service) yield* Effect.annotateCurrentSpan("service", input.service)
+
     const tinybird = getTinybird()
 
     const [facetsResult, durationStatsResult] = yield* Effect.all([
@@ -814,6 +803,8 @@ const getSpanAttributeValuesEffect = Effect.fn("Tinybird.getSpanAttributeValues"
       "getSpanAttributeValues",
     )
 
+    yield* Effect.annotateCurrentSpan("attributeKey", input.attributeKey)
+
     if (!input.attributeKey) {
       return { data: [] }
     }
@@ -912,6 +903,8 @@ const getResourceAttributeValuesEffect = Effect.fn("Tinybird.getResourceAttribut
       data ?? {},
       "getResourceAttributeValues",
     )
+
+    yield* Effect.annotateCurrentSpan("attributeKey", input.attributeKey)
 
     if (!input.attributeKey) {
       return { data: [] }
