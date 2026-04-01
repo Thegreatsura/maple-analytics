@@ -267,14 +267,14 @@ export const serviceMapEdgesHourly = defineDatasource(
 export type ServiceMapEdgesHourlyRow = InferRow<typeof serviceMapEdgesHourly>;
 
 /**
- * Lightweight projection of root spans for service overview queries.
+ * Lightweight projection of service entry point spans for service overview queries.
  * Pre-extracts deployment.environment and deployment.commit_sha from ResourceAttributes.
- * Only stores root spans (ParentSpanId = ''), sorted by (OrgId, ServiceName, Timestamp).
+ * Stores Server/Consumer spans (service entry points) plus root spans as fallback.
  * Populated by materialized view, not direct ingestion.
  */
 export const serviceOverviewSpans = defineDatasource("service_overview_spans", {
   description:
-    "Lightweight projection of root spans for service overview queries. Pre-extracts deployment attributes from ResourceAttributes. Populated by materialized view.",
+    "Lightweight projection of service entry point spans (Server/Consumer + root) for service overview queries. Pre-extracts deployment attributes from ResourceAttributes. Populated by materialized view.",
   jsonPaths: false,
   schema: {
     OrgId: t.string().lowCardinality(),

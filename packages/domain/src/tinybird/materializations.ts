@@ -268,7 +268,9 @@ export const serviceMapSpansMv = defineMaterializedView(
 );
 
 /**
- * Materialized view projecting root spans for service overview queries.
+ * Materialized view projecting service entry point spans for service overview queries.
+ * Includes Server/Consumer spans (service entry points per OTel semantics) plus root spans
+ * as a fallback for services with Internal/unset SpanKind (cron jobs, workers).
  * Pre-extracts deployment.environment and deployment.commit_sha from ResourceAttributes
  * so the service overview query avoids scanning heavy Map columns.
  */
@@ -276,7 +278,7 @@ export const serviceOverviewSpansMv = defineMaterializedView(
   "service_overview_spans_mv",
   {
     description:
-      "Materialized view projecting root spans for service overview queries. Pre-extracts deployment attributes from ResourceAttributes at write time.",
+      "Materialized view projecting service entry point spans (Server/Consumer + root) for service overview queries. Pre-extracts deployment attributes from ResourceAttributes at write time.",
     datasource: serviceOverviewSpans,
     nodes: [
       node({
@@ -292,7 +294,7 @@ export const serviceOverviewSpansMv = defineMaterializedView(
           ResourceAttributes['deployment.environment'] AS DeploymentEnv,
           ResourceAttributes['deployment.commit_sha'] AS CommitSha
         FROM traces
-        WHERE ParentSpanId = ''
+        WHERE SpanKind IN ('Server', 'Consumer') OR ParentSpanId = ''
       `,
       }),
     ],

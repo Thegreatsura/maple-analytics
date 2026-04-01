@@ -52,7 +52,7 @@ estimatedTotal = (sampledSpanCount * weight) + unsampledSpanCount
 throughput     = estimatedTotal / durationSeconds
 ```
 
-For example, with 10% sampling (`weight = 10`) and 500 sampled root spans over 60 seconds:
+For example, with 10% sampling (`weight = 10`) and 500 sampled service entry point spans over 60 seconds:
 
 ```
 estimatedTotal = 500 * 10 = 5000
