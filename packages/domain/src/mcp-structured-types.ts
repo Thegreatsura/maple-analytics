@@ -42,6 +42,7 @@ export interface TraceRow {
   hasError: boolean
   startTime?: string
   errorMessage?: string
+  resourceAttributes?: Record<string, string>
 }
 
 export interface PaginationMeta {
@@ -111,6 +112,7 @@ export interface SpanNodeData {
   statusCode: string
   statusMessage: string
   attributes: Record<string, string>
+  resourceAttributes: Record<string, string>
   children: SpanNodeData[]
 }
 

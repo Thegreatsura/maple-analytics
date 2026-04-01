@@ -6,14 +6,13 @@ import {
   McpQueryError,
   type McpToolRegistrar,
 } from "./types"
-import { resolveTenant } from "../lib/query-tinybird"
+import { withTenantExecutor } from "../lib/query-tinybird"
 import { resolveTimeRange } from "../lib/time"
 import { formatDurationFromMs, formatTable } from "../lib/format"
 import { formatNextSteps } from "../lib/next-steps"
-import { Effect, Schema } from "effect"
+import { Array as Arr, Effect, Schema, pipe } from "effect"
 import { createDualContent } from "../lib/structured-output"
 import { searchTraces } from "@maple/query-engine/observability"
-import { makeTinybirdExecutorFromTenant } from "@/services/TinybirdExecutorLive"
 
 export function registerSearchTracesTool(server: McpToolRegistrar) {
   server.tool(
@@ -48,9 +47,7 @@ export function registerSearchTracesTool(server: McpToolRegistrar) {
           )
         }
 
-        const tenant = yield* resolveTenant
-
-        const result = yield* searchTraces({
+        const result = yield* withTenantExecutor(searchTraces({
           timeRange: { startTime: st, endTime: et },
           service: params.service ?? undefined,
           spanName: params.span_name ?? undefined,
@@ -66,14 +63,15 @@ export function registerSearchTracesTool(server: McpToolRegistrar) {
           rootOnly: params.root_only ?? false,
           limit: lim,
           offset: off,
-        }).pipe(
-          Effect.provide(makeTinybirdExecutorFromTenant(tenant)),
-          Effect.mapError((e) => new McpQueryError({ message: e.message, pipe: "list_traces" })),
+        })).pipe(
+          Effect.catchTag("@maple/query-engine/errors/ObservabilityError", (e) =>
+            Effect.fail(new McpQueryError({ message: e.message, pipe: e.pipe ?? "search_traces", cause: e })),
+          ),
         )
 
         const spans = result.spans
         if (spans.length === 0) {
-          return { content: [{ type: "text", text: `No traces found matching filters (${st} — ${et})` }] }
+          return { content: [{ type: "text" as const, text: `No traces found matching filters (${st} — ${et})` }] }
         }
 
         const hasMore = result.pagination.hasMore
@@ -89,22 +87,25 @@ export function registerSearchTracesTool(server: McpToolRegistrar) {
           ? ["Trace ID", "Span Name", "Service", "Duration", "Status"]
           : ["Trace ID", "Root Span", "Duration", "Service", "Error"]
 
-        const rows = spans.map((s) =>
-          isSpanLevel
-            ? [
-                s.traceId.slice(0, 12) + "...",
-                s.spanName.length > 40 ? s.spanName.slice(0, 37) + "..." : s.spanName,
-                s.serviceName,
-                formatDurationFromMs(s.durationMs),
-                s.statusCode === "Error" ? "Error" : "",
-              ]
-            : [
-                s.traceId.slice(0, 12) + "...",
-                s.spanName.length > 30 ? s.spanName.slice(0, 27) + "..." : s.spanName,
-                formatDurationFromMs(s.durationMs),
-                s.serviceName,
-                s.statusCode === "Error" ? "Yes" : "",
-              ],
+        const rows = pipe(
+          spans,
+          Arr.map((s) =>
+            isSpanLevel
+              ? [
+                  s.traceId.slice(0, 12) + "...",
+                  s.spanName.length > 40 ? s.spanName.slice(0, 37) + "..." : s.spanName,
+                  s.serviceName,
+                  formatDurationFromMs(s.durationMs),
+                  s.statusCode === "Error" ? "Error" : "",
+                ]
+              : [
+                  s.traceId.slice(0, 12) + "...",
+                  s.spanName.length > 30 ? s.spanName.slice(0, 27) + "..." : s.spanName,
+                  formatDurationFromMs(s.durationMs),
+                  s.serviceName,
+                  s.statusCode === "Error" ? "Yes" : "",
+                ],
+          ),
         )
 
         lines.push(formatTable(headers, rows))
@@ -114,8 +115,10 @@ export function registerSearchTracesTool(server: McpToolRegistrar) {
           lines.push(``, `More results available. Call again with offset=${nextOffset} for the next page.`)
         }
 
-        const nextSteps = spans.slice(0, 3).map((s) =>
-          `\`inspect_trace trace_id="${s.traceId}"\` — full span tree`
+        const nextSteps = pipe(
+          spans,
+          Arr.take(3),
+          Arr.map((s) => `\`inspect_trace trace_id="${s.traceId}"\` — full span tree`),
         )
         lines.push(formatNextSteps(nextSteps))
 
@@ -130,17 +133,21 @@ export function registerSearchTracesTool(server: McpToolRegistrar) {
                 hasMore,
                 ...(hasMore && { nextOffset: off + spans.length }),
               },
-              traces: spans.map((s) => ({
-                traceId: s.traceId,
-                rootSpanName: s.spanName,
-                durationMs: s.durationMs,
-                spanCount: 1,
-                services: [s.serviceName],
-                hasError: s.statusCode === "Error",
-              })),
+              traces: pipe(
+                spans,
+                Arr.map((s) => ({
+                  traceId: s.traceId,
+                  rootSpanName: s.spanName,
+                  durationMs: s.durationMs,
+                  spanCount: 1,
+                  services: [s.serviceName],
+                  hasError: s.statusCode === "Error",
+                  resourceAttributes: s.resourceAttributes,
+                })),
+              ),
             },
           }),
         }
-      }),
+      }).pipe(Effect.withSpan("McpTool.searchTraces")),
   )
 }

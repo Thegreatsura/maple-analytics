@@ -1,3 +1,5 @@
+import type { TraceId, SpanId } from "@maple/domain"
+
 export interface TimeRange {
   readonly startTime: string
   readonly endTime: string
@@ -23,14 +25,15 @@ export interface ListServicesInput {
 // --- Traces ---
 
 export interface SpanResult {
-  readonly traceId: string
-  readonly spanId: string
+  readonly traceId: TraceId
+  readonly spanId: SpanId | null
   readonly spanName: string
   readonly serviceName: string
   readonly durationMs: number
   readonly statusCode: string
   readonly statusMessage: string
   readonly attributes: Record<string, string>
+  readonly resourceAttributes: Record<string, string>
   readonly timestamp: string
 }
 
@@ -63,7 +66,7 @@ export interface SearchTracesOutput {
 // --- Inspect Trace ---
 
 export interface SpanNode {
-  readonly spanId: string
+  readonly spanId: SpanId
   readonly parentSpanId: string
   readonly spanName: string
   readonly serviceName: string
@@ -71,11 +74,12 @@ export interface SpanNode {
   readonly statusCode: string
   readonly statusMessage: string
   readonly attributes: Record<string, string>
+  readonly resourceAttributes: Record<string, string>
   readonly children: SpanNode[]
 }
 
 export interface InspectTraceOutput {
-  readonly traceId: string
+  readonly traceId: TraceId
   readonly serviceCount: number
   readonly spanCount: number
   readonly rootDurationMs: number

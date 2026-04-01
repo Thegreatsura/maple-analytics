@@ -2,28 +2,28 @@ import type { Effect } from "effect"
 import { Schema } from "effect"
 
 export class McpTenantError extends Schema.TaggedErrorClass<McpTenantError>()(
-  "McpTenantError",
+  "@maple/mcp/errors/McpTenantError",
   { message: Schema.String },
 ) {}
 
 export class McpAuthMissingError extends Schema.TaggedErrorClass<McpAuthMissingError>()(
-  "McpAuthMissingError",
-  { message: Schema.String },
+  "@maple/mcp/errors/McpAuthMissingError",
+  { message: Schema.String, header: Schema.optionalKey(Schema.String) },
 ) {}
 
 export class McpAuthInvalidError extends Schema.TaggedErrorClass<McpAuthInvalidError>()(
-  "McpAuthInvalidError",
-  { message: Schema.String },
+  "@maple/mcp/errors/McpAuthInvalidError",
+  { message: Schema.String, reason: Schema.optionalKey(Schema.String) },
 ) {}
 
 export class McpInvalidTenantError extends Schema.TaggedErrorClass<McpInvalidTenantError>()(
-  "McpInvalidTenantError",
+  "@maple/mcp/errors/McpInvalidTenantError",
   { message: Schema.String, field: Schema.String },
 ) {}
 
 export class McpQueryError extends Schema.TaggedErrorClass<McpQueryError>()(
-  "McpQueryError",
-  { message: Schema.String, pipe: Schema.String },
+  "@maple/mcp/errors/McpQueryError",
+  { message: Schema.String, pipe: Schema.String, cause: Schema.optionalKey(Schema.Defect) },
 ) {}
 
 export type McpToolError =

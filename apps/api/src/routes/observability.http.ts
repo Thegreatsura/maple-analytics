@@ -12,7 +12,8 @@ import {
 } from "@maple/query-engine/observability"
 import { makeTinybirdExecutorFromTenant } from "../services/TinybirdExecutorLive"
 
-const mapError = (e: any) => new ObservabilityApiError({ message: e.message })
+const mapError = (e: { message: string; pipe?: string }) =>
+  new ObservabilityApiError({ message: e.message, pipe: e.pipe, cause: e })
 
 export const HttpObservabilityLive = HttpApiBuilder.group(MapleApi, "observability", (handlers) =>
   Effect.gen(function* () {

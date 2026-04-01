@@ -1,4 +1,5 @@
-import { Array as Arr, Effect, Option, pipe } from "effect"
+import { Array as Arr, Effect, Option, Schema, pipe } from "effect"
+import { TraceId, SpanId } from "@maple/domain"
 import type { ListTracesOutput } from "@maple/domain/tinybird"
 import { TinybirdExecutor, ObservabilityError, type TinybirdExecutorShape } from "./TinybirdExecutor"
 import type { SearchTracesInput, SearchTracesOutput, SpanResult } from "./types"
@@ -16,13 +17,17 @@ import { escapeForSQL } from "./sql-utils"
  * When searching by root-level fields only (service, error, duration), falls
  * back to the `list_traces` Tinybird pipe for fast MV-backed queries.
  */
-export const searchTraces = (
-  input: SearchTracesInput,
-): Effect.Effect<SearchTracesOutput, ObservabilityError, TinybirdExecutor> =>
-  Effect.gen(function* () {
+export const searchTraces = Effect.fn("Observability.searchTraces")(
+  function* (input: SearchTracesInput) {
     const executor = yield* TinybirdExecutor
     const limit = input.limit ?? 20
     const offset = input.offset ?? 0
+
+    yield* Effect.annotateCurrentSpan(
+      "searchMode", input.spanName && !input.rootOnly ? "span_level" : "root_level",
+    )
+    if (input.service) yield* Effect.annotateCurrentSpan("service", input.service)
+    if (input.spanName) yield* Effect.annotateCurrentSpan("spanName", input.spanName)
 
     const spans = input.spanName && !input.rootOnly
       ? yield* spanLevelSearch(executor, input, limit, offset)
@@ -32,10 +37,21 @@ export const searchTraces = (
       timeRange: input.timeRange,
       spans,
       pagination: { offset, limit, hasMore: spans.length === limit },
-    }
-  })
+    } satisfies SearchTracesOutput
+  },
+)
 
 const esc = escapeForSQL
+
+/** Parse ClickHouse's toString(Map) output back into a Record. */
+const parseAttributeMap = (str: string): Effect.Effect<Record<string, string>> =>
+  Effect.try({
+    try: () => {
+      if (!str || str === "{}" || str === "{'':''}") return {}
+      return JSON.parse(str.replace(/'/g, '"')) as Record<string, string>
+    },
+    catch: () => new Error("Failed to parse attribute map"),
+  }).pipe(Effect.orElseSucceed(() => ({})))
 
 /**
  * Query the raw `traces` table directly for span-level filtering.
@@ -93,6 +109,7 @@ const spanLevelSearch = (
       StatusCode as statusCode,
       StatusMessage as statusMessage,
       toString(SpanAttributes) as attributesStr,
+      toString(ResourceAttributes) as resourceAttributesStr,
       toString(Timestamp) as timestamp
     FROM traces
     WHERE ${allConditions.join("\n      AND ")}
@@ -111,25 +128,32 @@ const spanLevelSearch = (
     readonly statusCode: string
     readonly statusMessage: string
     readonly attributesStr: string
+    readonly resourceAttributesStr: string
     readonly timestamp: string
   }
 
-  return Effect.map(
+  return Effect.flatMap(
     executor.sqlQuery<RawSpanRow>(sql),
-    (rows): ReadonlyArray<SpanResult> =>
-      pipe(
-        rows,
-        Arr.map((row) => ({
-          traceId: row.traceId,
-          spanId: row.spanId,
-          spanName: row.spanName,
-          serviceName: row.serviceName,
-          durationMs: Number(row.durationMs),
-          statusCode: row.statusCode,
-          statusMessage: row.statusMessage ?? "",
-          attributes: parseAttributeMap(row.attributesStr),
-          timestamp: row.timestamp,
-        })),
+    (rows) =>
+      Effect.forEach(rows, (row) =>
+        Effect.map(
+          Effect.all({
+            attributes: parseAttributeMap(row.attributesStr),
+            resourceAttributes: parseAttributeMap(row.resourceAttributesStr),
+          }),
+          ({ attributes, resourceAttributes }): SpanResult => ({
+            traceId: Schema.decodeSync(TraceId)(row.traceId),
+            spanId: Schema.decodeSync(SpanId)(row.spanId),
+            spanName: row.spanName,
+            serviceName: row.serviceName,
+            durationMs: Number(row.durationMs),
+            statusCode: row.statusCode,
+            statusMessage: row.statusMessage ?? "",
+            attributes,
+            resourceAttributes,
+            timestamp: row.timestamp,
+          }),
+        ),
       ),
   )
 }
@@ -170,14 +194,4 @@ const rootLevelSearch = (
     (result): ReadonlyArray<SpanResult> =>
       pipe(result.data, Arr.map(toSpanResult)),
   )
-}
-
-/** Parse ClickHouse's toString(Map) output back into a Record. */
-function parseAttributeMap(str: string): Record<string, string> {
-  if (!str || str === "{}" || str === "{'':''}") return {}
-  try {
-    return JSON.parse(str.replace(/'/g, '"'))
-  } catch {
-    return {}
-  }
 }

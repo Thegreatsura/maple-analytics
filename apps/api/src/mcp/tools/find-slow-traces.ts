@@ -4,14 +4,13 @@ import {
   McpQueryError,
   type McpToolRegistrar,
 } from "./types"
-import { resolveTenant } from "../lib/query-tinybird"
+import { withTenantExecutor } from "../lib/query-tinybird"
 import { resolveTimeRange } from "../lib/time"
 import { formatDurationMs, formatDurationFromMs, formatTable } from "../lib/format"
 import { formatNextSteps } from "../lib/next-steps"
-import { Array as Arr, Effect, Schema } from "effect"
+import { Array as Arr, Effect, Schema, pipe } from "effect"
 import { createDualContent } from "../lib/structured-output"
 import { findSlowTraces } from "@maple/query-engine/observability"
-import { makeTinybirdExecutorFromTenant } from "@/services/TinybirdExecutorLive"
 
 export function registerFindSlowTracesTool(server: McpToolRegistrar) {
   server.tool(
@@ -27,20 +26,20 @@ export function registerFindSlowTracesTool(server: McpToolRegistrar) {
     ({ start_time, end_time, service, environment, limit }) =>
       Effect.gen(function* () {
         const { st, et } = resolveTimeRange(start_time, end_time)
-        const tenant = yield* resolveTenant
 
-        const result = yield* findSlowTraces({
+        const result = yield* withTenantExecutor(findSlowTraces({
           timeRange: { startTime: st, endTime: et },
           service: service ?? undefined,
           environment: environment ?? undefined,
           limit: limit ?? 10,
-        }).pipe(
-          Effect.provide(makeTinybirdExecutorFromTenant(tenant)),
-          Effect.mapError((e) => new McpQueryError({ message: e.message, pipe: "list_traces" })),
+        })).pipe(
+          Effect.catchTag("@maple/query-engine/errors/ObservabilityError", (e) =>
+            Effect.fail(new McpQueryError({ message: e.message, pipe: e.pipe ?? "find_slow_traces", cause: e })),
+          ),
         )
 
         if (result.traces.length === 0) {
-          return { content: [{ type: "text", text: `No traces found in ${st} — ${et}` }] }
+          return { content: [{ type: "text" as const, text: `No traces found in ${st} — ${et}` }] }
         }
 
         const lines: string[] = [`## Slowest Traces`, `Time range: ${st} — ${et}`]
@@ -68,8 +67,10 @@ export function registerFindSlowTracesTool(server: McpToolRegistrar) {
 
         lines.push(formatTable(headers, rows))
 
-        const nextSteps = Arr.map(Arr.take(result.traces, 3), (t) =>
-          `\`inspect_trace trace_id="${t.traceId}"\` — find bottleneck spans`
+        const nextSteps = pipe(
+          result.traces,
+          Arr.take(3),
+          Arr.map((t) => `\`inspect_trace trace_id="${t.traceId}"\` — find bottleneck spans`),
         )
         lines.push(formatNextSteps(nextSteps))
 
@@ -86,10 +87,11 @@ export function registerFindSlowTracesTool(server: McpToolRegistrar) {
                 spanCount: 1,
                 services: [t.serviceName],
                 hasError: t.statusCode === "Error",
+                resourceAttributes: t.resourceAttributes,
               })),
             },
           }),
         }
-      }),
+      }).pipe(Effect.withSpan("McpTool.findSlowTraces")),
   )
 }

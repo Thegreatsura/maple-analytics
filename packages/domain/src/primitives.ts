@@ -15,6 +15,12 @@ const MapleUuidId = (identifier: string, title: string) =>
     Schema.annotate({ identifier, title }),
   )
 
+export const TraceId = MapleId("@maple/TraceId", "Trace ID")
+export type TraceId = Schema.Schema.Type<typeof TraceId>
+
+export const SpanId = MapleId("@maple/SpanId", "Span ID")
+export type SpanId = Schema.Schema.Type<typeof SpanId>
+
 export const OrgId = MapleId("@maple/OrgId", "Org ID")
 export type OrgId = Schema.Schema.Type<typeof OrgId>
 

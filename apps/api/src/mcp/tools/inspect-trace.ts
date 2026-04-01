@@ -3,13 +3,12 @@ import {
   McpQueryError,
   type McpToolRegistrar,
 } from "./types"
-import { resolveTenant } from "../lib/query-tinybird"
+import { withTenantExecutor } from "../lib/query-tinybird"
 import { formatDurationFromMs, truncate } from "../lib/format"
 import { formatNextSteps } from "../lib/next-steps"
-import { Array as Arr, Effect, Schema } from "effect"
+import { Array as Arr, Effect, Schema, pipe } from "effect"
 import { createDualContent } from "../lib/structured-output"
 import { inspectTrace, type SpanNode } from "@maple/query-engine/observability"
-import { makeTinybirdExecutorFromTenant } from "@/services/TinybirdExecutorLive"
 
 export function registerInspectTraceTool(server: McpToolRegistrar) {
   server.tool(
@@ -20,15 +19,16 @@ export function registerInspectTraceTool(server: McpToolRegistrar) {
     }),
     ({ trace_id }) =>
       Effect.gen(function* () {
-        const tenant = yield* resolveTenant
+        yield* Effect.annotateCurrentSpan("traceId", trace_id)
 
-        const result = yield* inspectTrace(trace_id).pipe(
-          Effect.provide(makeTinybirdExecutorFromTenant(tenant)),
-          Effect.mapError((e) => new McpQueryError({ message: e.message, pipe: "span_hierarchy" })),
+        const result = yield* withTenantExecutor(inspectTrace(trace_id)).pipe(
+          Effect.catchTag("@maple/query-engine/errors/ObservabilityError", (e) =>
+            Effect.fail(new McpQueryError({ message: e.message, pipe: e.pipe ?? "span_hierarchy", cause: e })),
+          ),
         )
 
         if (result.spanCount === 0) {
-          return { content: [{ type: "text", text: `No spans found for trace ${trace_id}` }] }
+          return { content: [{ type: "text" as const, text: `No spans found for trace ${trace_id}` }] }
         }
 
         const lines: string[] = [
@@ -36,7 +36,7 @@ export function registerInspectTraceTool(server: McpToolRegistrar) {
           ``,
         ]
 
-        function renderNode(node: SpanNode, prefix: string, isLast: boolean) {
+        const renderNode = (node: SpanNode, prefix: string, isLast: boolean): void => {
           const connector = prefix === "" ? "" : isLast ? "\u2514\u2500\u2500 " : "\u251C\u2500\u2500 "
           const status = node.statusCode === "Error" ? " [Error]" : node.statusCode === "Ok" ? " [Ok]" : ""
           lines.push(
@@ -48,43 +48,53 @@ export function registerInspectTraceTool(server: McpToolRegistrar) {
           }
           const attrEntries = Object.entries(node.attributes)
           if (attrEntries.length > 0) {
-            const attrStr = attrEntries.slice(0, 5).map(([k, v]) => `${k}=${truncate(String(v), 60)}`).join(", ")
+            const attrStr = pipe(attrEntries, Arr.take(5), Arr.map(([k, v]) => `${k}=${truncate(String(v), 60)}`)).join(", ")
             lines.push(`${detailPrefix}    {${attrStr}}`)
           }
+          const resAttrEntries = Object.entries(node.resourceAttributes)
+          if (resAttrEntries.length > 0) {
+            const resAttrStr = pipe(resAttrEntries, Arr.take(5), Arr.map(([k, v]) => `${k}=${truncate(String(v), 60)}`)).join(", ")
+            lines.push(`${detailPrefix}    resource: {${resAttrStr}}`)
+          }
           const childPrefix = prefix + (prefix === "" ? "" : isLast ? "    " : "\u2502   ")
-          node.children.forEach((child, i) => {
+          Arr.forEach(node.children, (child, i) => {
             renderNode(child, childPrefix, i === node.children.length - 1)
           })
         }
 
-        for (const root of result.spans) {
+        Arr.forEach(result.spans, (root) => {
           renderNode(root, "", true)
-        }
+        })
 
         if (result.logs.length > 0) {
           lines.push(``, `Related Logs (${result.logs.length}):`)
-          for (const log of result.logs) {
+          Arr.forEach(result.logs, (log) => {
             const ts = log.timestamp
             const time = ts.split(" ")[1] ?? ts
             const sev = log.severityText.padEnd(5)
             lines.push(`  ${time} [${sev}] ${log.serviceName}: ${truncate(log.body, 100)}`)
-          }
+          })
         }
 
-        const serviceSet = new Set(result.spans.map(function collectServices(n: SpanNode): string[] {
-          return [n.serviceName, ...n.children.flatMap(collectServices)]
-        }).flat())
+        const collectServices = (n: SpanNode): string[] =>
+          [n.serviceName, ...Arr.flatMap(n.children, collectServices)]
+
+        const services = pipe(
+          result.spans,
+          Arr.flatMap(collectServices),
+          Arr.dedupe,
+        )
 
         const nextSteps: string[] = []
-        const hasErrors = result.spans.some(function hasError(n: SpanNode): boolean {
-          return n.statusCode === "Error" || n.children.some(hasError)
+        const hasErrors = Arr.some(result.spans, function checkError(n: SpanNode): boolean {
+          return n.statusCode === "Error" || Arr.some(n.children, checkError)
         })
         if (hasErrors) {
           nextSteps.push(`\`search_logs trace_id="${trace_id}"\` — see all logs for this trace`)
         }
-        for (const svc of Arr.take(Arr.fromIterable(serviceSet), 2)) {
+        Arr.forEach(Arr.take(services, 2), (svc) => {
           nextSteps.push(`\`diagnose_service service_name="${svc}"\` — investigate this service`)
-        }
+        })
         lines.push(formatNextSteps(nextSteps))
 
         return {
@@ -96,10 +106,10 @@ export function registerInspectTraceTool(server: McpToolRegistrar) {
               spanCount: result.spanCount,
               rootDurationMs: result.rootDurationMs,
               spans: [...result.spans] as any,
-              logs: result.logs.map((l) => ({ ...l })),
+              logs: pipe(result.logs, Arr.map((l) => ({ ...l }))),
             },
           }),
         }
-      }),
+      }).pipe(Effect.withSpan("McpTool.inspectTrace")),
   )
 }

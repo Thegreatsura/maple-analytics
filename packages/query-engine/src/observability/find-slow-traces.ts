@@ -1,15 +1,15 @@
 import { Array as Arr, Effect, pipe } from "effect"
 import type { ListTracesOutput, TracesDurationStatsOutput } from "@maple/domain/tinybird"
-import { TinybirdExecutor, ObservabilityError } from "./TinybirdExecutor"
+import { TinybirdExecutor } from "./TinybirdExecutor"
 import type { FindSlowTracesInput, FindSlowTracesOutput } from "./types"
 import { toSpanResult } from "./row-mappers"
 
-export const findSlowTraces = (
-  input: FindSlowTracesInput,
-): Effect.Effect<FindSlowTracesOutput, ObservabilityError, TinybirdExecutor> =>
-  Effect.gen(function* () {
+export const findSlowTraces = Effect.fn("Observability.findSlowTraces")(
+  function* (input: FindSlowTracesInput) {
     const executor = yield* TinybirdExecutor
     const limit = input.limit ?? 10
+
+    yield* Effect.annotateCurrentSpan("service", input.service ?? "all")
 
     const [tracesResult, statsResult] = yield* Effect.all(
       [
@@ -32,8 +32,8 @@ export const findSlowTraces = (
     const traces = pipe(
       tracesResult.data,
       Arr.sort((a: ListTracesOutput, b: ListTracesOutput) =>
-        Number(b.durationMicros) > Number(a.durationMicros) ? -1
-        : Number(b.durationMicros) < Number(a.durationMicros) ? 1
+        Number(b.durationMicros) > Number(a.durationMicros) ? 1
+        : Number(b.durationMicros) < Number(a.durationMicros) ? -1
         : 0,
       ),
       Arr.take(limit),
@@ -51,5 +51,6 @@ export const findSlowTraces = (
         maxMs: Number(rawStats.maxDurationMs ?? 0),
       } : null,
       traces,
-    }
-  })
+    } satisfies FindSlowTracesOutput
+  },
+)

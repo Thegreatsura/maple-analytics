@@ -58,13 +58,14 @@ const SearchTracesRequest = Schema.Struct({
 
 const SpanResult = Schema.Struct({
   traceId: Schema.String,
-  spanId: Schema.String,
+  spanId: Schema.NullOr(Schema.String),
   spanName: Schema.String,
   serviceName: Schema.String,
   durationMs: Schema.Number,
   statusCode: Schema.String,
   statusMessage: Schema.String,
   attributes: Schema.Record(Schema.String, Schema.String),
+  resourceAttributes: Schema.Record(Schema.String, Schema.String),
   timestamp: Schema.String,
 })
 
@@ -84,13 +85,48 @@ const InspectTraceRequest = Schema.Struct({
   traceId: Schema.String,
 })
 
+const LogEntry = Schema.Struct({
+  timestamp: Schema.String,
+  severityText: Schema.String,
+  serviceName: Schema.String,
+  body: Schema.String,
+  spanId: Schema.optionalKey(Schema.String),
+  traceId: Schema.optionalKey(Schema.String),
+})
+
+interface SpanNodeResponse {
+  readonly spanId: string
+  readonly parentSpanId: string
+  readonly spanName: string
+  readonly serviceName: string
+  readonly durationMs: number
+  readonly statusCode: string
+  readonly statusMessage: string
+  readonly attributes: Record<string, string>
+  readonly resourceAttributes: Record<string, string>
+  readonly children: ReadonlyArray<SpanNodeResponse>
+}
+
+const SpanNode: Schema.Schema<SpanNodeResponse> = Schema.Struct({
+  spanId: Schema.String,
+  parentSpanId: Schema.String,
+  spanName: Schema.String,
+  serviceName: Schema.String,
+  durationMs: Schema.Number,
+  statusCode: Schema.String,
+  statusMessage: Schema.String,
+  attributes: Schema.Record(Schema.String, Schema.String),
+  resourceAttributes: Schema.Record(Schema.String, Schema.String),
+  children: Schema.Array(Schema.suspend((): Schema.Schema<SpanNodeResponse> => SpanNode)),
+})
+
 const InspectTraceResponse = Schema.Struct({
   traceId: Schema.String,
   serviceCount: Schema.Number,
   spanCount: Schema.Number,
   rootDurationMs: Schema.Number,
-  spans: Schema.Unknown,
-  logs: Schema.Unknown,
+  spans: Schema.Array(SpanNode),
+  logs: Schema.Array(LogEntry),
 })
 
 // --- Find Errors ---
@@ -124,10 +160,26 @@ const DiagnoseServiceRequest = Schema.Struct({
 const DiagnoseServiceResponse = Schema.Struct({
   serviceName: Schema.String,
   timeRange: TimeRange,
-  health: Schema.Unknown,
-  topErrors: Schema.Unknown,
-  recentTraces: Schema.Unknown,
-  recentLogs: Schema.Unknown,
+  health: Schema.Struct({
+    throughput: Schema.Number,
+    errorRate: Schema.Number,
+    errorCount: Schema.Number,
+    p50Ms: Schema.Number,
+    p95Ms: Schema.Number,
+    p99Ms: Schema.Number,
+    apdex: Schema.Number,
+  }),
+  topErrors: Schema.Array(Schema.Struct({
+    errorType: Schema.String,
+    count: Schema.Number,
+  })),
+  recentTraces: Schema.Array(Schema.Struct({
+    traceId: Schema.String,
+    rootSpanName: Schema.String,
+    durationMs: Schema.Number,
+    hasError: Schema.Boolean,
+  })),
+  recentLogs: Schema.Array(LogEntry),
 })
 
 // --- Search Logs ---
@@ -145,7 +197,7 @@ const SearchLogsRequest = Schema.Struct({
 const SearchLogsResponse = Schema.Struct({
   timeRange: TimeRange,
   total: Schema.Number,
-  logs: Schema.Unknown,
+  logs: Schema.Array(LogEntry),
   pagination: Schema.Struct({
     offset: Schema.Number,
     limit: Schema.Number,
@@ -156,8 +208,12 @@ const SearchLogsResponse = Schema.Struct({
 // --- Error class ---
 
 export class ObservabilityApiError extends Schema.TaggedErrorClass<ObservabilityApiError>()(
-  "ObservabilityApiError",
-  { message: Schema.String },
+  "@maple/http/errors/ObservabilityApiError",
+  {
+    message: Schema.String,
+    pipe: Schema.optionalKey(Schema.String),
+    cause: Schema.optionalKey(Schema.Defect),
+  },
   { httpApiStatus: 500 },
 ) {}
 

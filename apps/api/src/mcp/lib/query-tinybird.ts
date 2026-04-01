@@ -4,6 +4,8 @@ import { Effect } from "effect"
 import { resolveMcpTenantContext } from "@/mcp/lib/resolve-tenant"
 import { McpAuthMissingError, McpQueryError } from "@/mcp/tools/types"
 import { TinybirdService } from "@/services/TinybirdService"
+import { TinybirdExecutor } from "@maple/query-engine/observability"
+import { makeTinybirdExecutorFromTenant } from "@/services/TinybirdExecutorLive"
 import type { TenantContext } from "@/services/AuthService"
 
 export const resolveTenant = Effect.gen(function* () {
@@ -13,6 +15,15 @@ export const resolveTenant = Effect.gen(function* () {
   )
   return yield* resolveMcpTenantContext(nativeReq)
 })
+
+/** Infrastructure binding: resolves tenant and provides TinybirdExecutor layer. */
+export const withTenantExecutor = <A, E>(
+  effect: Effect.Effect<A, E, TinybirdExecutor>,
+) =>
+  Effect.gen(function* () {
+    const tenant = yield* resolveTenant
+    return yield* Effect.provide(effect, makeTinybirdExecutorFromTenant(tenant))
+  })
 
 export const queryTinybird = <T = any>(
   pipe: TinybirdPipe,

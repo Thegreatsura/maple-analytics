@@ -2,10 +2,11 @@ import { Effect, Schema, ServiceMap } from "effect"
 import type { TinybirdPipe } from "@maple/domain/tinybird-pipes"
 
 export class ObservabilityError extends Schema.TaggedErrorClass<ObservabilityError>()(
-  "ObservabilityError",
+  "@maple/query-engine/errors/ObservabilityError",
   {
     message: Schema.String,
-    pipe: Schema.optional(Schema.String),
+    pipe: Schema.optionalKey(Schema.String),
+    cause: Schema.optionalKey(Schema.Defect),
   },
 ) {}
 

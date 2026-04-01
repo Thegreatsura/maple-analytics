@@ -147,7 +147,7 @@ export const McpToolsLive = Layer.effectDiscard(
               Effect.tap(() => Effect.logInfo("Tool completed")),
               Effect.map(toCallToolResult),
               Effect.catchTags({
-                McpQueryError: (error) =>
+                "@maple/mcp/errors/McpQueryError": (error) =>
                   Effect.logError(`Tool error: ${error.message}`).pipe(
                     Effect.annotateLogs({
                       errorTag: error._tag,
@@ -160,7 +160,7 @@ export const McpToolsLive = Layer.effectDiscard(
                       }),
                     ),
                   ),
-                McpTenantError: (error) =>
+                "@maple/mcp/errors/McpTenantError": (error) =>
                   Effect.logError(`Tool error: ${error.message}`).pipe(
                     Effect.annotateLogs({ errorTag: error._tag }),
                     Effect.as(
@@ -170,7 +170,7 @@ export const McpToolsLive = Layer.effectDiscard(
                       }),
                     ),
                   ),
-                McpAuthMissingError: (error) =>
+                "@maple/mcp/errors/McpAuthMissingError": (error) =>
                   Effect.logError(`Auth error: ${error.message}`).pipe(
                     Effect.annotateLogs({ errorTag: error._tag }),
                     Effect.as(
@@ -180,7 +180,7 @@ export const McpToolsLive = Layer.effectDiscard(
                       }),
                     ),
                   ),
-                McpAuthInvalidError: (error) =>
+                "@maple/mcp/errors/McpAuthInvalidError": (error) =>
                   Effect.logError(`Auth error: ${error.message}`).pipe(
                     Effect.annotateLogs({ errorTag: error._tag }),
                     Effect.as(
@@ -190,7 +190,7 @@ export const McpToolsLive = Layer.effectDiscard(
                       }),
                     ),
                   ),
-                McpInvalidTenantError: (error) =>
+                "@maple/mcp/errors/McpInvalidTenantError": (error) =>
                   Effect.logError(`Tenant validation error [${error.field}]: ${error.message}`).pipe(
                     Effect.annotateLogs({ errorTag: error._tag, field: error.field }),
                     Effect.as(
