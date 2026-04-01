@@ -1,27 +1,38 @@
 import { datasources, pipes, projectRevision } from "../generated/tinybird-project-manifest"
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http"
-import { Duration, Effect, Layer, ServiceMap } from "effect"
+import { Duration, Effect, Layer, Schema, ServiceMap } from "effect"
 
 const POLL_INTERVAL_MS = 2_000
 const MAX_POLL_ATTEMPTS = 300
 const REQUEST_TIMEOUT = Duration.seconds(30)
 
-interface DeployResponse {
-  readonly result: "success" | "failed" | "no_changes"
-  readonly deployment?: {
-    readonly id: string
-    readonly status: string
-    readonly feedback?: Array<{ readonly resource: string | null; readonly level: string; readonly message: string }>
-    readonly deleted_datasource_names?: string[]
-    readonly deleted_pipe_names?: string[]
-    readonly changed_datasource_names?: string[]
-    readonly changed_pipe_names?: string[]
-    readonly new_datasource_names?: string[]
-    readonly new_pipe_names?: string[]
-  }
-  readonly error?: string
-  readonly errors?: ReadonlyArray<{ readonly filename?: string; readonly error: string }>
-}
+const FeedbackEntry = Schema.Struct({
+  resource: Schema.NullOr(Schema.String),
+  level: Schema.String,
+  message: Schema.String,
+})
+
+const DeployResponseSchema = Schema.Struct({
+  result: Schema.Literals(["success", "failed", "no_changes"]),
+  deployment: Schema.optionalKey(Schema.Struct({
+    id: Schema.String,
+    status: Schema.optionalKey(Schema.String),
+    feedback: Schema.optionalKey(Schema.Array(FeedbackEntry)),
+    deleted_datasource_names: Schema.optionalKey(Schema.Array(Schema.String)),
+    deleted_pipe_names: Schema.optionalKey(Schema.Array(Schema.String)),
+    changed_datasource_names: Schema.optionalKey(Schema.Array(Schema.String)),
+    changed_pipe_names: Schema.optionalKey(Schema.Array(Schema.String)),
+    new_datasource_names: Schema.optionalKey(Schema.Array(Schema.String)),
+    new_pipe_names: Schema.optionalKey(Schema.Array(Schema.String)),
+  })),
+  error: Schema.optionalKey(Schema.String),
+  errors: Schema.optionalKey(Schema.Array(Schema.Struct({
+    filename: Schema.optionalKey(Schema.String),
+    error: Schema.String,
+  }))),
+})
+type DeployResponse = typeof DeployResponseSchema.Type
+const DeployResponseFromJson = Schema.fromJsonString(DeployResponseSchema)
 
 export interface TinybirdProjectSyncParams {
   readonly baseUrl: string
@@ -60,13 +71,15 @@ interface SqlResponse {
   readonly data?: ReadonlyArray<Record<string, unknown>>
 }
 
-interface DeploymentStatusBody {
-  readonly deployment?: {
-    readonly status?: string
-    readonly feedback?: Array<{ readonly resource: string | null; readonly level: string; readonly message: string }>
-    readonly errors?: string[]
-  }
-}
+const DeploymentStatusBodySchema = Schema.Struct({
+  deployment: Schema.optionalKey(Schema.Struct({
+    status: Schema.optionalKey(Schema.String),
+    feedback: Schema.optionalKey(Schema.Array(FeedbackEntry)),
+    errors: Schema.optionalKey(Schema.Array(Schema.String)),
+  })),
+})
+type DeploymentStatusBody = typeof DeploymentStatusBodySchema.Type
+const DeploymentStatusBodyFromJson = Schema.fromJsonString(DeploymentStatusBodySchema)
 
 interface DeploymentsListBody {
   readonly deployments: Array<{ readonly id: string; readonly status: string; readonly live?: boolean }>
@@ -239,17 +252,14 @@ export class TinybirdProjectSync extends ServiceMap.Service<TinybirdProjectSync,
             )
           }
 
-          let deployBody: DeployResponse
-          try {
-            deployBody = JSON.parse(deployRawBody) as DeployResponse
-          } catch {
-            return yield* Effect.fail(
+          const deployBody = yield* Schema.decodeUnknownEffect(DeployResponseFromJson)(deployRawBody).pipe(
+            Effect.mapError(() =>
               new TinybirdSyncError(
                 `Tinybird returned invalid JSON from /v1/deploy.\nResponse: ${deployRawBody}`,
                 deployResponse.status,
               ),
-            )
-          }
+            ),
+          )
 
           if (deployBody.result === "failed") {
             return yield* Effect.fail(
@@ -305,17 +315,14 @@ export class TinybirdProjectSync extends ServiceMap.Service<TinybirdProjectSync,
               )
             }
 
-            let statusBody: DeploymentStatusBody
-            try {
-              statusBody = JSON.parse(statusRawBody) as DeploymentStatusBody
-            } catch {
-              return yield* Effect.fail(
+            const statusBody = yield* Schema.decodeUnknownEffect(DeploymentStatusBodyFromJson)(statusRawBody).pipe(
+              Effect.mapError(() =>
                 new TinybirdSyncError(
                   `Tinybird returned invalid JSON from deployment status.\nResponse: ${statusRawBody}`,
                   statusResponse.status,
                 ),
-              )
-            }
+              ),
+            )
             const status = statusBody.deployment?.status
 
             if (status === "data_ready") {
@@ -386,17 +393,14 @@ export class TinybirdProjectSync extends ServiceMap.Service<TinybirdProjectSync,
             )
           }
 
-          let body: DeploymentStatusBody
-          try {
-            body = JSON.parse(rawBody) as DeploymentStatusBody
-          } catch {
-            return yield* Effect.fail(
+          const body = yield* Schema.decodeUnknownEffect(DeploymentStatusBodyFromJson)(rawBody).pipe(
+            Effect.mapError(() =>
               new TinybirdSyncError(
                 `Tinybird returned invalid JSON from deployment status.\nResponse: ${rawBody}`,
                 response.status,
               ),
-            )
-          }
+            ),
+          )
           const status = body.deployment?.status ?? "unknown"
           const errorMessage = extractStatusErrorMessage(body, status)
 

@@ -43,15 +43,15 @@ export const searchTraces = Effect.fn("Observability.searchTraces")(
 
 const esc = escapeForSQL
 
+const StringRecordFromJson = Schema.fromJsonString(Schema.Record(Schema.String, Schema.String))
+
 /** Parse ClickHouse's toString(Map) output back into a Record. */
-const parseAttributeMap = (str: string): Effect.Effect<Record<string, string>> =>
-  Effect.try({
-    try: () => {
-      if (!str || str === "{}" || str === "{'':''}") return {}
-      return JSON.parse(str.replace(/'/g, '"')) as Record<string, string>
-    },
-    catch: () => new Error("Failed to parse attribute map"),
-  }).pipe(Effect.orElseSucceed(() => ({})))
+const parseAttributeMap = (str: string): Effect.Effect<Record<string, string>> => {
+  if (!str || str === "{}" || str === "{'':''}") return Effect.succeed({})
+  return Schema.decodeUnknownEffect(StringRecordFromJson)(str.replace(/'/g, '"')).pipe(
+    Effect.orElseSucceed(() => ({})),
+  )
+}
 
 /**
  * Query the raw `traces` table directly for span-level filtering.

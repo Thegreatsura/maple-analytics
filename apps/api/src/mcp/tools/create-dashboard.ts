@@ -11,6 +11,7 @@ import { DashboardPersistenceService } from "@/services/DashboardPersistenceServ
 import { PortableDashboardDocument } from "@maple/domain/http"
 
 const decodePortableDashboard = Schema.decodeUnknownSync(PortableDashboardDocument)
+const PortableDashboardFromJson = Schema.fromJsonString(PortableDashboardDocument)
 
 // ---------------------------------------------------------------------------
 // Dashboard templates
@@ -210,15 +211,9 @@ export function registerCreateDashboardTool(server: McpToolRegistrar) {
             }
           }
 
-          const parsed = yield* Effect.try({
-            try: () => JSON.parse(params.dashboard_json!) as unknown,
-            catch: () => new McpQueryError({ message: "Invalid JSON: could not parse dashboard_json", pipe: "create_dashboard" }),
-          })
-
-          portable = yield* Effect.try({
-            try: () => decodePortableDashboard(parsed),
-            catch: (error) => new McpQueryError({ message: `Invalid dashboard schema: ${String(error)}`, pipe: "create_dashboard" }),
-          })
+          portable = yield* Schema.decodeUnknownEffect(PortableDashboardFromJson)(params.dashboard_json!).pipe(
+            Effect.mapError(() => new McpQueryError({ message: "Invalid dashboard JSON", pipe: "create_dashboard" })),
+          )
         } else {
           const templateFn = DASHBOARD_TEMPLATES[templateName]
           if (!templateFn) {

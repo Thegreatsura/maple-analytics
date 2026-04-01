@@ -7,7 +7,7 @@ import {
   SDPersistenceError,
   SDUnauthorizedError,
 } from "@maple/domain/http"
-import { Array as Arr, Effect, Option, Redacted } from "effect"
+import { Array as Arr, Effect, Option, Redacted, Schema } from "effect"
 import { Env } from "../services/Env"
 import { ScrapeTargetsService } from "../services/ScrapeTargetsService"
 
@@ -82,18 +82,12 @@ export const HttpServiceDiscoveryLive = HttpApiBuilder.group(
               }
 
               if (row.labelsJson) {
-                const labelsJson = row.labelsJson
-                const extra = yield* Effect.try({
-                  try: () => JSON.parse(labelsJson) as unknown,
-                  catch: () => new Error("Invalid JSON"),
-                }).pipe(Effect.option)
+                const extra = yield* Schema.decodeUnknownEffect(
+                  Schema.fromJsonString(Schema.Record(Schema.String, Schema.String)),
+                )(row.labelsJson).pipe(Effect.option)
 
-                if (Option.isSome(extra) && extra.value && typeof extra.value === "object") {
-                  for (const [k, v] of Object.entries(extra.value)) {
-                    if (typeof v === "string") {
-                      labels[k] = v
-                    }
-                  }
+                if (Option.isSome(extra)) {
+                  Object.assign(labels, extra.value)
                 }
               }
 

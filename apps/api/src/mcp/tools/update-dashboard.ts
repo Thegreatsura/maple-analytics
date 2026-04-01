@@ -11,7 +11,7 @@ import { DashboardPersistenceService } from "@/services/DashboardPersistenceServ
 import { DashboardDocument, PortableDashboardDocument } from "@maple/domain/http"
 import { IsoDateTimeString } from "@maple/domain"
 
-const decodePortableDashboard = Schema.decodeUnknownSync(PortableDashboardDocument)
+const PortableDashboardFromJson = Schema.fromJsonString(PortableDashboardDocument)
 const decodeIsoDateTimeString = Schema.decodeUnknownSync(IsoDateTimeString)
 
 const TIME_RANGE_MAP: Record<string, string> = {
@@ -67,15 +67,9 @@ export function registerUpdateDashboardTool(server: McpToolRegistrar) {
         let updated: DashboardDocument
 
         if (dashboard_json) {
-          const parsed = yield* Effect.try({
-            try: () => JSON.parse(dashboard_json) as unknown,
-            catch: () => new McpQueryError({ message: "Invalid JSON: could not parse dashboard_json", pipe: "update_dashboard" }),
-          })
-
-          const portable = yield* Effect.try({
-            try: () => decodePortableDashboard(parsed),
-            catch: (error) => new McpQueryError({ message: `Invalid dashboard schema: ${String(error)}`, pipe: "update_dashboard" }),
-          })
+          const portable = yield* Schema.decodeUnknownEffect(PortableDashboardFromJson)(dashboard_json).pipe(
+            Effect.mapError(() => new McpQueryError({ message: "Invalid dashboard JSON", pipe: "update_dashboard" })),
+          )
 
           updated = new DashboardDocument({
             id: existing.id,

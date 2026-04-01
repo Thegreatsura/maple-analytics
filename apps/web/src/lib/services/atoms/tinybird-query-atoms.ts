@@ -82,13 +82,12 @@ function makeQueryAtomFamily<Input, Output>(
   query: QueryEffect<Input, Output>,
   options?: QueryAtomOptions,
 ) {
+  const UnknownFromJson = Schema.fromJsonString(Schema.Unknown)
+
   const family = Atom.family((key: string) => {
     let resultAtom = Atom.make(
-      Effect.try({
-        try: () => JSON.parse(key) as Input,
-        catch: toQueryAtomError,
-      }).pipe(
-        Effect.flatMap((input) => query(input) as Effect.Effect<Output, unknown, never>),
+      Schema.decodeUnknownEffect(UnknownFromJson)(key).pipe(
+        Effect.flatMap((input) => query(input as Input) as Effect.Effect<Output, unknown, never>),
         Effect.mapError(toQueryAtomError),
       ),
     )

@@ -12,11 +12,10 @@ const SKIP_ATTR_KEYS = HashSet.fromIterable([
   "server.port", "client.address",
 ])
 
+const StringRecordFromJson = Schema.fromJsonString(Schema.Record(Schema.String, Schema.String))
+
 const extractKeyAttributes = (raw: string): Effect.Effect<Record<string, string>> =>
-  Effect.try({
-    try: () => JSON.parse(raw) as Record<string, string>,
-    catch: () => new Error("Failed to parse span attributes"),
-  }).pipe(
+  Schema.decodeUnknownEffect(StringRecordFromJson)(raw).pipe(
     Effect.map((parsed) =>
       pipe(
         Object.entries(parsed),
@@ -32,10 +31,7 @@ const extractKeyAttributes = (raw: string): Effect.Effect<Record<string, string>
   )
 
 const parseJsonAttributes = (raw: string): Effect.Effect<Record<string, string>> =>
-  Effect.try({
-    try: () => JSON.parse(raw) as Record<string, string>,
-    catch: () => new Error("Failed to parse resource attributes"),
-  }).pipe(
+  Schema.decodeUnknownEffect(StringRecordFromJson)(raw).pipe(
     Effect.map((parsed) =>
       pipe(
         Object.entries(parsed),
