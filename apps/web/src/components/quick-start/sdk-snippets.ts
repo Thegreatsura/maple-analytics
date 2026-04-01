@@ -143,22 +143,16 @@ func main() {
     label: "Effect",
     description: "TypeScript toolkit",
     iconKey: "effect",
-    install: { packages: ["effect", "@effect/opentelemetry", "@effect/platform", "@opentelemetry/sdk-trace-node"] },
+    install: { packages: ["@maple-dev/effect-sdk", "effect"] },
     instrument: `// telemetry.ts
-import * as Otlp from "@effect/opentelemetry/Otlp"
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient"
-import { Effect, Layer } from "effect"
+import { Maple } from "@maple-dev/effect-sdk"
+import { Effect } from "effect"
 
-export const TracerLive = Otlp.layerJson({
-  baseUrl: "{{INGEST_URL}}",
-  resource: {
-    serviceName: "my-effect-app",
-    serviceVersion: "1.0.0",
-  },
-  headers: {
-    "Authorization": "Bearer {{API_KEY}}",
-  },
-}).pipe(Layer.provide(FetchHttpClient.layer))
+// Auto-detects MAPLE_ENDPOINT, MAPLE_INGEST_KEY,
+// commit SHA, and deployment environment from env vars
+const TracerLive = Maple.layer({
+  serviceName: "my-effect-app",
+})
 
 // Use in your program
 const program = Effect.gen(function* () {

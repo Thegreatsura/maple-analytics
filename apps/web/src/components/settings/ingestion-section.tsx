@@ -277,7 +277,7 @@ export function IngestionSection() {
             <p className="text-muted-foreground text-xs">
               Learn how to send telemetry data in the{" "}
               <a
-                href="https://docs.maple.dev"
+                href="https://maple.dev/docs"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-foreground underline underline-offset-2 hover:no-underline"

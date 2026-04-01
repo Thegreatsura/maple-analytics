@@ -142,6 +142,12 @@ function NavBarInner({ locale = "en" }: { locale?: string }) {
                 {m.nav_roadmap()}
               </a>
             </NavigationMenuItem>
+
+            <NavigationMenuItem>
+              <a href="/docs" className="inline-flex h-9 w-max items-center justify-center bg-transparent px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:bg-muted/20 hover:text-fg transition-all">
+                Docs
+              </a>
+            </NavigationMenuItem>
           </NavigationMenuList>
         </NavigationMenu>
       </div>
@@ -236,6 +242,10 @@ function NavBarInner({ locale = "en" }: { locale?: string }) {
               <a href={l("/roadmap")} onClick={() => setMenuOpen(false)}
                 className="text-xs text-fg hover:text-fg transition-colors py-2 font-medium">
                 {m.nav_roadmap()}
+              </a>
+              <a href="/docs" onClick={() => setMenuOpen(false)}
+                className="text-xs text-fg hover:text-fg transition-colors py-2 font-medium">
+                Docs
               </a>
             </div>
 

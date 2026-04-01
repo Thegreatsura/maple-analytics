@@ -1,16 +1,8 @@
 {
   "name": "@maple/landing",
-  "type": "module",
   "version": "0.0.1",
-  "scripts": {
-    "dev": "astro dev --port 3391",
-    "build": "astro build",
-    "preview": "astro preview",
-    "astro": "astro",
-    "deploy:stack": "alchemy deploy",
-    "destroy:stack": "alchemy destroy"
-  },
   "dependencies": {
+    "@astrojs/mdx": "^5.0.3",
     "@astrojs/react": "^4.4.2",
     "@astrojs/sitemap": "^3.7.0",
     "@base-ui/react": "catalog:ui",
@@ -35,5 +27,14 @@
     "tailwind-merge": "catalog:tailwind",
     "tailwindcss": "catalog:tailwind",
     "tw-animate-css": "catalog:tailwind"
-  }
+  },
+  "scripts": {
+    "dev": "astro dev --port 3391",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "deploy:stack": "alchemy deploy",
+    "destroy:stack": "alchemy destroy"
+  },
+  "type": "module"
 }

@@ -1,5 +1,6 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
+import mdx from '@astrojs/mdx';
 import paraglide from '@inlang/paraglide-astro';
 import react from '@astrojs/react';
 import sitemap from '@astrojs/sitemap';
@@ -20,7 +21,14 @@ export default defineConfig({
       fallbackType: 'rewrite',
     },
   },
+  markdown: {
+    shikiConfig: {
+      theme: 'vitesse-dark',
+      wrap: true,
+    },
+  },
   integrations: [
+    mdx(),
     paraglide({
       project: './project.inlang',
       outdir: './src/paraglide',

@@ -169,7 +169,7 @@ export function ApiKeysSection() {
               <CardDescription>
                 Manage keys for programmatic access to the Maple API.{" "}
                 <a
-                  href="https://api.maple.dev/docs"
+                  href="https://maple.dev/docs"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-foreground underline underline-offset-2 hover:no-underline"
