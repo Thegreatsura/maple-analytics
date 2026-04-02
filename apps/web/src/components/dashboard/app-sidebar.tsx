@@ -8,6 +8,9 @@ import {
   ServerIcon,
   BellIcon,
   CircleWarningIcon,
+  CircleQuestionIcon,
+  DiscordIcon,
+  EnvelopeIcon,
   GearIcon,
   LogoutIcon,
   ChevronUpIcon,
@@ -357,6 +360,38 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
+              <SidebarMenuItem>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={<SidebarMenuButton tooltip="Support" />}
+                  >
+                    <CircleQuestionIcon size={18} />
+                    <span>Support</span>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent side="right" align="start" sideOffset={4}>
+                    <DropdownMenuGroup>
+                      <DropdownMenuItem
+                        render={
+                          <a
+                            href="https://discord.gg/BnXjKuwJqP"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          />
+                        }
+                      >
+                        <DiscordIcon size={16} />
+                        Community Discord
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        render={<a href="mailto:support@maple.dev" />}
+                      >
+                        <EnvelopeIcon size={16} />
+                        Email Support
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton
                   render={<Link to="/settings" />}

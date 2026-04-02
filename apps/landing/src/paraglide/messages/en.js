@@ -1583,6 +1583,14 @@ export const footer_twitter = () => `Twitter / X`
  * @returns {string}
  */
 /* @__NO_SIDE_EFFECTS__ */
+export const footer_discord = () => `Discord`
+
+
+/**
+ * 
+ * @returns {string}
+ */
+/* @__NO_SIDE_EFFECTS__ */
 export const footer_copyright = () => `© 2026 Maple. All rights reserved.`
 
 
