@@ -1,4 +1,4 @@
-import { feature, plan, planFeature } from 'atmn';
+import { feature, plan } from 'atmn';
 
 // Features
 export const logs = feature({
@@ -31,33 +31,33 @@ export const starter = plan({
 		interval: 'month',
 	},
 	items: [
-		planFeature({
-			feature_id: 'logs',
+		({
+			featureId: 'logs',
 			included: 50,
 			reset: {
 				interval: 'month',
 			},
 		}),
-		planFeature({
+		({
 
-			feature_id: 'metrics',
+			featureId: 'metrics',
 			included: 50,
 			reset: {
 				interval: 'month',
 			},
 		}),
-		planFeature({
-			feature_id: 'traces',
+		({
+			featureId: 'traces',
 			included: 50,
 			reset: {
 				interval: 'month',
 			},
 		}),
 	],
-	free_trial: {
-		duration_length: 30,
-		duration_type: 'day',
-		card_required: true,
+	freeTrial: {
+		durationLength: 14,
+		durationType: 'day',
+		cardRequired: true,
 	},
 });
 
@@ -69,33 +69,33 @@ export const startup = plan({
 		interval: 'month',
 	},
 	items: [
-		planFeature({
-			feature_id: 'logs',
+		({
+			featureId: 'logs',
 			included: 100,
 			price: {
 				amount: 0.25,
-				billing_units: 1,
-				billing_method: 'usage_based',
+				billingUnits: 1,
+				billingMethod: 'usage_based',
 				interval: 'month',
 			},
 		}),
-		planFeature({
-			feature_id: 'metrics',
+		({
+			featureId: 'metrics',
 			included: 100,
 			price: {
 				amount: 0.25,
-				billing_units: 1,
-				billing_method: 'usage_based',
+				billingUnits: 1,
+				billingMethod: 'usage_based',
 				interval: 'month',
 			},
 		}),
-		planFeature({
-			feature_id: 'traces',
+		({
+			featureId: 'traces',
 			included: 100,
 			price: {
 				amount: 0.25,
-				billing_units: 1,
-				billing_method: 'usage_based',
+				billingUnits: 1,
+				billingMethod: 'usage_based',
 				interval: 'month',
 			},
 		}),
