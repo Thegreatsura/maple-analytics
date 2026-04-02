@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import { Result } from "@/lib/effect-atom"
+import { wrapEffectSchema } from "@effect-router/core"
 import { Schema } from "effect"
 import { toast } from "sonner"
 import { formatDistanceToNow, format } from "date-fns"
@@ -53,7 +54,7 @@ const errorDetailSearchSchema = Schema.Struct({
 
 export const Route = createFileRoute("/errors/$errorType")({
   component: ErrorDetailPage,
-  validateSearch: Schema.toStandardSchemaV1(errorDetailSearchSchema),
+  validateSearch: wrapEffectSchema(errorDetailSearchSchema),
 })
 
 function ErrorDetailPage() {

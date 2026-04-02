@@ -2,9 +2,7 @@ import { ClerkProvider, useAuth } from "@clerk/clerk-react"
 import { AutumnProvider } from "autumn-js/react"
 import { Component, StrictMode, useCallback, useEffect, useRef, useState } from "react"
 import ReactDOM from "react-dom/client"
-import { RouterProvider } from "@tanstack/react-router"
-
-import { RegistryContext } from "@/lib/effect-atom"
+import { EffectRouterProvider } from "@effect-router/core/react"
 import { apiBaseUrl } from "./lib/services/common/api-base-url"
 import { ClerkAuthBridge } from "./lib/services/common/clerk-auth-bridge"
 import { isClerkAuthEnabled } from "./lib/services/common/auth-mode"
@@ -151,8 +149,9 @@ function ClerkInnerApp() {
   if (!settled) return null
 
   return (
-    <RouterProvider
+    <EffectRouterProvider
       router={router}
+      registry={appRegistry}
       context={{ auth: { isAuthenticated: !!isSignedIn, orgId } }}
     />
   )
@@ -185,8 +184,9 @@ function SelfHostedInnerApp() {
   }
 
   return (
-    <RouterProvider
+    <EffectRouterProvider
       router={router}
+      registry={appRegistry}
       context={{ auth }}
     />
   )
@@ -212,8 +212,6 @@ const app = isClerkAuthEnabled
 
 ReactDOM.createRoot(root).render(
   <StrictMode>
-    <RegistryContext.Provider value={appRegistry}>
-      {app}
-    </RegistryContext.Provider>
+    {app}
   </StrictMode>,
 )

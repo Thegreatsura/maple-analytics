@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import { useMemo } from "react"
 import { Result } from "@/lib/effect-atom"
+import { wrapEffectSchema } from "@effect-router/core"
 import { Schema } from "effect"
 
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
@@ -32,7 +33,7 @@ const serviceDetailSearchSchema = Schema.Struct({
 
 export const Route = createFileRoute("/services/$serviceName")({
   component: ServiceDetailPage,
-  validateSearch: Schema.toStandardSchemaV1(serviceDetailSearchSchema),
+  validateSearch: wrapEffectSchema(serviceDetailSearchSchema),
 })
 
 interface ServiceChartConfig {

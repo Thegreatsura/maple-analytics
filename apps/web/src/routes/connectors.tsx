@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { wrapEffectSchema } from "@effect-router/core"
 import { Schema } from "effect";
 
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
@@ -18,7 +19,7 @@ const ConnectorsSearch = Schema.Struct({
 
 export const Route = createFileRoute("/connectors")({
   component: ConnectorsPage,
-  validateSearch: Schema.toStandardSchemaV1(ConnectorsSearch),
+  validateSearch: wrapEffectSchema(ConnectorsSearch),
 })
 
 function ConnectorsPage() {

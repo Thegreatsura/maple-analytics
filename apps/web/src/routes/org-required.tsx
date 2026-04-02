@@ -1,5 +1,6 @@
 import { OrganizationSwitcher, useAuth } from "@clerk/clerk-react"
 import { Navigate, createFileRoute } from "@tanstack/react-router"
+import { wrapEffectSchema } from "@effect-router/core"
 import { Schema } from "effect"
 import { parseRedirectUrl } from "@/lib/redirect-utils"
 import { isClerkAuthEnabled } from "@/lib/services/common/auth-mode"
@@ -11,7 +12,7 @@ const OrgRequiredSearch = Schema.Struct({
 
 export const Route = createFileRoute("/org-required")({
   component: OrgRequiredPage,
-  validateSearch: Schema.toStandardSchemaV1(OrgRequiredSearch),
+  validateSearch: wrapEffectSchema(OrgRequiredSearch),
 })
 
 function OrgRequiredPage() {

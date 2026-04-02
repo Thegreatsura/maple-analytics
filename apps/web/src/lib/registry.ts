@@ -4,6 +4,6 @@ import { runtimeLayer } from "./services/common/runtime"
 
 export const appRegistry = AtomRegistry.make({ scheduleTask })
 
-const sharedAtomRuntime = Atom.runtime(runtimeLayer)
+export const sharedAtomRuntime = Atom.runtime(runtimeLayer)
 
 appRegistry.mount(sharedAtomRuntime)

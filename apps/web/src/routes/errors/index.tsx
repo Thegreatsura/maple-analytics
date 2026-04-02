@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import { wrapEffectSchema } from "@effect-router/core"
 import { Schema } from "effect"
 
 import { BooleanFromStringParam, OptionalStringArrayParam } from "@/lib/search-params"
@@ -25,7 +26,7 @@ export type ErrorsSearchParams = Schema.Schema.Type<typeof errorsSearchSchema>
 
 export const Route = createFileRoute("/errors/")({
   component: ErrorsPage,
-  validateSearch: Schema.toStandardSchemaV1(errorsSearchSchema),
+  validateSearch: wrapEffectSchema(errorsSearchSchema),
 })
 
 function ErrorsPage() {

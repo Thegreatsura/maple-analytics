@@ -1,6 +1,8 @@
-import { createRouter as createTanStackRouter } from "@tanstack/react-router"
+import { createEffectRouter } from "@effect-router/core"
 
 import { NotFoundError, RouteError } from "./components/route-error"
+import { appRegistry, sharedAtomRuntime } from "./lib/registry"
+import { runtime } from "./lib/services/common/runtime"
 import { routeTree } from "./routeTree.gen"
 
 export interface RouterAuthContext {
@@ -8,8 +10,11 @@ export interface RouterAuthContext {
   orgId: string | null | undefined
 }
 
-export const router = createTanStackRouter({
+export const router = createEffectRouter({
   routeTree,
+  managedRuntime: runtime,
+  atomRuntime: sharedAtomRuntime,
+  registry: appRegistry,
   scrollRestoration: true,
   defaultPreloadStaleTime: 0,
   defaultErrorComponent: RouteError,
