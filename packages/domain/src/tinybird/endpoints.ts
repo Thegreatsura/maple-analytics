@@ -2357,7 +2357,7 @@ export const alertTracesAggregate = defineEndpoint("alert_traces_aggregate", {
     end_time: p.dateTime().describe("End of time range"),
     service_name: p.string().optional().describe("Filter by service name"),
     span_name: p.string().optional().describe("Filter by span name"),
-    root_only: p.string().optional().describe("Filter to root spans only"),
+    root_only: p.string().optional().describe("Filter to service entry point spans (Server/Consumer + root)"),
     environments: p.string().optional().describe("Comma-separated environments filter"),
     commit_shas: p.string().optional().describe("Comma-separated commit SHA filter"),
     attribute_filter_key: p.string().optional().describe("Filter where SpanAttributes[key] = value"),
@@ -2419,7 +2419,7 @@ export const alertTracesAggregate = defineEndpoint("alert_traces_aggregate", {
           AND Timestamp <= {{DateTime(end_time)}}
           {% if defined(service_name) %}AND ServiceName = {{String(service_name)}}{% end %}
           {% if defined(span_name) %}AND SpanName = {{String(span_name)}}{% end %}
-          {% if defined(root_only) %}AND ParentSpanId = ''{% end %}
+          {% if defined(root_only) %}AND (SpanKind IN ('Server', 'Consumer') OR ParentSpanId = ''){% end %}
           {% if defined(errors_only) %}AND StatusCode = 'Error'{% end %}
           {% if defined(environments) %}
             AND ResourceAttributes['deployment.environment'] IN splitByChar(',', {{String(environments, "")}})
@@ -2645,7 +2645,7 @@ export const alertTracesAggregateByService = defineEndpoint("alert_traces_aggreg
     start_time: p.dateTime().describe("Start of time range"),
     end_time: p.dateTime().describe("End of time range"),
     span_name: p.string().optional().describe("Filter by span name"),
-    root_only: p.string().optional().describe("Filter to root spans only"),
+    root_only: p.string().optional().describe("Filter to service entry point spans (Server/Consumer + root)"),
     environments: p.string().optional().describe("Comma-separated environments filter"),
     commit_shas: p.string().optional().describe("Comma-separated commit SHA filter"),
     attribute_filter_key: p.string().optional().describe("Filter where SpanAttributes[key] = value"),
@@ -2707,7 +2707,7 @@ export const alertTracesAggregateByService = defineEndpoint("alert_traces_aggreg
           AND OrgId = {{String(org_id)}}
           AND Timestamp <= {{DateTime(end_time)}}
           {% if defined(span_name) %}AND SpanName = {{String(span_name)}}{% end %}
-          {% if defined(root_only) %}AND ParentSpanId = ''{% end %}
+          {% if defined(root_only) %}AND (SpanKind IN ('Server', 'Consumer') OR ParentSpanId = ''){% end %}
           {% if defined(errors_only) %}AND StatusCode = 'Error'{% end %}
           {% if defined(environments) %}
             AND ResourceAttributes['deployment.environment'] IN splitByChar(',', {{String(environments, "")}})
@@ -2941,7 +2941,7 @@ export const customTracesTimeseries = defineEndpoint("custom_traces_timeseries",
     group_by_span_name: p.string().optional().describe("Group by SpanName"),
     group_by_status_code: p.string().optional().describe("Group by StatusCode"),
     group_by_http_method: p.string().optional().describe("Group by http.method"),
-    root_only: p.string().optional().describe("Filter to root spans only"),
+    root_only: p.string().optional().describe("Filter to service entry point spans (Server/Consumer + root)"),
     environments: p.string().optional().describe("Comma-separated environments filter"),
     commit_shas: p.string().optional().describe("Comma-separated commit SHA filter"),
     group_by_attributes: p.string().optional().describe("Comma-separated SpanAttributes keys to group by"),
@@ -3020,7 +3020,7 @@ export const customTracesTimeseries = defineEndpoint("custom_traces_timeseries",
           {% if defined(span_name) %}AND SpanName = {{String(span_name)}}{% end %}
           AND Timestamp >= {{DateTime(start_time)}}
           AND Timestamp <= {{DateTime(end_time)}}
-          {% if defined(root_only) %}AND ParentSpanId = ''{% end %}
+          {% if defined(root_only) %}AND (SpanKind IN ('Server', 'Consumer') OR ParentSpanId = ''){% end %}
           {% if defined(errors_only) %}AND StatusCode = 'Error'{% end %}
           {% if defined(environments) %}
             AND ResourceAttributes['deployment.environment'] IN splitByChar(',', {{String(environments, "")}})
@@ -3140,7 +3140,7 @@ export const customTracesBreakdown = defineEndpoint("custom_traces_breakdown", {
     group_by_span_name: p.string().optional().describe("Group by SpanName"),
     group_by_status_code: p.string().optional().describe("Group by StatusCode"),
     group_by_http_method: p.string().optional().describe("Group by http.method"),
-    root_only: p.string().optional().describe("Filter to root spans only"),
+    root_only: p.string().optional().describe("Filter to service entry point spans (Server/Consumer + root)"),
     environments: p.string().optional().describe("Comma-separated environments filter"),
     commit_shas: p.string().optional().describe("Comma-separated commit SHA filter"),
     group_by_attribute: p.string().optional().describe("Group by SpanAttributes[key]"),
@@ -3216,7 +3216,7 @@ export const customTracesBreakdown = defineEndpoint("custom_traces_breakdown", {
           {% if defined(span_name) %}AND SpanName = {{String(span_name)}}{% end %}
           AND Timestamp >= {{DateTime(start_time)}}
           AND Timestamp <= {{DateTime(end_time)}}
-          {% if defined(root_only) %}AND ParentSpanId = ''{% end %}
+          {% if defined(root_only) %}AND (SpanKind IN ('Server', 'Consumer') OR ParentSpanId = ''){% end %}
           {% if defined(errors_only) %}AND StatusCode = 'Error'{% end %}
           {% if defined(environments) %}
             AND ResourceAttributes['deployment.environment'] IN splitByChar(',', {{String(environments, "")}})
