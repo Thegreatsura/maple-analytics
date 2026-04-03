@@ -6,6 +6,7 @@ import { serverFunctionMap } from "@/components/dashboard-builder/data-source-re
 import type { DashboardWidget, WidgetDataSource } from "@/components/dashboard-builder/types"
 import { disabledResultAtom } from "@/lib/services/atoms/disabled-result-atom"
 import type { WidgetDataState } from "@/components/dashboard-builder/types"
+import { snapTimestamp } from "@/lib/time-utils"
 
 function interpolateParams(
   params: Record<string, unknown>,
@@ -184,6 +185,7 @@ const toWidgetDataAtomError = (error: unknown): WidgetDataAtomError => {
 
 function normalizeForKey(value: unknown): unknown {
   if (value === null || typeof value !== "object") {
+    if (typeof value === "string") return snapTimestamp(value)
     return value
   }
 

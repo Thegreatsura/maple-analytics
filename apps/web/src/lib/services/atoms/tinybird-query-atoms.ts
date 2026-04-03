@@ -1,5 +1,6 @@
 import { Atom } from "@/lib/effect-atom"
 import { Effect, Schema } from "effect"
+import { snapTimestamp } from "@/lib/time-utils"
 import {
   getCustomChartServiceDetail,
   getCustomChartServiceSparklines,
@@ -54,6 +55,7 @@ const toQueryAtomError = (error: unknown): QueryAtomError => {
 
 function normalizeForKey(value: unknown): unknown {
   if (value === null || typeof value !== "object") {
+    if (typeof value === "string") return snapTimestamp(value)
     return value
   }
 

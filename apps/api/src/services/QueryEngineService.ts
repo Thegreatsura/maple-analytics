@@ -16,7 +16,7 @@ import {
   QueryEngineValidationError,
   TinybirdQueryError,
 } from "@maple/domain/http"
-import { Array as Arr, Duration, Effect, Layer, Match, Option, Result, ServiceMap } from "effect"
+import { Array as Arr, Cache, Duration, Effect, Layer, Match, Option, Result, ServiceMap } from "effect"
 import type { TenantContext } from "./AuthService"
 import { TinybirdService, type TinybirdServiceShape } from "./TinybirdService"
 
@@ -97,6 +97,20 @@ const withTimeout = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 const toEpochMs = (value: string): number => new Date(value.replace(" ", "T") + "Z").getTime()
 const TINYBIRD_DATETIME_RE = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(\.\d+)?$/
+
+const CACHE_SNAP_S = 15
+
+function snapSeconds(dateStr: string): string {
+  if (dateStr.length !== 19 || dateStr[4] !== "-" || dateStr[10] !== " ") return dateStr
+  const seconds = parseInt(dateStr.slice(17, 19), 10)
+  if (Number.isNaN(seconds)) return dateStr
+  const snapped = seconds - (seconds % CACHE_SNAP_S)
+  return dateStr.slice(0, 17) + snapped.toString().padStart(2, "0")
+}
+
+function buildCacheKey(orgId: string, request: QueryEngineExecuteRequest): string {
+  return `${orgId}:${snapSeconds(request.startTime)}:${snapSeconds(request.endTime)}:${JSON.stringify(request.query)}`
+}
 
 const computeBucketSeconds = (startMs: number, endMs: number): number => {
   const targetPoints = 40
@@ -1109,12 +1123,32 @@ export const makeQueryEngineEvaluateGrouped = (tinybird: QueryEngineTinybird) =>
 export class QueryEngineService extends ServiceMap.Service<QueryEngineService, QueryEngineServiceShape>()("QueryEngineService", {
   make: Effect.gen(function* () {
     const tinybird = yield* TinybirdService
-    const execute = makeQueryEngineExecute(tinybird)
+    const executeImpl = makeQueryEngineExecute(tinybird)
     const evaluate = makeQueryEngineEvaluate(tinybird)
     const evaluateGrouped = makeQueryEngineEvaluateGrouped(tinybird)
 
+    const executeCache = yield* Cache.make<
+      string,
+      QueryEngineExecuteResponse,
+      QueryEngineValidationError | QueryEngineExecutionError | QueryEngineTimeoutError
+    >({
+      capacity: 256,
+      timeToLive: "15 seconds",
+      lookup: () => Effect.die("unused"),
+    })
+
     return {
-      execute: (tenant, request) => withTimeout(execute(tenant, request)),
+      execute: (tenant, request) =>
+        withTimeout(
+          Effect.gen(function* () {
+            const key = buildCacheKey(tenant.orgId, request)
+            const cached = yield* Cache.getSuccess(executeCache, key)
+            if (Option.isSome(cached)) return cached.value
+            const result = yield* executeImpl(tenant, request)
+            yield* Cache.set(executeCache, key, result)
+            return result
+          }),
+        ),
       evaluate: (tenant, request) => withTimeout(evaluate(tenant, request)),
       evaluateGrouped: (tenant, request, groupBy) => withTimeout(evaluateGrouped(tenant, request, groupBy)),
     }
