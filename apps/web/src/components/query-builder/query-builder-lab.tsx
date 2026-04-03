@@ -47,13 +47,7 @@ import {
   slowHintsSummary,
 } from "@/lib/query-builder/performance-hints"
 import {
-  getLogsFacetsResultAtom,
   getQueryBuilderTimeseriesResultAtom,
-  getSpanAttributeKeysResultAtom,
-  getSpanAttributeValuesResultAtom,
-  getResourceAttributeKeysResultAtom,
-  getResourceAttributeValuesResultAtom,
-  getTracesFacetsResultAtom,
   listMetricsResultAtom,
 } from "@/lib/services/atoms/tinybird-query-atoms"
 import {
@@ -74,6 +68,7 @@ import {
   type QueryBuilderQueryDraft,
 } from "@/lib/query-builder/model"
 import { useRefreshableAtomValue } from "@/hooks/use-refreshable-atom-value"
+import { AutocompleteValuesProvider, useAutocompleteValuesContext } from "@/hooks/use-autocomplete-values"
 
 type DataSource = QueryBuilderDataSource
 type QueryDraft = QueryBuilderQueryDraft
@@ -342,7 +337,15 @@ function QueryBuilderAtomResults({
   )
 }
 
-export function QueryBuilderLab({
+export function QueryBuilderLab({ startTime, endTime }: QueryBuilderLabProps) {
+  return (
+    <AutocompleteValuesProvider startTime={startTime} endTime={endTime}>
+      <QueryBuilderLabInner startTime={startTime} endTime={endTime} />
+    </AutocompleteValuesProvider>
+  )
+}
+
+function QueryBuilderLabInner({
   startTime,
   endTime,
 }: QueryBuilderLabProps) {
@@ -362,107 +365,14 @@ export function QueryBuilderLab({
     [queries],
   )
 
+  const autocompleteValues = useAutocompleteValuesContext()
+
   const metricsResult = useRefreshableAtomValue(
     listMetricsResultAtom({
       data: {
         limit: 300,
       },
     }),
-  )
-
-  const tracesFacetsResult = useRefreshableAtomValue(
-    getTracesFacetsResultAtom({
-      data: {
-        startTime,
-        endTime,
-      },
-    }),
-  )
-
-  const logsFacetsResult = useRefreshableAtomValue(
-    getLogsFacetsResultAtom({
-      data: {
-        startTime,
-        endTime,
-      },
-    }),
-  )
-
-  const spanAttributeKeysResult = useRefreshableAtomValue(
-    getSpanAttributeKeysResultAtom({
-      data: {
-        startTime,
-        endTime,
-      },
-    }),
-  )
-
-  const [activeAttributeKey, setActiveAttributeKey] = React.useState<string | null>(null)
-  const [activeResourceAttributeKey, setActiveResourceAttributeKey] = React.useState<string | null>(null)
-
-  const spanAttributeValuesResult = useRefreshableAtomValue(
-    getSpanAttributeValuesResultAtom({
-      data: {
-        startTime,
-        endTime,
-        attributeKey: activeAttributeKey ?? "",
-      },
-    }),
-  )
-
-  const resourceAttributeKeysResult = useRefreshableAtomValue(
-    getResourceAttributeKeysResultAtom({
-      data: {
-        startTime,
-        endTime,
-      },
-    }),
-  )
-
-  const resourceAttributeValuesResult = useRefreshableAtomValue(
-    getResourceAttributeValuesResultAtom({
-      data: {
-        startTime,
-        endTime,
-        attributeKey: activeResourceAttributeKey ?? "",
-      },
-    }),
-  )
-
-  const attributeKeys = React.useMemo(
-    () =>
-      Result.builder(spanAttributeKeysResult)
-        .onSuccess((response) => response.data.map((row) => row.attributeKey))
-        .orElse(() => []),
-    [spanAttributeKeysResult],
-  )
-
-  const attributeValues = React.useMemo(
-    () =>
-      activeAttributeKey
-        ? Result.builder(spanAttributeValuesResult)
-            .onSuccess((response) => response.data.map((row) => row.attributeValue))
-            .orElse(() => [])
-        : [],
-    [activeAttributeKey, spanAttributeValuesResult],
-  )
-
-  const resourceAttributeKeys = React.useMemo(
-    () =>
-      Result.builder(resourceAttributeKeysResult)
-        .onSuccess((response) => response.data.map((row) => row.attributeKey))
-        .orElse(() => []),
-    [resourceAttributeKeysResult],
-  )
-
-  const resourceAttributeValues = React.useMemo(
-    () =>
-      activeResourceAttributeKey
-        ? Result.builder(resourceAttributeValuesResult)
-            .onSuccess((response) => response.data.map((row) => row.attributeValue))
-            .orElse(() => [])
-        : [],
-    [activeResourceAttributeKey, resourceAttributeValuesResult],
   )
 
   const metricRows = React.useMemo(
@@ -496,66 +406,6 @@ export function QueryBuilderLab({
 
     return [...map.values()]
   }, [metricRows])
-
-  const autocompleteValuesBySource = React.useMemo(() => {
-    const tracesFacets = Result.builder(tracesFacetsResult)
-      .onSuccess((response) => response.data)
-      .orElse(() => ({
-        services: [],
-        spanNames: [],
-        deploymentEnvs: [],
-      }))
-
-    const logsFacets = Result.builder(logsFacetsResult)
-      .onSuccess((response) => response.data)
-      .orElse(() => ({
-        services: [],
-        severities: [],
-      }))
-
-    const toNames = (items: Array<{ name: string }>): string[] => {
-      const seen = new Set<string>()
-      const values: string[] = []
-
-      for (const item of items) {
-        const next = item.name.trim()
-        if (!next || seen.has(next)) {
-          continue
-        }
-
-        seen.add(next)
-        values.push(next)
-      }
-
-      return values
-    }
-
-    const metricServices = toNames(
-      metricRows
-        .map((row) => ({ name: row.serviceName }))
-        .filter((row) => row.name.trim()),
-    )
-
-    return {
-      traces: {
-        services: toNames(tracesFacets.services),
-        spanNames: toNames(tracesFacets.spanNames),
-        environments: toNames(tracesFacets.deploymentEnvs),
-        attributeKeys,
-        attributeValues,
-        resourceAttributeKeys,
-        resourceAttributeValues,
-      },
-      logs: {
-        services: toNames(logsFacets.services),
-        severities: toNames(logsFacets.severities),
-      },
-      metrics: {
-        services: metricServices,
-        metricTypes: [...QUERY_BUILDER_METRIC_TYPES],
-      },
-    }
-  }, [attributeKeys, attributeValues, resourceAttributeKeys, resourceAttributeValues, logsFacetsResult, metricRows, tracesFacetsResult])
 
   React.useEffect(() => {
     const firstMetric = metricOptions[0]
@@ -913,17 +763,6 @@ export function QueryBuilderLab({
                               textareaClassName="pl-7"
                               value={query.whereClause}
                               dataSource={query.dataSource}
-                              values={autocompleteValuesBySource[query.dataSource]}
-                              onActiveAttributeKey={
-                                query.dataSource === "traces"
-                                  ? setActiveAttributeKey
-                                  : undefined
-                              }
-                              onActiveResourceAttributeKey={
-                                query.dataSource === "traces"
-                                  ? setActiveResourceAttributeKey
-                                  : undefined
-                              }
                               onChange={(nextWhereClause) =>
                                 updateQuery(query.id, (current) => ({
                                   ...current,
@@ -1038,7 +877,7 @@ export function QueryBuilderLab({
                                 }))
                               }
                               dataSource={query.dataSource}
-                              attributeKeys={attributeKeys}
+                              attributeKeys={autocompleteValues.attributeKeys}
                               placeholder="service.name | span.name | none | attr.http.route"
                             />
                           </div>

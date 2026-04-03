@@ -4,7 +4,8 @@ import {
   WidgetBuilderInitialSnapshot,
   WidgetBuilderPreview,
 } from "@/atoms/widget-query-builder-atoms"
-import { AutocompleteKeysProvider } from "@/hooks/use-autocomplete-context"
+import { AutocompleteValuesProvider } from "@/hooks/use-autocomplete-values"
+import { useDashboardTimeRange } from "@/components/dashboard-builder/dashboard-providers"
 import { toInitialState } from "@/lib/query-builder/widget-builder-utils"
 import type { DashboardWidget } from "@/components/dashboard-builder/types"
 
@@ -16,6 +17,9 @@ export function WidgetBuilderProvider({
   children?: ReactNode
 }) {
   const initialState = useMemo(() => toInitialState(widget), [widget])
+  const {
+    state: { resolvedTimeRange: resolvedTime },
+  } = useDashboardTimeRange()
 
   return createElement(
     WidgetBuilderForm.Provider,
@@ -26,7 +30,11 @@ export function WidgetBuilderProvider({
       createElement(
         WidgetBuilderPreview.Provider,
         { value: initialState as never },
-        createElement(AutocompleteKeysProvider, null, children),
+        createElement(AutocompleteValuesProvider, {
+          startTime: resolvedTime?.startTime,
+          endTime: resolvedTime?.endTime,
+          children,
+        }),
       ),
     ),
   )

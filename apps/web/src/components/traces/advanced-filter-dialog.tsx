@@ -11,22 +11,15 @@ import {
 import { Button } from "@maple/ui/components/ui/button"
 import { MagnifierIcon } from "@/components/icons"
 import { WhereClauseEditor } from "@/components/query-builder/where-clause-editor"
-import type { WhereClauseAutocompleteValues } from "@/lib/query-builder/where-clause-autocomplete"
 
 interface AdvancedFilterDialogProps {
   initialValue: string
   onApply: (value: string) => void
-  autocompleteValues?: WhereClauseAutocompleteValues
-  onActiveAttributeKey?: (key: string | null) => void
-  onActiveResourceAttributeKey?: (key: string | null) => void
 }
 
 export function AdvancedFilterDialog({
   initialValue,
   onApply,
-  autocompleteValues,
-  onActiveAttributeKey,
-  onActiveResourceAttributeKey,
 }: AdvancedFilterDialogProps) {
   const [open, setOpen] = React.useState(false)
   const [value, setValue] = React.useState(initialValue)
@@ -110,9 +103,6 @@ export function AdvancedFilterDialog({
             dataSource="traces"
             autocompleteScope="trace_search"
             maxSuggestions={20}
-            values={autocompleteValues}
-            onActiveAttributeKey={onActiveAttributeKey}
-            onActiveResourceAttributeKey={onActiveResourceAttributeKey}
             onChange={setValue}
             placeholder='service.name = "checkout" AND attr.http.route = "/orders/:id"'
             textareaClassName="font-mono text-sm leading-relaxed resize-y min-h-[200px]"

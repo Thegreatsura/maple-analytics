@@ -12,9 +12,8 @@ import {
 } from "@maple/ui/components/ui/select"
 import { cn } from "@maple/ui/utils"
 import { WhereClauseEditor } from "@/components/query-builder/where-clause-editor"
-import { useAutocompleteContext } from "@/hooks/use-autocomplete-context"
 import { useWidgetBuilder } from "@/hooks/use-widget-builder"
-import { useWidgetBuilderData } from "@/hooks/use-widget-builder-data"
+import { useAutocompleteValuesContext } from "@/hooks/use-autocomplete-values"
 import type { ValueUnit } from "@/components/dashboard-builder/types"
 import { Switch } from "@maple/ui/components/ui/switch"
 import { getListPerformanceHints } from "@/lib/query-builder/performance-hints"
@@ -218,8 +217,7 @@ function DraggableColumnRow({
 
 export function ListConfigPanel() {
   const { state, actions: { setState } } = useWidgetBuilder()
-  const { autocompleteValues } = useWidgetBuilderData()
-  const { setActiveAttributeKey, setActiveResourceAttributeKey } = useAutocompleteContext()
+  const autocompleteValues = useAutocompleteValuesContext()
 
   const listDataSource = state.listDataSource
   const whereClause = state.listWhereClause
@@ -366,9 +364,6 @@ export function ListConfigPanel() {
           rows={1}
           value={whereClause}
           dataSource={listDataSource}
-          values={autocompleteValues[listDataSource]}
-          onActiveAttributeKey={setActiveAttributeKey}
-          onActiveResourceAttributeKey={setActiveResourceAttributeKey}
           onChange={(value) => onChange({ listWhereClause: value })}
           placeholder={
             listDataSource === "traces"

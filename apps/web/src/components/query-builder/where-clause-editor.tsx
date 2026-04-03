@@ -9,6 +9,7 @@ import {
 } from "@/lib/query-builder/where-clause-autocomplete"
 import type { QueryBuilderDataSource } from "@/lib/query-builder/model"
 import { useAutocompleteContextOptional } from "@/hooks/use-autocomplete-context"
+import { useAutocompleteValuesContextOptional } from "@/hooks/use-autocomplete-values"
 import { cn } from "@maple/ui/utils"
 
 interface WhereClauseEditorProps {
@@ -51,8 +52,10 @@ export function WhereClauseEditor({
   const lastAttrKeyRef = React.useRef<string | null>(null)
   const lastResourceKeyRef = React.useRef<string | null>(null)
 
-  // Use context directly when available and no explicit callbacks provided
+  // Use context directly when available and no explicit props provided
   const autocompleteCtx = useAutocompleteContextOptional()
+  const autocompleteValuesCtx = useAutocompleteValuesContextOptional()
+  const resolvedValues = values ?? autocompleteValuesCtx?.[dataSource]
   const resolvedOnActiveAttributeKey = onActiveAttributeKey ?? autocompleteCtx?.setActiveAttributeKey
   const resolvedOnActiveResourceAttributeKey = onActiveResourceAttributeKey ?? autocompleteCtx?.setActiveResourceAttributeKey
 
@@ -62,7 +65,7 @@ export function WhereClauseEditor({
         expression,
         cursor: cursorPos,
         dataSource,
-        values,
+        values: resolvedValues,
         scope: autocompleteScope,
         maxSuggestions,
       })
@@ -85,7 +88,7 @@ export function WhereClauseEditor({
         resolvedOnActiveResourceAttributeKey?.(nextResourceKey)
       }
     },
-    [autocompleteScope, dataSource, maxSuggestions, resolvedOnActiveAttributeKey, resolvedOnActiveResourceAttributeKey, values],
+    [autocompleteScope, dataSource, maxSuggestions, resolvedOnActiveAttributeKey, resolvedOnActiveResourceAttributeKey, resolvedValues],
   )
 
   const autocomplete = React.useMemo(
@@ -94,11 +97,11 @@ export function WhereClauseEditor({
         expression: value,
         cursor,
         dataSource,
-        values,
+        values: resolvedValues,
         scope: autocompleteScope,
         maxSuggestions,
       }),
-    [autocompleteScope, cursor, dataSource, maxSuggestions, value, values],
+    [autocompleteScope, cursor, dataSource, maxSuggestions, value, resolvedValues],
   )
 
   const suggestions = autocomplete.suggestions
