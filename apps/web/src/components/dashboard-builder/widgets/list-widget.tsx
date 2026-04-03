@@ -1,4 +1,5 @@
 import { memo } from "react"
+import { Link } from "@tanstack/react-router"
 import { Skeleton } from "@maple/ui/components/ui/skeleton"
 import {
   Table,
@@ -121,13 +122,40 @@ export const ListWidget = memo(function ListWidget({
                     const displayValue = Array.isArray(value)
                       ? value.join(", ")
                       : formatCellValue(value, col.unit)
+
+                    let content: React.ReactNode = displayValue
+                    if (col.field === "traceId" && typeof value === "string" && value) {
+                      const truncated = value.length > 8 ? value.slice(0, 8) : value
+                      content = (
+                        <Link
+                          to="/traces/$traceId"
+                          params={{ traceId: value }}
+                          target="_blank"
+                          className="font-mono text-primary underline decoration-primary/30 underline-offset-2 hover:decoration-primary"
+                        >
+                          {truncated}
+                        </Link>
+                      )
+                    } else if (col.field === "spanName" && typeof value === "string" && value) {
+                      content = (
+                        <Link
+                          to="/traces"
+                          search={{ spanNames: [value] }}
+                          target="_blank"
+                          className="hover:underline underline-offset-2"
+                        >
+                          {displayValue}
+                        </Link>
+                      )
+                    }
+
                     return (
                       <TableCell
                         key={col.field}
                         className="text-xs"
                         style={{ textAlign: col.align ?? "left" }}
                       >
-                        {displayValue}
+                        {content}
                       </TableCell>
                     )
                   })}
