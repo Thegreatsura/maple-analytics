@@ -13,15 +13,19 @@ import {
 } from "@maple/ui/components/ui/select";
 import {
   Combobox,
+  ComboboxChip,
+  ComboboxChips,
+  ComboboxChipsInput,
   ComboboxContent,
+  ComboboxEmpty,
   ComboboxInput,
   ComboboxItem,
   ComboboxList,
+  useComboboxAnchor,
 } from "@maple/ui/components/ui/combobox";
 import { cn } from "@maple/ui/utils";
 import { WhereClauseEditor } from "@/components/query-builder/where-clause-editor";
 import type { WhereClauseAutocompleteValues } from "@/lib/query-builder/where-clause-autocomplete";
-import { useAutocompleteContext } from "@/hooks/use-autocomplete-context";
 import {
   AGGREGATIONS_BY_SOURCE,
   GROUP_BY_OPTIONS,
@@ -87,7 +91,7 @@ const ADD_ON_KEYS: { key: QueryBuilderAddOnKey; label: string }[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// GroupByMultiSelect (inline)
+// GroupByMultiSelect
 // ---------------------------------------------------------------------------
 
 function GroupByMultiSelect({
@@ -101,16 +105,9 @@ function GroupByMultiSelect({
   dataSource: QueryBuilderDataSource;
   attributeKeys?: string[];
 }) {
-  const inputRef = React.useRef<HTMLInputElement | null>(null);
-  const [isFocused, setIsFocused] = React.useState(false);
-  const [isDismissed, setIsDismissed] = React.useState(false);
-  const [inputValue, setInputValue] = React.useState("");
-  const [activeIndex, setActiveIndex] = React.useState(0);
+  const anchor = useComboboxAnchor();
 
-  const selectedSet = React.useMemo(() => new Set(value), [value]);
-
-  const suggestions = React.useMemo(() => {
-    const query = inputValue.toLowerCase();
+  const options = React.useMemo(() => {
     const staticOptions = GROUP_BY_OPTIONS[dataSource]
       .filter((opt) => opt.value !== "none")
       .map((opt) => ({ label: opt.label, value: opt.value }));
@@ -118,138 +115,29 @@ function GroupByMultiSelect({
       label: `attr.${key}`,
       value: `attr.${key}`,
     }));
-    const options = [...staticOptions, ...attrOptions].filter((opt) => !selectedSet.has(opt.value));
-    if (!query) return options;
-    return options.filter(
-      (opt) => opt.label.toLowerCase().includes(query) || opt.value.toLowerCase().includes(query),
-    );
-  }, [inputValue, dataSource, attributeKeys, selectedSet]);
-
-  const isOpen = isFocused && !isDismissed && suggestions.length > 0;
-
-  const handleInputChange = React.useCallback((nextValue: string) => {
-    setInputValue(nextValue);
-    setActiveIndex(0);
-    setIsDismissed(false);
-  }, []);
-
-  const addKey = React.useCallback(
-    (key: string) => {
-      if (!selectedSet.has(key)) {
-        onChange([...value, key]);
-      }
-      setInputValue("");
-      setIsDismissed(false);
-    },
-    [value, onChange, selectedSet],
-  );
-
-  const removeKey = React.useCallback(
-    (key: string) => {
-      onChange(value.filter((k) => k !== key));
-    },
-    [value, onChange],
-  );
-
-  const applySuggestion = React.useCallback(
-    (index: number) => {
-      const suggestion = suggestions[index];
-      if (!suggestion) return;
-      addKey(suggestion.value);
-    },
-    [suggestions, addKey],
-  );
+    return [...staticOptions, ...attrOptions];
+  }, [dataSource, attributeKeys]);
 
   return (
-    <div className="relative flex-1 min-w-[140px]">
-      <div
-        className={cn(
-          "flex flex-wrap items-center gap-1 min-h-8 px-2 py-1 border rounded-md bg-transparent text-xs",
-          isFocused && "ring-1 ring-ring",
-        )}
-        onClick={() => inputRef.current?.focus()}
-      >
-        {value.map((key) => (
-          <span
-            key={key}
-            className="inline-flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-xs font-mono text-foreground"
-          >
-            {key}
-            <button
-              type="button"
-              className="ml-0.5 text-muted-foreground hover:text-foreground"
-              onClick={(event) => {
-                event.stopPropagation();
-                removeKey(key);
-              }}
-            >
-              ×
-            </button>
-          </span>
-        ))}
-        <input
-          ref={inputRef}
-          value={inputValue}
-          placeholder={value.length === 0 ? "service.name" : ""}
-          className="flex-1 min-w-[80px] bg-transparent outline-none text-xs placeholder:text-muted-foreground"
-          onFocus={() => {
-            setIsFocused(true);
-            setIsDismissed(false);
-          }}
-          onBlur={() => setIsFocused(false)}
-          onChange={(event) => handleInputChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Backspace" && !inputValue && value.length > 0) {
-              removeKey(value[value.length - 1]);
-              return;
-            }
-            if (!isOpen || suggestions.length === 0) return;
-            if (event.key === "ArrowDown") {
-              event.preventDefault();
-              setActiveIndex((c) => (c + 1) % suggestions.length);
-              return;
-            }
-            if (event.key === "ArrowUp") {
-              event.preventDefault();
-              setActiveIndex((c) => (c - 1 + suggestions.length) % suggestions.length);
-              return;
-            }
-            if (event.key === "Enter" || event.key === "Tab") {
-              event.preventDefault();
-              applySuggestion(activeIndex);
-              return;
-            }
-            if (event.key === "Escape") {
-              event.preventDefault();
-              setIsDismissed(true);
-            }
-          }}
-        />
-      </div>
-      {isOpen && (
-        <div
-          role="listbox"
-          aria-label="Group by suggestions"
-          className="absolute z-50 mt-1 max-h-52 w-full overflow-auto border bg-popover text-popover-foreground shadow-md rounded-md"
-        >
-          {suggestions.map((suggestion, index) => (
-            <button
-              key={suggestion.value}
-              type="button"
-              role="option"
-              aria-selected={index === activeIndex}
-              className={cn(
-                "flex w-full items-center px-2 py-1.5 text-left text-xs font-mono",
-                index === activeIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
-              )}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => applySuggestion(index)}
-            >
-              {suggestion.label}
-            </button>
+    <div className="flex-1 min-w-[140px]">
+      <Combobox multiple value={value} onValueChange={onChange}>
+        <ComboboxChips ref={anchor} className="text-xs font-mono">
+          {value.map((key) => (
+            <ComboboxChip key={key}>{key}</ComboboxChip>
           ))}
-        </div>
-      )}
+          <ComboboxChipsInput placeholder={value.length === 0 ? "service.name" : ""} />
+        </ComboboxChips>
+        <ComboboxContent anchor={anchor}>
+          <ComboboxEmpty>No fields found.</ComboboxEmpty>
+          <ComboboxList>
+            {options.map((opt) => (
+              <ComboboxItem key={opt.value} value={opt.value} className="font-mono">
+                {opt.label}
+              </ComboboxItem>
+            ))}
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
     </div>
   );
 }
@@ -415,7 +303,6 @@ function TracesLogsBody({
   autocompleteValues: AutocompleteValues;
   onUpdate: (updater: (q: QueryBuilderQueryDraft) => QueryBuilderQueryDraft) => void;
 }) {
-  const { setActiveAttributeKey, setActiveResourceAttributeKey } = useAutocompleteContext();
   return (
     <>
       {/* Row 1: Where clause */}
@@ -426,8 +313,6 @@ function TracesLogsBody({
           value={query.whereClause}
           dataSource={query.dataSource}
           values={autocompleteValues[query.dataSource]}
-          onActiveAttributeKey={setActiveAttributeKey}
-          onActiveResourceAttributeKey={setActiveResourceAttributeKey}
           onChange={(nextWhereClause) =>
             onUpdate((current) => ({
               ...current,
@@ -535,7 +420,6 @@ function MetricsBody({
   autocompleteValues: AutocompleteValues;
   onUpdate: (updater: (q: QueryBuilderQueryDraft) => QueryBuilderQueryDraft) => void;
 }) {
-  const { setActiveAttributeKey, setActiveResourceAttributeKey } = useAutocompleteContext();
   return (
     <>
       {/* Row 1: Metric type + name */}
@@ -590,8 +474,6 @@ function MetricsBody({
         value={query.whereClause}
         dataSource={query.dataSource}
         values={autocompleteValues.metrics}
-        onActiveAttributeKey={setActiveAttributeKey}
-        onActiveResourceAttributeKey={setActiveResourceAttributeKey}
         onChange={(nextWhereClause) =>
           onUpdate((current) => ({
             ...current,

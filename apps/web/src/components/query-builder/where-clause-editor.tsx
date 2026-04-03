@@ -8,6 +8,7 @@ import {
   type WhereClauseAutocompleteValues,
 } from "@/lib/query-builder/where-clause-autocomplete"
 import type { QueryBuilderDataSource } from "@/lib/query-builder/model"
+import { useAutocompleteContextOptional } from "@/hooks/use-autocomplete-context"
 import { cn } from "@maple/ui/utils"
 
 interface WhereClauseEditorProps {
@@ -50,6 +51,11 @@ export function WhereClauseEditor({
   const lastAttrKeyRef = React.useRef<string | null>(null)
   const lastResourceKeyRef = React.useRef<string | null>(null)
 
+  // Use context directly when available and no explicit callbacks provided
+  const autocompleteCtx = useAutocompleteContextOptional()
+  const resolvedOnActiveAttributeKey = onActiveAttributeKey ?? autocompleteCtx?.setActiveAttributeKey
+  const resolvedOnActiveResourceAttributeKey = onActiveResourceAttributeKey ?? autocompleteCtx?.setActiveResourceAttributeKey
+
   const notifyActiveKeys = React.useCallback(
     (expression: string, cursorPos: number) => {
       const ac = getWhereClauseAutocomplete({
@@ -67,7 +73,7 @@ export function WhereClauseEditor({
           : null
       if (nextAttrKey !== lastAttrKeyRef.current) {
         lastAttrKeyRef.current = nextAttrKey
-        onActiveAttributeKey?.(nextAttrKey)
+        resolvedOnActiveAttributeKey?.(nextAttrKey)
       }
 
       const nextResourceKey =
@@ -76,10 +82,10 @@ export function WhereClauseEditor({
           : null
       if (nextResourceKey !== lastResourceKeyRef.current) {
         lastResourceKeyRef.current = nextResourceKey
-        onActiveResourceAttributeKey?.(nextResourceKey)
+        resolvedOnActiveResourceAttributeKey?.(nextResourceKey)
       }
     },
-    [autocompleteScope, dataSource, maxSuggestions, onActiveAttributeKey, onActiveResourceAttributeKey, values],
+    [autocompleteScope, dataSource, maxSuggestions, resolvedOnActiveAttributeKey, resolvedOnActiveResourceAttributeKey, values],
   )
 
   const autocomplete = React.useMemo(
