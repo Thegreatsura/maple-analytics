@@ -1,3 +1,5 @@
+import { Match, pipe } from "effect"
+
 /**
  * Format a duration in milliseconds to a human-readable string.
  * - < 1ms: displays in microseconds (μs)
@@ -163,3 +165,23 @@ export function bucketIntervalLabel(seconds: number | undefined): string {
 export function formatThroughput(value: number, suffix: string): string {
   return `${formatNumber(value)}${suffix}`
 }
+
+/**
+ * Format a numeric value according to a unit type.
+ * Used by chart Y-axis ticks, tooltips, and stat widgets.
+ */
+export const formatValueByUnit: (num: number, unit?: string) => string = (num, unit) =>
+  pipe(
+    Match.value(unit),
+    Match.when("percent", () => `${(num * 100).toFixed(1)}%`),
+    Match.when("duration_ms", () => formatDuration(num)),
+    Match.when("duration_us", () => formatDuration(num / 1000)),
+    Match.when("requests_per_sec", () => `${formatNumber(num)}/s`),
+    Match.when("bytes", () => {
+      if (num >= 1_000_000_000) return `${(num / 1_000_000_000).toFixed(1)} GB`
+      if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)} MB`
+      if (num >= 1_000) return `${(num / 1_000).toFixed(1)} KB`
+      return `${num} B`
+    }),
+    Match.orElse(() => formatNumber(num)),
+  )

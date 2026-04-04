@@ -87,6 +87,7 @@
     "@types/react-grid-layout": "^2.1.0",
     "@vitejs/plugin-react": "^5.1.3",
     "jsdom": "^27.0.0",
+    "react-scan": "^0.5.3",
     "typescript": "catalog:tooling",
     "vite": "catalog:",
     "vite-tsconfig-paths": "^6.0.5",

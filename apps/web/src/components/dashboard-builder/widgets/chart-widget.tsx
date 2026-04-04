@@ -56,6 +56,7 @@ export const ChartWidget = memo(function ChartWidget({
           tooltip={tooltip}
           stacked={display.stacked}
           curveType={display.curveType}
+          unit={display.unit}
         />
       </Suspense>
     </WidgetFrame>

@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "effect": "catalog:effect",
     "@base-ui/react": "catalog:ui",
     "@xyflow/react": "catalog:ui",
     "class-variance-authority": "catalog:ui",

@@ -19,6 +19,7 @@ export interface BaseChartProps {
   stacked?: boolean
   curveType?: "linear" | "monotone"
   referenceLines?: ChartReferenceLine[]
+  unit?: string
 }
 
 export type ChartCategory = "bar" | "area" | "line" | "radar"

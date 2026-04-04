@@ -12,7 +12,7 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "../../ui/chart"
-import { formatNumber, inferBucketSeconds, inferRangeMs, formatBucketLabel } from "../../../lib/format"
+import { formatValueByUnit, inferBucketSeconds, inferRangeMs, formatBucketLabel } from "../../../lib/format"
 
 const fallbackData: Record<string, unknown>[] = [
   { bucket: "2026-01-01T00:00:00Z", A: 12, B: 8 },
@@ -35,7 +35,7 @@ function formatBucketTime(value: unknown): string {
   return typeof value === "string" ? value : ""
 }
 
-export function QueryBuilderLineChart({ data, className, legend, tooltip, curveType }: BaseChartProps) {
+export function QueryBuilderLineChart({ data, className, legend, tooltip, curveType, unit }: BaseChartProps) {
   const { chartData, seriesDefinitions } = React.useMemo(() => {
     const source = Array.isArray(data) && data.length > 0 ? data : fallbackData
     const rawSeriesKeys: string[] = []
@@ -77,18 +77,36 @@ export function QueryBuilderLineChart({ data, className, legend, tooltip, curveT
     [seriesDefinitions],
   )
 
-  const { data: processedData, hasIncomplete, incompleteKeys } = useIncompleteSegments(chartData, valueKeys)
+  const { data: incompleteData, hasIncomplete, incompleteKeys } = useIncompleteSegments(chartData, valueKeys)
+
+  const bucketSeconds = React.useMemo(
+    () => inferBucketSeconds(
+      chartData
+        .map((row) => ({ bucket: formatBucketTime(row.bucket) }))
+        .filter((row) => row.bucket.length > 0),
+    ),
+    [chartData],
+  )
+
+  const processedData = React.useMemo(() => {
+    if (unit !== "requests_per_sec" || !bucketSeconds) return incompleteData
+    return incompleteData.map((row) => {
+      const next: Record<string, unknown> = { bucket: row.bucket }
+      for (const key of Object.keys(row)) {
+        if (key === "bucket") continue
+        const val = row[key]
+        next[key] = typeof val === "number" ? val / bucketSeconds : val
+      }
+      return next
+    })
+  }, [incompleteData, unit, bucketSeconds])
 
   const axisContext = React.useMemo(
     () => ({
       rangeMs: inferRangeMs(chartData),
-      bucketSeconds: inferBucketSeconds(
-        chartData
-          .map((row) => ({ bucket: formatBucketTime(row.bucket) }))
-          .filter((row) => row.bucket.length > 0),
-      ),
+      bucketSeconds,
     }),
-    [chartData],
+    [chartData, bucketSeconds],
   )
 
   const chartConfig = React.useMemo(() => {
@@ -126,7 +144,7 @@ export function QueryBuilderLineChart({ data, className, legend, tooltip, curveT
           tickLine={false}
           axisLine={false}
           tickMargin={8}
-          tickFormatter={(value) => formatNumber(asFiniteNumber(value))}
+          tickFormatter={(value) => formatValueByUnit(asFiniteNumber(value), unit)}
         />
 
         {tooltip !== "hidden" && (
@@ -150,7 +168,7 @@ export function QueryBuilderLineChart({ data, className, legend, tooltip, curveT
                       <span className="shrink-0 size-2.5 rounded-[2px]" style={{ backgroundColor: item.color }} />
                       <span className="text-muted-foreground">{label}</span>
                       <span className="font-mono font-medium">
-                        {formatNumber(asFiniteNumber(value))}
+                        {formatValueByUnit(asFiniteNumber(value), unit)}
                       </span>
                     </span>
                   )

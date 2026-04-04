@@ -1,12 +1,12 @@
 import { memo } from "react"
 import { Skeleton } from "@maple/ui/components/ui/skeleton"
+import { formatValueByUnit } from "@maple/ui/lib/format"
 import { WidgetFrame } from "@/components/dashboard-builder/widgets/widget-shell"
 import type {
   WidgetDataState,
   WidgetDisplayConfig,
   WidgetMode,
 } from "@/components/dashboard-builder/types"
-import { formatNumber, formatDuration } from "@/lib/format"
 
 interface StatWidgetProps {
   dataState: WidgetDataState
@@ -21,33 +21,7 @@ export function formatValue(value: unknown, unit?: string, prefix?: string, suff
   const num = typeof value === "number" ? value : Number(value)
   if (Number.isNaN(num)) return String(value ?? "-")
 
-  let formatted: string
-  switch (unit) {
-    case "percent":
-      formatted = `${(num * 100).toFixed(1)}%`
-      break
-    case "duration_ms":
-      formatted = formatDuration(num)
-      break
-    case "duration_us":
-      formatted = formatDuration(num / 1000)
-      break
-    case "number":
-      formatted = formatNumber(num)
-      break
-    case "requests_per_sec":
-      formatted = `${num.toFixed(1)}/s`
-      break
-    case "bytes":
-      if (num >= 1_000_000_000) formatted = `${(num / 1_000_000_000).toFixed(1)} GB`
-      else if (num >= 1_000_000) formatted = `${(num / 1_000_000).toFixed(1)} MB`
-      else if (num >= 1_000) formatted = `${(num / 1_000).toFixed(1)} KB`
-      else formatted = `${num} B`
-      break
-    default:
-      formatted = formatNumber(num)
-  }
-
+  const formatted = formatValueByUnit(num, unit)
   return `${prefix ?? ""}${formatted}${suffix ?? ""}`
 }
 
