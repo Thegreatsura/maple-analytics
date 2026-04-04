@@ -116,6 +116,20 @@ export const traces = defineDatasource("traces", {
       { jsonPath: "$.links_attributes[:]" }
     ),
   },
+  indexes: [
+    {
+      name: "idx_trace_id",
+      expr: "TraceId",
+      type: "bloom_filter(0.01)",
+      granularity: 1,
+    },
+    {
+      name: "idx_span_attr_vals",
+      expr: "mapValues(SpanAttributes)",
+      type: "bloom_filter(0.01)",
+      granularity: 1,
+    },
+  ],
   engine: engine.mergeTree({
     partitionKey: "toDate(Timestamp)",
     sortingKey: ["OrgId", "ServiceName", "SpanName", "toDateTime(Timestamp)"],
