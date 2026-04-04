@@ -97,7 +97,7 @@ export interface OrgTinybirdSettingsServiceShape {
   >
   readonly resolveRuntimeConfig: (
     orgId: OrgId,
-  ) => Effect.Effect<Option.Option<RuntimeTinybirdConfig>, OrgTinybirdSettingsPersistenceError | OrgTinybirdSettingsEncryptionError | OrgTinybirdSettingsSyncError>
+  ) => Effect.Effect<Option.Option<RuntimeTinybirdConfig>, OrgTinybirdSettingsPersistenceError | OrgTinybirdSettingsEncryptionError>
 }
 
 const decodeIsoDateTimeStringSync = Schema.decodeUnknownSync(IsoDateTimeString)
@@ -461,15 +461,16 @@ export class OrgTinybirdSettingsService extends ServiceMap.Service<OrgTinybirdSe
           return Option.none<RuntimeTinybirdConfig>()
         }
 
-        // Don't block on revision mismatch — the old schema is usually good enough.
-        // Individual queries may fail on missing columns, but that's better than
-        // blocking everything until the user manually resyncs.
+        // When syncStatus is not "active" (e.g. a deployment failed), still return the
+        // config so queries can reach the custom host. The old schema is usually good
+        // enough — individual queries may fail on missing columns, but that's better
+        // than blocking everything until the user manually resyncs.
         if (row.value.syncStatus !== "active") {
-          return yield* Effect.fail(
-            new OrgTinybirdSettingsSyncError({
-              message: row.value.lastSyncError ?? "BYO Tinybird is configured but not healthy",
-            }),
-          )
+          yield* Effect.logWarning("BYO Tinybird config returned in degraded state", {
+            orgId,
+            syncStatus: row.value.syncStatus,
+            lastSyncError: row.value.lastSyncError,
+          })
         }
 
         const token = yield* decryptToken(

@@ -366,6 +366,46 @@ describe("OrgTinybirdSettingsService", () => {
     expect(result.pipe(Option.map((c) => c.host), Option.getOrElse(() => ""))).toBe("https://customer.tinybird.co")
   })
 
+  it("resolveRuntimeConfig returns config even when syncStatus is error (graceful degradation)", async () => {
+    const { url, dbPath } = createTempDbUrl()
+    __testables.setSyncProjectImpl(async () => ({
+      projectRevision: "rev-1",
+      result: "success",
+      deploymentId: "dep-1",
+    }))
+
+    const layer = makeLayer(url)
+
+    await Effect.runPromise(
+      OrgTinybirdSettingsService.upsert(
+        asOrgId("org_a"),
+        asUserId("user_a"),
+        adminRoles,
+        {
+          host: "https://customer.tinybird.co",
+          token: "secret-token",
+        },
+      ).pipe(Effect.provide(layer)),
+    )
+
+    const db = new Database(dbPath)
+    db
+      .query(
+        "UPDATE org_tinybird_settings SET sync_status = ?, last_sync_error = ? WHERE org_id = ?",
+      )
+      .run("error", "deployment failed", "org_a")
+    db.close()
+
+    const result = await Effect.runPromise(
+      OrgTinybirdSettingsService.resolveRuntimeConfig(asOrgId("org_a")).pipe(
+        Effect.provide(layer),
+      ),
+    )
+
+    expect(Option.isSome(result)).toBe(true)
+    expect(result.pipe(Option.map((c) => c.host), Option.getOrElse(() => ""))).toBe("https://customer.tinybird.co")
+  })
+
   it("reports stored error states without masking them as out_of_sync", async () => {
     const { url, dbPath } = createTempDbUrl()
     __testables.setSyncProjectImpl(async () => ({
