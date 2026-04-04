@@ -1,5 +1,4 @@
 import * as React from "react"
-import { Atom, useAtom } from "@/lib/effect-atom"
 
 import { AppSidebar } from "@/components/dashboard/app-sidebar"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@maple/ui/components/ui/sidebar"
@@ -12,13 +11,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@maple/ui/components/ui/breadcrumb"
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@maple/ui/components/ui/sheet"
+import { PageLayout } from "@maple/ui/components/ui/page-layout"
 import { Button } from "@maple/ui/components/ui/button"
 import { useIsMobile } from "@maple/ui/hooks/use-mobile"
 import { LayoutLeftIcon } from "@/components/icons"
@@ -66,9 +59,6 @@ export function DashboardLayout({
   breadcrumbActions,
   rightSidebar,
 }: DashboardLayoutProps) {
-  const isScrolledAtom = React.useMemo(() => Atom.make(false), [])
-  const [isScrolled, setIsScrolled] = useAtom(isScrolledAtom)
-  const [filterSheetOpen, setFilterSheetOpen] = React.useState(false)
   const isMobile = useIsMobile()
   const hasHeader = title || titleContent || description || headerActions
 
@@ -82,100 +72,89 @@ export function DashboardLayout({
         >
           Skip to main content
         </a>
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
-              {breadcrumbs.map((item, index) => (
-                <React.Fragment key={item.label}>
-                  {index > 0 && <BreadcrumbSeparator />}
-                  <BreadcrumbItem>
-                    {item.href ? (
-                      (() => {
-                        const { pathname, search } = parseSearchFromHref(item.href)
-                        if (!search) {
+        <PageLayout.Root>
+          <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="mr-2 h-4" />
+            <Breadcrumb>
+              <BreadcrumbList>
+                {breadcrumbs.map((item, index) => (
+                  <React.Fragment key={item.label}>
+                    {index > 0 && <BreadcrumbSeparator />}
+                    <BreadcrumbItem>
+                      {item.href ? (
+                        (() => {
+                          const { pathname, search } = parseSearchFromHref(item.href)
+                          if (!search) {
+                            return (
+                              <BreadcrumbLink render={<Link to={pathname} />}>
+                                {item.label}
+                              </BreadcrumbLink>
+                            )
+                          }
                           return (
-                            <BreadcrumbLink render={<Link to={pathname} />}>
+                            <BreadcrumbLink render={<Link to={pathname} search={search as never} />}>
                               {item.label}
                             </BreadcrumbLink>
                           )
-                        }
-                        return (
-                          <BreadcrumbLink render={<Link to={pathname} search={search as never} />}>
-                            {item.label}
-                          </BreadcrumbLink>
-                        )
-                      })()
-                    ) : (
-                      <BreadcrumbPage>{item.label}</BreadcrumbPage>
-                    )}
-                  </BreadcrumbItem>
-                </React.Fragment>
-              ))}
-            </BreadcrumbList>
-          </Breadcrumb>
-          {(breadcrumbActions || (filterSidebar && isMobile)) && (
-            <div className="ml-auto flex shrink-0 items-center gap-2">
-              {filterSidebar && isMobile && (
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  onClick={() => setFilterSheetOpen(true)}
-                  aria-label="Open filters"
-                >
-                  <LayoutLeftIcon size={16} />
-                </Button>
-              )}
-              {breadcrumbActions}
-            </div>
-          )}
-        </header>
-        <div className="flex min-h-0 flex-1 overflow-hidden">
-          {filterSidebar && !isMobile && (
-            <aside className="sticky top-0 h-full w-64 shrink-0 overflow-y-auto border-r p-4">
-              {filterSidebar}
-            </aside>
-          )}
-          {filterSidebar && isMobile && (
-            <Sheet open={filterSheetOpen} onOpenChange={setFilterSheetOpen}>
-              <SheetContent side="left" className="w-72 p-4 overflow-y-auto">
-                <SheetHeader className="sr-only">
-                  <SheetTitle>Filters</SheetTitle>
-                  <SheetDescription>Filter options for this page.</SheetDescription>
-                </SheetHeader>
-                {filterSidebar}
-              </SheetContent>
-            </Sheet>
-          )}
-          <main id="main-content" className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {(hasHeader || stickyContent) && (
-              <div className={`shrink-0 space-y-4 p-4 transition-shadow ${isScrolled ? "shadow-[0_2px_8px_rgba(0,0,0,0.08)]" : ""}`}>
-                {hasHeader && (
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                    <div className="min-w-0 flex-1">
-                      {titleContent ?? (
-                        title && <h1 className="text-2xl font-bold tracking-tight truncate" title={title}>{title}</h1>
+                        })()
+                      ) : (
+                        <BreadcrumbPage>{item.label}</BreadcrumbPage>
                       )}
-                      {description && (
-                        <p className="text-muted-foreground">{description}</p>
-                      )}
-                    </div>
-                    {headerActions && <div className="shrink-0 overflow-x-auto">{headerActions}</div>}
-                  </div>
+                    </BreadcrumbItem>
+                  </React.Fragment>
+                ))}
+              </BreadcrumbList>
+            </Breadcrumb>
+            {(breadcrumbActions || (filterSidebar && isMobile)) && (
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                {filterSidebar && isMobile && (
+                  <PageLayout.FilterSidebarTrigger>
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      aria-label="Open filters"
+                    >
+                      <LayoutLeftIcon size={16} />
+                    </Button>
+                  </PageLayout.FilterSidebarTrigger>
                 )}
-                {stickyContent}
+                {breadcrumbActions}
               </div>
             )}
-            <div
-              className="flex min-h-0 flex-1 flex-col overflow-auto p-4"
-              onScroll={(e) => setIsScrolled(e.currentTarget.scrollTop > 0)}
-            >
-              {children}
-            </div>
-          </main>
-          {rightSidebar && <aside className="hidden lg:block">{rightSidebar}</aside>}
-        </div>
+          </header>
+          <PageLayout.Body>
+            {filterSidebar && (
+              <PageLayout.FilterSidebar>
+                {filterSidebar}
+              </PageLayout.FilterSidebar>
+            )}
+            <PageLayout.Content>
+              {(hasHeader || stickyContent) && (
+                <PageLayout.StickyArea>
+                  {hasHeader && (
+                    <PageLayout.Header
+                      title={title}
+                      titleContent={titleContent}
+                      description={description}
+                    >
+                      {headerActions && <PageLayout.HeaderActions>{headerActions}</PageLayout.HeaderActions>}
+                    </PageLayout.Header>
+                  )}
+                  {stickyContent}
+                </PageLayout.StickyArea>
+              )}
+              <PageLayout.ScrollArea>
+                {children}
+              </PageLayout.ScrollArea>
+            </PageLayout.Content>
+            {rightSidebar && (
+              <PageLayout.RightSidebar>
+                {rightSidebar}
+              </PageLayout.RightSidebar>
+            )}
+          </PageLayout.Body>
+        </PageLayout.Root>
       </SidebarInset>
     </SidebarProvider>
   )

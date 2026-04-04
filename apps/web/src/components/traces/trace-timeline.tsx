@@ -5,8 +5,10 @@ import { ChevronExpandYIcon } from "@/components/icons"
 import { Button } from "@maple/ui/components/ui/button"
 import { getServiceLegendColor } from "@maple/ui/colors"
 import type { SpanNode } from "@/api/tinybird/traces"
+import { useContainerSize } from "@maple/ui/hooks/use-container-size"
 import { useTraceView } from "./trace-view-context"
-import { useTraceTimeline, clampViewport } from "./use-trace-timeline"
+import { useTraceTimeline } from "./use-trace-timeline"
+import { useTimelineGestures } from "./use-timeline-gestures"
 import { TraceTimelineSearch } from "./trace-timeline-search"
 import { TraceTimelineMinimap } from "./trace-timeline-minimap"
 import { TraceTimelineTimeAxis } from "./trace-timeline-time-axis"
@@ -22,11 +24,10 @@ export function TraceTimeline() {
   const searchInputRef = React.useRef<HTMLInputElement>(null)
   const tooltipRef = React.useRef<HTMLDivElement>(null)
   const [scrollTop, setScrollTop] = React.useState(0)
-  const [containerSize, setContainerSize] = React.useState({ width: 0, height: 0 })
   const [hoveredSpan, setHoveredSpan] = React.useState<SpanNode | null>(null)
   const [tooltipPos, setTooltipPos] = React.useState<{ x: number; y: number } | null>(null)
-  const isPanning = React.useRef(false)
-  const panStart = React.useRef<{ x: number; viewportStartMs: number; viewportEndMs: number } | null>(null)
+
+  const containerSize = useContainerSize(scrollRef)
 
   const {
     bars,
@@ -45,20 +46,15 @@ export function TraceTimeline() {
     defaultExpandDepth: Infinity,
   })
 
-  // Observe container size
-  React.useEffect(() => {
-    if (!scrollRef.current) return
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerSize({
-          width: entry.contentRect.width,
-          height: entry.contentRect.height,
-        })
-      }
-    })
-    observer.observe(scrollRef.current)
-    return () => observer.disconnect()
-  }, [])
+  const { isPanning, handleMouseDown } = useTimelineGestures({
+    scrollRef,
+    containerRef,
+    viewport: state.viewport,
+    containerWidth: containerSize.width,
+    traceStartMs,
+    traceEndMs,
+    dispatch,
+  })
 
   // Handle scroll
   const handleScroll = React.useCallback(() => {
@@ -66,93 +62,6 @@ export function TraceTimeline() {
       setScrollTop(scrollRef.current.scrollTop)
     }
   }, [])
-
-  // Scroll-wheel zoom — use native listener to avoid passive event issue
-  const wheelHandlerRef = React.useRef<(e: WheelEvent) => void>(undefined)
-  wheelHandlerRef.current = (e: WheelEvent) => {
-    // Horizontal scroll = pan
-    if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && containerSize.width > 0) {
-      const visibleDuration = state.viewport.endMs - state.viewport.startMs
-      const deltaMs = (e.deltaX / containerSize.width) * visibleDuration
-      dispatch({ type: "PAN", deltaMs, traceStartMs, traceEndMs })
-      e.preventDefault()
-      return
-    }
-
-    // Ctrl/Cmd + scroll = zoom
-    if (e.deltaY !== 0 && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault()
-      const el = scrollRef.current
-      if (!el) return
-      const rect = el.getBoundingClientRect()
-      const mouseX = e.clientX - rect.left
-      const mousePercent = mouseX / rect.width
-      const visibleDuration = state.viewport.endMs - state.viewport.startMs
-      const centerMs = state.viewport.startMs + mousePercent * visibleDuration
-
-      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15
-      dispatch({ type: "ZOOM", centerMs, factor, traceStartMs, traceEndMs })
-    }
-  }
-
-  React.useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    const handler = (e: WheelEvent) => wheelHandlerRef.current?.(e)
-    el.addEventListener("wheel", handler, { passive: false })
-    return () => el.removeEventListener("wheel", handler)
-  }, [])
-
-  // Panning via mouse drag
-  const handleMouseDown = React.useCallback(
-    (e: React.MouseEvent) => {
-      // Only start pan if clicking on empty area (not on a bar)
-      const target = e.target as HTMLElement
-      if (target.closest("[data-span-id]")) return
-
-      isPanning.current = true
-      panStart.current = {
-        x: e.clientX,
-        viewportStartMs: state.viewport.startMs,
-        viewportEndMs: state.viewport.endMs,
-      }
-      e.preventDefault()
-    },
-    [state.viewport]
-  )
-
-  React.useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isPanning.current || !panStart.current || !containerRef.current) return
-      const rect = containerRef.current.getBoundingClientRect()
-      const deltaPercent = (e.clientX - panStart.current.x) / rect.width
-      const visibleDuration = panStart.current.viewportEndMs - panStart.current.viewportStartMs
-      const deltaMs = -deltaPercent * visibleDuration
-      dispatch({
-        type: "SET_VIEWPORT",
-        viewport: clampViewport(
-          {
-            startMs: panStart.current.viewportStartMs + deltaMs,
-            endMs: panStart.current.viewportEndMs + deltaMs,
-          },
-          traceStartMs,
-          traceEndMs
-        ),
-      })
-    }
-
-    const handleMouseUp = () => {
-      isPanning.current = false
-      panStart.current = null
-    }
-
-    window.addEventListener("mousemove", handleMouseMove)
-    window.addEventListener("mouseup", handleMouseUp)
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove)
-      window.removeEventListener("mouseup", handleMouseUp)
-    }
-  }, [dispatch])
 
   // Hover tooltip (ref-based for performance)
   const handleMouseMoveForTooltip = React.useCallback(
@@ -221,10 +130,10 @@ export function TraceTimeline() {
     (viewport: { startMs: number; endMs: number }) => {
       dispatch({
         type: "SET_VIEWPORT",
-        viewport: clampViewport(viewport, traceStartMs, traceEndMs),
+        viewport,
       })
     },
-    [dispatch, traceStartMs, traceEndMs]
+    [dispatch]
   )
 
   // Zoom to fit

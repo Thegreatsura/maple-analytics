@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react"
 import { toast } from "sonner"
 import { ChevronRightIcon, CopyIcon } from "@/components/icons"
+import { useClipboard } from "@maple/ui/hooks/use-clipboard"
 import { highlightCode } from "@/lib/sugar-high"
 
 interface CollapsibleJsonValueProps {
@@ -9,6 +10,7 @@ interface CollapsibleJsonValueProps {
 }
 
 export function CollapsibleJsonValue({ value, parsed }: CollapsibleJsonValueProps) {
+  const clipboard = useClipboard()
   const [expanded, setExpanded] = useState(false)
 
   const highlighted = useMemo(() => {
@@ -42,7 +44,7 @@ export function CollapsibleJsonValue({ value, parsed }: CollapsibleJsonValueProp
               className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation()
-                navigator.clipboard.writeText(value)
+                clipboard.copy(value)
                 toast.success("Copied to clipboard")
               }}
             >

@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const navigateSpy = vi.fn();
 const atoms = {
   facets: Symbol("facets"),
+  logsFacets: Symbol("logsFacets"),
+  metricAttributeKeys: Symbol("metricAttributeKeys"),
   spanAttributeKeys: Symbol("spanAttributeKeys"),
   spanAttributeValues: Symbol("spanAttributeValues"),
   resourceAttributeKeys: Symbol("resourceAttributeKeys"),
@@ -110,6 +112,8 @@ vi.mock("@/hooks/use-effective-time-range", () => ({
 
 vi.mock("@/lib/services/atoms/tinybird-query-atoms", () => ({
   getTracesFacetsResultAtom: () => atoms.facets,
+  getLogsFacetsResultAtom: () => atoms.logsFacets,
+  getMetricAttributeKeysResultAtom: () => atoms.metricAttributeKeys,
   getSpanAttributeKeysResultAtom: () => atoms.spanAttributeKeys,
   getSpanAttributeValuesResultAtom: () => atoms.spanAttributeValues,
   getResourceAttributeKeysResultAtom: () => atoms.resourceAttributeKeys,
@@ -133,6 +137,14 @@ vi.mock("@/lib/effect-atom", async () => {
               httpStatusCodes: [],
             },
           });
+        case atoms.logsFacets:
+          return actual.Result.success({
+            data: {
+              services: [],
+              severities: [],
+            },
+          });
+        case atoms.metricAttributeKeys:
         case atoms.spanAttributeKeys:
         case atoms.spanAttributeValues:
         case atoms.resourceAttributeKeys:

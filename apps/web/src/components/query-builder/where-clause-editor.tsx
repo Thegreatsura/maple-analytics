@@ -1,15 +1,11 @@
 import * as React from "react"
 
 import { Textarea } from "@maple/ui/components/ui/textarea"
-import {
-  applyWhereClauseSuggestion,
-  getWhereClauseAutocomplete,
-  type WhereClauseAutocompleteScope,
-  type WhereClauseAutocompleteValues,
-} from "@/lib/query-builder/where-clause-autocomplete"
+import type { WhereClauseAutocompleteScope, WhereClauseAutocompleteValues } from "@/lib/query-builder/where-clause-autocomplete"
 import type { QueryBuilderDataSource } from "@/lib/query-builder/model"
 import { useAutocompleteContextOptional } from "@/hooks/use-autocomplete-context"
 import { useAutocompleteValuesContextOptional } from "@/hooks/use-autocomplete-values"
+import { useWhereClauseAutocomplete } from "@/hooks/use-where-clause-autocomplete"
 import { cn } from "@maple/ui/utils"
 
 interface WhereClauseEditorProps {
@@ -44,13 +40,6 @@ export function WhereClauseEditor({
   ariaLabel,
 }: WhereClauseEditorProps) {
   const textAreaRef = React.useRef<HTMLTextAreaElement | null>(null)
-  const [cursor, setCursor] = React.useState(value.length)
-  const [isFocused, setIsFocused] = React.useState(false)
-  const [isDismissed, setIsDismissed] = React.useState(false)
-  const [activeIndex, setActiveIndex] = React.useState(0)
-
-  const lastAttrKeyRef = React.useRef<string | null>(null)
-  const lastResourceKeyRef = React.useRef<string | null>(null)
 
   // Use context directly when available and no explicit props provided
   const autocompleteCtx = useAutocompleteContextOptional()
@@ -59,105 +48,49 @@ export function WhereClauseEditor({
   const resolvedOnActiveAttributeKey = onActiveAttributeKey ?? autocompleteCtx?.setActiveAttributeKey
   const resolvedOnActiveResourceAttributeKey = onActiveResourceAttributeKey ?? autocompleteCtx?.setActiveResourceAttributeKey
 
-  const notifyActiveKeys = React.useCallback(
-    (expression: string, cursorPos: number) => {
-      const ac = getWhereClauseAutocomplete({
-        expression,
-        cursor: cursorPos,
-        dataSource,
-        values: resolvedValues,
-        scope: autocompleteScope,
-        maxSuggestions,
-      })
+  const {
+    suggestions,
+    activeIndex,
+    isOpen,
+    syncCursor,
+    onTextChange,
+    onFocus,
+    onBlur,
+    onKeyIntent,
+    applySuggestion,
+  } = useWhereClauseAutocomplete({
+    expression: value,
+    dataSource,
+    values: resolvedValues,
+    scope: autocompleteScope,
+    maxSuggestions,
+    onActiveAttributeKey: resolvedOnActiveAttributeKey,
+    onActiveResourceAttributeKey: resolvedOnActiveResourceAttributeKey,
+  })
 
-      const nextAttrKey =
-        ac.context === "value" && ac.key?.startsWith("attr.")
-          ? ac.key.slice(5)
-          : null
-      if (nextAttrKey !== lastAttrKeyRef.current) {
-        lastAttrKeyRef.current = nextAttrKey
-        resolvedOnActiveAttributeKey?.(nextAttrKey)
-      }
-
-      const nextResourceKey =
-        ac.context === "value" && ac.key?.startsWith("resource.")
-          ? ac.key.slice(9)
-          : null
-      if (nextResourceKey !== lastResourceKeyRef.current) {
-        lastResourceKeyRef.current = nextResourceKey
-        resolvedOnActiveResourceAttributeKey?.(nextResourceKey)
-      }
-    },
-    [autocompleteScope, dataSource, maxSuggestions, resolvedOnActiveAttributeKey, resolvedOnActiveResourceAttributeKey, resolvedValues],
-  )
-
-  const autocomplete = React.useMemo(
-    () =>
-      getWhereClauseAutocomplete({
-        expression: value,
-        cursor,
-        dataSource,
-        values: resolvedValues,
-        scope: autocompleteScope,
-        maxSuggestions,
-      }),
-    [autocompleteScope, cursor, dataSource, maxSuggestions, value, resolvedValues],
-  )
-
-  const suggestions = autocomplete.suggestions
-  const isOpen = isFocused && !isDismissed && suggestions.length > 0
-
-  const syncCursor = React.useCallback(
-    (target: HTMLTextAreaElement) => {
-      const pos = target.selectionStart ?? target.value.length
-      setCursor(pos)
-      setIsDismissed(false)
-      setActiveIndex(0)
-      notifyActiveKeys(target.value, pos)
-    },
-    [notifyActiveKeys],
-  )
-
-  const applySuggestion = React.useCallback(
+  const handleApplySuggestion = React.useCallback(
     (index: number) => {
-      const suggestion = suggestions[index]
-      if (!suggestion) {
-        return
-      }
+      const result = applySuggestion(index)
+      if (!result) return
 
-      const applied = applyWhereClauseSuggestion({
-        expression: value,
-        context: autocomplete.context,
-        replaceStart: autocomplete.replaceStart,
-        replaceEnd: autocomplete.replaceEnd,
-        suggestion,
-      })
-
-      onChange(applied.expression)
-      setCursor(applied.cursor)
-      setIsDismissed(false)
-      notifyActiveKeys(applied.expression, applied.cursor)
+      onChange(result.expression)
 
       const schedule = (callback: () => void) => {
         if (typeof window !== "undefined" && window.requestAnimationFrame) {
           window.requestAnimationFrame(() => callback())
           return
         }
-
         globalThis.setTimeout(callback, 0)
       }
 
       schedule(() => {
         const textarea = textAreaRef.current
-        if (!textarea) {
-          return
-        }
-
+        if (!textarea) return
         textarea.focus()
-        textarea.setSelectionRange(applied.cursor, applied.cursor)
+        textarea.setSelectionRange(result.cursor, result.cursor)
       })
     },
-    [autocomplete.context, autocomplete.replaceEnd, autocomplete.replaceStart, notifyActiveKeys, onChange, suggestions, value],
+    [applySuggestion, onChange],
   )
 
   return (
@@ -170,66 +103,50 @@ export function WhereClauseEditor({
         className={textareaClassName}
         aria-label={ariaLabel}
         onFocus={(event) => {
-          setIsFocused(true)
-          setIsDismissed(false)
-          syncCursor(event.currentTarget)
+          onFocus()
+          syncCursor(event.currentTarget.selectionStart ?? event.currentTarget.value.length)
         }}
-        onBlur={() => {
-          setIsFocused(false)
-        }}
+        onBlur={() => onBlur()}
         onChange={(event) => {
           const pos = event.currentTarget.selectionStart ?? event.currentTarget.value.length
-          setCursor(pos)
-          setIsDismissed(false)
-          setActiveIndex(0)
+          onTextChange(event.target.value, pos)
           onChange(event.target.value)
-          notifyActiveKeys(event.target.value, pos)
         }}
-        onClick={(event) => syncCursor(event.currentTarget)}
-        onSelect={(event) => syncCursor(event.currentTarget)}
+        onClick={(event) => syncCursor(event.currentTarget.selectionStart ?? event.currentTarget.value.length)}
+        onSelect={(event) => syncCursor(event.currentTarget.selectionStart ?? event.currentTarget.value.length)}
         onKeyUp={(event) => {
           if (isOpen && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
             return
           }
-          syncCursor(event.currentTarget)
+          syncCursor(event.currentTarget.selectionStart ?? event.currentTarget.value.length)
         }}
         onKeyDown={(event) => {
           // Always prevent Enter from inserting newlines (where clauses are single-line)
           if (event.key === "Enter") {
             event.preventDefault()
             if (isOpen && suggestions.length > 0) {
-              applySuggestion(activeIndex)
+              handleApplySuggestion(activeIndex)
             }
             return
           }
 
-          if (!isOpen || suggestions.length === 0) {
-            return
-          }
-
           if (event.key === "ArrowDown") {
-            event.preventDefault()
-            setActiveIndex((current) => (current + 1) % suggestions.length)
+            if (onKeyIntent("next")) event.preventDefault()
             return
           }
 
           if (event.key === "ArrowUp") {
-            event.preventDefault()
-            setActiveIndex((current) =>
-              (current - 1 + suggestions.length) % suggestions.length,
-            )
+            if (onKeyIntent("prev")) event.preventDefault()
             return
           }
 
           if (event.key === "Tab") {
-            event.preventDefault()
-            applySuggestion(activeIndex)
+            if (onKeyIntent("accept")) event.preventDefault()
             return
           }
 
           if (event.key === "Escape") {
-            event.preventDefault()
-            setIsDismissed(true)
+            if (onKeyIntent("dismiss")) event.preventDefault()
           }
         }}
       />
@@ -255,7 +172,7 @@ export function WhereClauseEditor({
               onMouseDown={(event) => {
                 event.preventDefault()
               }}
-              onClick={() => applySuggestion(index)}
+              onClick={() => handleApplySuggestion(index)}
             >
               <span className="font-mono">{suggestion.label}</span>
               <span className="text-[10px] uppercase text-muted-foreground">

@@ -13,6 +13,15 @@ import { useInfiniteLogs, FETCH_THRESHOLD } from "@/hooks/use-infinite-logs"
 
 const ROW_HEIGHT = 28
 
+export interface LogsTableViewProps {
+  allData: Log[]
+  isFetchingNextPage: boolean
+  hasNextPage: boolean
+  fetchNextPage: () => void
+  waiting: boolean
+  onLogClick?: (log: Log) => void
+}
+
 interface LogsTableProps {
   filters?: LogsSearchParams
 }
@@ -36,28 +45,27 @@ function LoadingState() {
   )
 }
 
-function LogsTableContent({
+export function LogsTableView({
   allData,
   isFetchingNextPage,
   hasNextPage,
   fetchNextPage,
   waiting,
-}: {
-  allData: Log[]
-  isFetchingNextPage: boolean
-  hasNextPage: boolean
-  fetchNextPage: () => void
-  waiting: boolean
-}) {
+  onLogClick,
+}: LogsTableViewProps) {
   const [selectedLog, setSelectedLog] = React.useState<Log | null>(null)
   const [sheetOpen, setSheetOpen] = React.useState(false)
   const { effectiveTimezone } = useTimezonePreference()
   const scrollContainerRef = React.useRef<HTMLDivElement>(null)
 
   const handleRowClick = React.useCallback((log: Log) => {
+    if (onLogClick) {
+      onLogClick(log)
+      return
+    }
     setSelectedLog(log)
     setSheetOpen(true)
-  }, [])
+  }, [onLogClick])
 
   const virtualizer = useVirtualizer({
     count: allData.length,
@@ -172,7 +180,7 @@ export function LogsTable({ filters }: LogsTableProps) {
       </div>
     ))
     .onSuccess((_response, result) => (
-      <LogsTableContent
+      <LogsTableView
         allData={allData}
         isFetchingNextPage={isFetchingNextPage}
         hasNextPage={hasNextPage}

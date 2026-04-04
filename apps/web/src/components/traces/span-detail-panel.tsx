@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Result, useAtomValue } from "@/lib/effect-atom"
 import { XmarkIcon, ClockIcon, CircleWarningIcon, CircleInfoIcon, SquareTerminalIcon, ChevronDownIcon, ChevronUpIcon, CopyIcon } from "@/components/icons"
 import { toast } from "sonner"
+import { useClipboard } from "@maple/ui/hooks/use-clipboard"
 
 import { Button } from "@maple/ui/components/ui/button"
 import { Alert, AlertTitle, AlertDescription } from "@maple/ui/components/ui/alert"
@@ -121,12 +122,13 @@ What could be causing this error and how can I fix it?`
 }
 
 function ErrorSection({ message, serviceName, spanName, attributes }: ErrorSectionProps) {
+  const clipboard = useClipboard()
   const [expanded, setExpanded] = useState(false)
   const isLong = message.length > 120 || message.includes('\n')
 
   const handleCopyPrompt = async () => {
     const prompt = formatErrorPrompt({ message, serviceName, spanName, attributes })
-    await navigator.clipboard.writeText(prompt)
+    await clipboard.copy(prompt)
     toast.success("Copied error prompt to clipboard")
   }
 

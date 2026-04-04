@@ -19,6 +19,15 @@ import { formatRelativeTime } from "@/lib/format"
 import { HttpSpanLabel } from "./http-span-label"
 import { useInfiniteTraces, FETCH_THRESHOLD } from "@/hooks/use-infinite-traces"
 
+export interface TracesTableViewProps {
+  allData: Trace[]
+  isFetchingNextPage: boolean
+  hasNextPage: boolean
+  fetchNextPage: () => void
+  waiting: boolean
+  onTraceClick: (traceId: string) => void
+}
+
 function formatDuration(ms: number): string {
   if (ms < 1) {
     return `${(ms * 1000).toFixed(0)}μs`
@@ -111,20 +120,14 @@ function LoadingState() {
   )
 }
 
-function TracesTableContent({
+export function TracesTableView({
   allData,
   isFetchingNextPage,
   hasNextPage,
   fetchNextPage,
   waiting,
-}: {
-  allData: Trace[]
-  isFetchingNextPage: boolean
-  hasNextPage: boolean
-  fetchNextPage: () => void
-  waiting: boolean
-}) {
-  const navigate = useNavigate()
+  onTraceClick,
+}: TracesTableViewProps) {
   const { effectiveTimezone } = useTimezonePreference()
   const scrollContainerRef = React.useRef<HTMLDivElement>(null)
 
@@ -307,21 +310,11 @@ function TracesTableContent({
                   data-index={virtualRow.index}
                   className="border-b transition-colors hover:bg-muted/50 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset"
                   tabIndex={0}
-                  onClick={() =>
-                    navigate({
-                      to: "/traces/$traceId",
-                      params: { traceId: row.original.traceId },
-                      search: true,
-                    })
-                  }
+                  onClick={() => onTraceClick(row.original.traceId)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault()
-                      navigate({
-                        to: "/traces/$traceId",
-                        params: { traceId: row.original.traceId },
-                        search: true,
-                      })
+                      onTraceClick(row.original.traceId)
                     }
                   }}
                 >
@@ -368,8 +361,16 @@ function TracesTableContent({
 }
 
 export function TracesTable({ filters }: TracesTableProps) {
+  const navigate = useNavigate()
   const { firstPageResult, allData, isFetchingNextPage, hasNextPage, fetchNextPage } =
     useInfiniteTraces(filters)
+
+  const onTraceClick = React.useCallback(
+    (traceId: string) => {
+      navigate({ to: "/traces/$traceId", params: { traceId }, search: true })
+    },
+    [navigate],
+  )
 
   return Result.builder(firstPageResult)
     .onInitial(() => <LoadingState />)
@@ -380,12 +381,13 @@ export function TracesTable({ filters }: TracesTableProps) {
       </div>
     ))
     .onSuccess((_response, result) => (
-      <TracesTableContent
+      <TracesTableView
         allData={allData}
         isFetchingNextPage={isFetchingNextPage}
         hasNextPage={hasNextPage}
         fetchNextPage={fetchNextPage}
         waiting={result.waiting ?? false}
+        onTraceClick={onTraceClick}
       />
     ))
     .render()

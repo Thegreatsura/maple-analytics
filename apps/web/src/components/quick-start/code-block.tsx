@@ -2,6 +2,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 import { CopyIcon, CheckIcon } from "@/components/icons"
 import { cn } from "@maple/ui/utils"
+import { useClipboard } from "@maple/ui/hooks/use-clipboard"
 import { highlightCode } from "@/lib/sugar-high"
 
 interface CodeBlockProps {
@@ -11,12 +12,13 @@ interface CodeBlockProps {
 }
 
 export function CodeBlock({ code, language, className }: CodeBlockProps) {
+  const clipboard = useClipboard()
   const [copied, setCopied] = useState(false)
   const highlighted = highlightCode(code)
 
   async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(code)
+      await clipboard.copy(code)
       setCopied(true)
       toast.success("Copied to clipboard")
       setTimeout(() => setCopied(false), 2000)

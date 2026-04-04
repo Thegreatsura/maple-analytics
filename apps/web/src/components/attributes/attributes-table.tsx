@@ -1,6 +1,7 @@
 import { toast } from "sonner"
 import { ChevronRightIcon } from "@/components/icons"
 import { cn } from "@maple/ui/utils"
+import { useClipboard } from "@maple/ui/hooks/use-clipboard"
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@maple/ui/components/ui/collapsible"
 import { CollapsibleJsonValue } from "./json-value"
 
@@ -13,6 +14,8 @@ export function CopyableValue({
   children?: React.ReactNode
   className?: string
 }) {
+  const clipboard = useClipboard()
+
   return (
     <span
       className={cn(
@@ -20,7 +23,7 @@ export function CopyableValue({
         className
       )}
       onClick={() => {
-        navigator.clipboard.writeText(value)
+        clipboard.copy(value)
         toast.success("Copied to clipboard")
       }}
       title="Click to copy"
