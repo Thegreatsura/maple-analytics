@@ -490,7 +490,7 @@ describe("tracesListQuery", () => {
     expect(sql).toContain("SpanAttributes AS spanAttributes")
     expect(sql).toContain("ResourceAttributes AS resourceAttributes")
     expect(sql).toContain("ORDER BY timestamp DESC")
-    expect(sql).toContain("LIMIT 100")
+    expect(sql).toContain("LIMIT 25")
     expect(sql).toContain("FORMAT JSON")
   })
 
@@ -506,11 +506,9 @@ describe("tracesListQuery", () => {
     expect(sql).toContain("ServiceName = 'api'")
   })
 
-  it("always uses traces table (not MV)", () => {
+  it("uses trace_list_mv when rootOnly", () => {
     const q = tracesListQuery({ rootOnly: true })
     const { sql } = compileCH(q, baseParams)
-    expect(sql).toContain("FROM traces")
-    // rootOnly should add ParentSpanId filter since we're not using MV
-    expect(sql).toContain("ParentSpanId = ''")
+    expect(sql).toContain("FROM trace_list_mv")
   })
 })
