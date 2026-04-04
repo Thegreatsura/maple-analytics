@@ -1,5 +1,6 @@
 import { useMemo } from "react"
-import { Atom, Result, useAtomValue } from "@/lib/effect-atom"
+import { Atom, Result } from "@/lib/effect-atom"
+import { useRefreshableAtomValue } from "@/hooks/use-refreshable-atom-value"
 import { Effect, Schedule, Schema } from "effect"
 import { useDashboardTimeRange } from "@/components/dashboard-builder/dashboard-providers"
 import { serverFunctionMap } from "@/components/dashboard-builder/data-source-registry"
@@ -255,15 +256,16 @@ export function useWidgetData(widget: DashboardWidget) {
   const resolvedParams = resolvedTimeRange
     ? interpolateParams(
         {
+          ...widget.dataSource.params,
+          strategy: { enableEmptyRangeFallback: false },
           startTime: resolvedTimeRange.startTime,
           endTime: resolvedTimeRange.endTime,
-          ...widget.dataSource.params,
         },
         resolvedTimeRange
       )
     : {}
 
-  const result = useAtomValue(
+  const result = useRefreshableAtomValue(
     resolvedTimeRange && hasServerFn
       ? widgetFetchAtom({
           endpoint: widget.dataSource.endpoint,

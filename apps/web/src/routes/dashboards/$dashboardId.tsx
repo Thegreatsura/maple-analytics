@@ -8,7 +8,8 @@ import { DashboardCanvas } from "@/components/dashboard-builder/canvas/dashboard
 import { DashboardToolbar } from "@/components/dashboard-builder/toolbar/dashboard-toolbar";
 import { WidgetPicker } from "@/components/dashboard-builder/config/chart-picker";
 import { InlineEditableTitle } from "@/components/dashboard-builder/inline-editable-title";
-import { DashboardTimeRangeWrapper } from "@/components/dashboard-builder/dashboard-providers";
+import { DashboardTimeRangeWrapper, useDashboardTimeRange } from "@/components/dashboard-builder/dashboard-providers";
+import { PageRefreshProvider } from "@/components/time-range-picker/page-refresh-context";
 import type {
   VisualizationType,
   WidgetDataSource,
@@ -17,6 +18,7 @@ import type {
 } from "@/components/dashboard-builder/types";
 import { useDashboardStore } from "@/hooks/use-dashboard-store";
 import { DashboardAiPanel } from "@/components/dashboard-builder/ai";
+import type { ReactNode } from "react";
 
 // Module-level atoms — singleton (only one dashboard page visible at a time)
 const chartPickerOpenAtom = Atom.make(false)
@@ -32,6 +34,16 @@ export const Route = effectRoute(createFileRoute("/dashboards/$dashboardId"))({
 });
 
 
+
+function DashboardRefreshBridge({ children }: { children: ReactNode }) {
+  const { state: { timeRange } } = useDashboardTimeRange()
+  const timePreset = timeRange.type === "relative" ? timeRange.value : undefined
+  return (
+    <PageRefreshProvider timePreset={timePreset}>
+      {children}
+    </PageRefreshProvider>
+  )
+}
 
 function DashboardViewPage() {
   const { dashboardId } = Route.useParams();
@@ -133,6 +145,7 @@ function DashboardViewPage() {
       initialTimeRange={activeDashboard.timeRange}
       onTimeRangeChange={(timeRange) => updateDashboardTimeRange(activeDashboard.id, timeRange)}
     >
+      <DashboardRefreshBridge>
       <DashboardLayout
         breadcrumbs={[
           { label: "Dashboards", href: "/dashboards" },
@@ -222,6 +235,7 @@ function DashboardViewPage() {
           onSelect={handleAddWidget}
         />
       </DashboardLayout>
+      </DashboardRefreshBridge>
     </DashboardTimeRangeWrapper>
   );
 }

@@ -8,6 +8,7 @@ import {
   DropdownMenuItem,
 } from "@maple/ui/components/ui/dropdown-menu"
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker"
+import { ReloadControls } from "@/components/time-range-picker/reload-controls"
 import { useDashboardTimeRange } from "@/components/dashboard-builder/dashboard-providers"
 import { downloadPortableDashboard } from "@/components/dashboard-builder/portable-dashboard"
 import type { Dashboard, WidgetMode } from "@/components/dashboard-builder/types"
@@ -59,6 +60,7 @@ export function DashboardToolbar({
           }
         }}
       />
+      <ReloadControls />
       {mode === "edit" && (
         <>
           <Button variant="outline" size="sm" onClick={onAddWidget} disabled={readOnly}>

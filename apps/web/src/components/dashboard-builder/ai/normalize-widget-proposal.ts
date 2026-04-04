@@ -339,6 +339,12 @@ function normalizeFormulaEntry(
   }
 }
 
+function stripTimeParams(params: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!params) return params
+  const { startTime, endTime, ...rest } = params
+  return rest
+}
+
 export function normalizeAiWidgetProposal(
   input: AiWidgetProposal,
 ): NormalizeAiWidgetProposalResult {
@@ -346,11 +352,11 @@ export function normalizeAiWidgetProposal(
     input.visualization === "list" &&
     (input.dataSource.endpoint === "list_traces" || input.dataSource.endpoint === "list_logs")
   ) {
-    return { kind: "valid", proposal: input }
+    return { kind: "valid", proposal: { ...input, dataSource: { ...input.dataSource, params: stripTimeParams(input.dataSource.params) } } }
   }
 
   if (input.dataSource.endpoint !== "custom_query_builder_timeseries") {
-    return { kind: "valid", proposal: input }
+    return { kind: "valid", proposal: { ...input, dataSource: { ...input.dataSource, params: stripTimeParams(input.dataSource.params) } } }
   }
 
   const params = asRecord(input.dataSource.params) ?? {}
@@ -400,10 +406,11 @@ export function normalizeAiWidgetProposal(
         : true,
   } as const
 
+  const { startTime: _st, endTime: _et, ...restParams } = params
   const normalizedDataSource: WidgetDataSource = {
     ...input.dataSource,
     params: {
-      ...params,
+      ...restParams,
       queries: normalizedQueries.map(rewriteFriendlyQueryLegend),
       formulas: normalizedFormulas,
       comparison: normalizedComparison,

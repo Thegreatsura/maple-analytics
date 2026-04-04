@@ -129,14 +129,20 @@ export function WidgetFrame({
       {dataState.status === "loading" ? (
         loadingSkeleton
       ) : dataState.status === "error" ? (
-        <div className="flex items-center justify-center h-full flex-col gap-1">
-          <span className="text-xs text-muted-foreground">Unable to load</span>
-          {dataState.message && (
-            <span className="text-[10px] text-destructive/70 max-w-[90%] text-center truncate">
-              {dataState.message}
-            </span>
-          )}
-        </div>
+        dataState.message === "No query data found in selected time range" ? (
+          <div className="flex items-center justify-center h-full">
+            <span className="text-xs text-muted-foreground">No data in selected time range</span>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-full flex-col gap-1">
+            <span className="text-xs text-muted-foreground">Unable to load</span>
+            {dataState.message && (
+              <span className="text-[10px] text-destructive/70 max-w-[90%] text-center truncate">
+                {dataState.message}
+              </span>
+            )}
+          </div>
+        )
       ) : (
         children
       )}

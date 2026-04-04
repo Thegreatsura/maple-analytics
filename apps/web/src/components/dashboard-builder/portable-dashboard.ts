@@ -98,6 +98,13 @@ export function toPortableDashboard(dashboard: Dashboard): PortableDashboard {
   }
 }
 
+function stripWidgetTimeParams(widget: DashboardWidget): DashboardWidget {
+  const params = widget.dataSource.params
+  if (!params || !("startTime" in params || "endTime" in params)) return widget
+  const { startTime, endTime, ...rest } = params
+  return { ...widget, dataSource: { ...widget.dataSource, params: rest } }
+}
+
 export function parsePortableDashboardJson(json: string): PortableDashboard {
   const parsed = JSON.parse(json)
   const decoded = decodePortableDashboard(parsed)
@@ -118,7 +125,7 @@ export function parsePortableDashboardJson(json: string): PortableDashboard {
             value: decoded.timeRange.value,
           },
     widgets: normalizeWidgetLayouts(
-      decoded.widgets.map((widget) => clonePortableDashboard(widget as DashboardWidget)),
+      decoded.widgets.map((widget) => stripWidgetTimeParams(clonePortableDashboard(widget as DashboardWidget))),
     ),
   }
 }
