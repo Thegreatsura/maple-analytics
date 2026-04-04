@@ -13,6 +13,7 @@ import type {
   WidgetDisplayConfig,
   WidgetMode,
 } from "@/components/dashboard-builder/types"
+import { useDashboardActions } from "@/components/dashboard-builder/dashboard-actions-context"
 import { useWidgetData } from "@/hooks/use-widget-data"
 import { ChartWidget } from "@/components/dashboard-builder/widgets/chart-widget"
 import { StatWidget } from "@/components/dashboard-builder/widgets/stat-widget"
@@ -21,17 +22,6 @@ import { ListWidget } from "@/components/dashboard-builder/widgets/list-widget"
 
 interface DashboardCanvasProps {
   widgets: DashboardWidget[]
-  mode: WidgetMode
-  onLayoutChange: (
-    layouts: Array<{ i: string; x: number; y: number; w: number; h: number }>
-  ) => void
-  onRemoveWidget: (widgetId: string) => void
-  onCloneWidget?: (widgetId: string) => void
-  onUpdateWidgetDisplay?: (
-    widgetId: string,
-    display: Partial<WidgetDisplayConfig>
-  ) => void
-  onConfigureWidget?: (widgetId: string) => void
 }
 
 const visualizationRegistry: Record<
@@ -53,40 +43,28 @@ const visualizationRegistry: Record<
 
 const WidgetRenderer = memo(function WidgetRenderer({
   widget,
-  mode,
-  onRemoveWidget,
-  onCloneWidget,
-  onConfigureWidget,
 }: {
   widget: DashboardWidget
-  mode: WidgetMode
-  onRemoveWidget: (widgetId: string) => void
-  onCloneWidget?: (widgetId: string) => void
-  onConfigureWidget?: (widgetId: string) => void
 }) {
+  const { mode, readOnly, removeWidget, cloneWidget, configureWidget } =
+    useDashboardActions()
   const { dataState } = useWidgetData(widget)
   const Visualization =
     visualizationRegistry[widget.visualization] ?? visualizationRegistry.chart
 
   const onRemove = useCallback(
-    () => onRemoveWidget(widget.id),
-    [onRemoveWidget, widget.id]
+    () => removeWidget(widget.id),
+    [removeWidget, widget.id]
   )
 
   const onClone = useMemo(
-    () =>
-      onCloneWidget
-        ? () => onCloneWidget(widget.id)
-        : undefined,
-    [onCloneWidget, widget.id]
+    () => (readOnly ? undefined : () => cloneWidget(widget.id)),
+    [readOnly, cloneWidget, widget.id]
   )
 
   const onConfigure = useMemo(
-    () =>
-      onConfigureWidget
-        ? () => onConfigureWidget(widget.id)
-        : undefined,
-    [onConfigureWidget, widget.id]
+    () => (readOnly ? undefined : () => configureWidget(widget.id)),
+    [readOnly, configureWidget, widget.id]
   )
 
   return (
@@ -103,12 +81,8 @@ const WidgetRenderer = memo(function WidgetRenderer({
 
 export function DashboardCanvas({
   widgets,
-  mode,
-  onLayoutChange,
-  onRemoveWidget,
-  onCloneWidget,
-  onConfigureWidget,
 }: DashboardCanvasProps) {
+  const { mode, updateWidgetLayouts } = useDashboardActions()
   const { width, containerRef, mounted } = useContainerWidth()
 
   const layouts: Layout = widgets.map((w) => ({
@@ -146,7 +120,7 @@ export function DashboardCanvas({
           }}
           compactor={verticalCompactor}
           onLayoutChange={(layout) =>
-            onLayoutChange(
+            updateWidgetLayouts(
               layout.map((l) => ({
                 i: l.i,
                 x: l.x,
@@ -159,13 +133,7 @@ export function DashboardCanvas({
         >
           {widgets.map((widget) => (
             <div key={widget.id}>
-              <WidgetRenderer
-                widget={widget}
-                mode={mode}
-                onRemoveWidget={onRemoveWidget}
-                onCloneWidget={onCloneWidget}
-                onConfigureWidget={onConfigureWidget}
-              />
+              <WidgetRenderer widget={widget} />
             </div>
           ))}
         </GridLayout>

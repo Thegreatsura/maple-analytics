@@ -34,7 +34,7 @@ export interface AutocompleteValuesContextType {
 const AutocompleteValuesCtx = React.createContext<AutocompleteValuesContextType | null>(null)
 
 export function useAutocompleteValuesContext(): AutocompleteValuesContextType {
-  const ctx = React.useContext(AutocompleteValuesCtx)
+  const ctx = React.use(AutocompleteValuesCtx)
   if (!ctx) {
     throw new Error("useAutocompleteValuesContext must be used inside AutocompleteValuesProvider")
   }
@@ -42,7 +42,7 @@ export function useAutocompleteValuesContext(): AutocompleteValuesContextType {
 }
 
 export function useAutocompleteValuesContextOptional(): AutocompleteValuesContextType | null {
-  return React.useContext(AutocompleteValuesCtx)
+  return React.use(AutocompleteValuesCtx)
 }
 
 // ---------------------------------------------------------------------------
@@ -194,9 +194,9 @@ function AutocompleteValuesInner({
   ])
 
   return (
-    <AutocompleteValuesCtx.Provider value={value}>
+    <AutocompleteValuesCtx value={value}>
       {children}
-    </AutocompleteValuesCtx.Provider>
+    </AutocompleteValuesCtx>
   )
 }
 

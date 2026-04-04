@@ -10,28 +10,24 @@ import {
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker"
 import { ReloadControls } from "@/components/time-range-picker/reload-controls"
 import { useDashboardTimeRange } from "@/components/dashboard-builder/dashboard-providers"
+import { useDashboardActions } from "@/components/dashboard-builder/dashboard-actions-context"
 import { downloadPortableDashboard } from "@/components/dashboard-builder/portable-dashboard"
-import type { Dashboard, WidgetMode } from "@/components/dashboard-builder/types"
+import type { Dashboard } from "@/components/dashboard-builder/types"
 
 interface DashboardToolbarProps {
-  mode: WidgetMode
-  readOnly?: boolean
   dashboard: Dashboard
   onToggleEdit: () => void
   onAddWidget: () => void
-  onAutoLayout: () => void
   onOpenAi?: () => void
 }
 
 export function DashboardToolbar({
-  mode,
-  readOnly = false,
   dashboard,
   onToggleEdit,
   onAddWidget,
-  onAutoLayout,
   onOpenAi,
 }: DashboardToolbarProps) {
+  const { mode, readOnly, autoLayoutWidgets } = useDashboardActions()
   const {
     state: { timeRange, resolvedTimeRange },
     actions: { setTimeRange },
@@ -67,7 +63,7 @@ export function DashboardToolbar({
             <PlusIcon size={14} data-icon="inline-start" />
             Add Widget
           </Button>
-          <Button variant="outline" size="sm" onClick={onAutoLayout} disabled={readOnly}>
+          <Button variant="outline" size="sm" onClick={autoLayoutWidgets} disabled={readOnly}>
             <GridIcon size={14} data-icon="inline-start" />
             Auto Layout
           </Button>

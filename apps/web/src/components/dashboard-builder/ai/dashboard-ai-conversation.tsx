@@ -26,6 +26,7 @@ import { Tool } from "@/components/ai-elements/tool"
 import { WidgetProposalCard } from "./widget-proposal-card"
 import { WidgetRemovalCard } from "./widget-removal-card"
 import { normalizeAiWidgetProposal } from "./normalize-widget-proposal"
+import { useDashboardActions } from "@/components/dashboard-builder/dashboard-actions-context"
 import type { UIMessage } from "ai"
 import type {
   DashboardWidget,
@@ -59,24 +60,15 @@ function shouldShowThinkingIndicator(
 }
 
 interface DashboardAiConversationProps {
-  dashboardId: string
   dashboardName: string
   widgets: DashboardWidget[]
-  onAddWidget: (
-    visualization: VisualizationType,
-    dataSource: WidgetDataSource,
-    display: WidgetDisplayConfig,
-  ) => void
-  onRemoveWidget: (widgetId: string) => void
 }
 
 export function DashboardAiConversation({
-  dashboardId,
   dashboardName,
   widgets,
-  onAddWidget,
-  onRemoveWidget,
 }: DashboardAiConversationProps) {
+  const { dashboardId, addWidget, removeWidget } = useDashboardActions()
   const { orgId } = useAuth()
 
   const agent = useAgent({
@@ -202,7 +194,7 @@ export function DashboardAiConversation({
                                 key={toolPart.toolCallId ?? i}
                                 input={normalized.proposal}
                                 onAccept={() => {
-                                  onAddWidget(
+                                  addWidget(
                                     normalized.proposal.visualization,
                                     normalized.proposal.dataSource,
                                     normalized.proposal.display,
@@ -234,7 +226,7 @@ export function DashboardAiConversation({
                                 key={toolPart.toolCallId ?? i}
                                 input={{ widgetTitle: input.widgetTitle }}
                                 widgets={widgets}
-                                onConfirm={onRemoveWidget}
+                                onConfirm={removeWidget}
                               />
                             )
                           }

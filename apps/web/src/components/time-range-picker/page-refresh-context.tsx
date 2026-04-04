@@ -111,14 +111,14 @@ export function PageRefreshProvider({
   )
 
   return (
-    <PageRefreshContext.Provider value={value}>
+    <PageRefreshContext value={value}>
       {children}
-    </PageRefreshContext.Provider>
+    </PageRefreshContext>
   )
 }
 
 export function usePageRefreshContext() {
-  const context = React.useContext(PageRefreshContext)
+  const context = React.use(PageRefreshContext)
   if (!context) {
     throw new Error("usePageRefreshContext must be used within a PageRefreshProvider")
   }
@@ -126,5 +126,5 @@ export function usePageRefreshContext() {
 }
 
 export function useOptionalPageRefreshContext() {
-  return React.useContext(PageRefreshContext)
+  return React.use(PageRefreshContext)
 }

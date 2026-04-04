@@ -9,13 +9,9 @@ import { DashboardToolbar } from "@/components/dashboard-builder/toolbar/dashboa
 import { WidgetPicker } from "@/components/dashboard-builder/config/chart-picker";
 import { InlineEditableTitle } from "@/components/dashboard-builder/inline-editable-title";
 import { DashboardTimeRangeWrapper, useDashboardTimeRange } from "@/components/dashboard-builder/dashboard-providers";
+import { DashboardActionsProvider, useDashboardActions } from "@/components/dashboard-builder/dashboard-actions-context";
 import { PageRefreshProvider } from "@/components/time-range-picker/page-refresh-context";
-import type {
-  VisualizationType,
-  WidgetDataSource,
-  WidgetDisplayConfig,
-  WidgetMode,
-} from "@/components/dashboard-builder/types";
+import type { WidgetMode } from "@/components/dashboard-builder/types";
 import { useDashboardStore } from "@/hooks/use-dashboard-store";
 import { DashboardAiPanel } from "@/components/dashboard-builder/ai";
 import type { ReactNode } from "react";
@@ -79,57 +75,6 @@ function DashboardViewPage() {
     });
   };
 
-  const handleAddWidget = (
-    visualization: VisualizationType,
-    dataSource: WidgetDataSource,
-    display: WidgetDisplayConfig,
-  ) => {
-    if (readOnly) return;
-    addWidget(dashboardId, visualization, dataSource, display);
-    if (mode === "view") {
-      navigate({
-        to: "/dashboards/$dashboardId",
-        params: { dashboardId },
-        search: { mode: "edit" },
-      });
-    }
-  };
-
-  const handleLayoutChange = (
-    layouts: Array<{ i: string; x: number; y: number; w: number; h: number }>,
-  ) => {
-    if (readOnly) return;
-    updateWidgetLayouts(dashboardId, layouts);
-  };
-
-  const handleRemoveWidget = (widgetId: string) => {
-    if (readOnly) return;
-    removeWidget(dashboardId, widgetId);
-  };
-
-  const handleCloneWidget = (widgetId: string) => {
-    if (readOnly) return;
-    cloneWidget(dashboardId, widgetId);
-  };
-
-  const handleUpdateWidgetDisplay = (widgetId: string, display: Partial<WidgetDisplayConfig>) => {
-    if (readOnly) return;
-    updateWidgetDisplay(dashboardId, widgetId, display);
-  };
-
-  const handleConfigureWidget = (widgetId: string) => {
-    if (readOnly) return;
-    navigate({
-      to: "/dashboards/$dashboardId/widgets/$widgetId",
-      params: { dashboardId, widgetId },
-    });
-  };
-
-  const handleAutoLayout = () => {
-    if (readOnly) return;
-    autoLayoutWidgets(dashboardId);
-  };
-
   if (!activeDashboard) {
     return (
       <DashboardLayout
@@ -145,6 +90,12 @@ function DashboardViewPage() {
       initialTimeRange={activeDashboard.timeRange}
       onTimeRangeChange={(timeRange) => updateDashboardTimeRange(activeDashboard.id, timeRange)}
     >
+      <DashboardActionsProvider
+        dashboardId={dashboardId}
+        mode={mode}
+        readOnly={readOnly}
+        store={{ addWidget, removeWidget, cloneWidget, updateWidgetDisplay, updateWidgetLayouts, autoLayoutWidgets }}
+      >
       <DashboardRefreshBridge>
       <DashboardLayout
         breadcrumbs={[
@@ -161,12 +112,9 @@ function DashboardViewPage() {
 
         headerActions={
           <DashboardToolbar
-            mode={mode}
-            readOnly={readOnly}
             dashboard={activeDashboard}
             onToggleEdit={handleToggleEdit}
             onAddWidget={() => setChartPickerOpen(true)}
-            onAutoLayout={handleAutoLayout}
             onOpenAi={() => setAiPanelOpen(true)}
           />
         }
@@ -174,11 +122,8 @@ function DashboardViewPage() {
           aiPanelOpen ? (
             <DashboardAiPanel
               onOpenChange={setAiPanelOpen}
-              dashboardId={activeDashboard.id}
               dashboardName={activeDashboard.name}
               widgets={activeDashboard.widgets}
-              onAddWidget={handleAddWidget}
-              onRemoveWidget={handleRemoveWidget}
             />
           ) : undefined
         }
@@ -220,22 +165,21 @@ function DashboardViewPage() {
         ) : (
           <DashboardCanvas
             widgets={activeDashboard.widgets}
-            mode={mode}
-            onLayoutChange={handleLayoutChange}
-            onRemoveWidget={handleRemoveWidget}
-            onCloneWidget={readOnly ? undefined : handleCloneWidget}
-            onUpdateWidgetDisplay={handleUpdateWidgetDisplay}
-            onConfigureWidget={readOnly ? undefined : handleConfigureWidget}
           />
         )}
 
-        <WidgetPicker
+        <WidgetPickerWithActions
           open={readOnly ? false : chartPickerOpen}
           onOpenChange={readOnly ? () => undefined : setChartPickerOpen}
-          onSelect={handleAddWidget}
         />
       </DashboardLayout>
       </DashboardRefreshBridge>
+      </DashboardActionsProvider>
     </DashboardTimeRangeWrapper>
   );
+}
+
+function WidgetPickerWithActions({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { addWidget } = useDashboardActions();
+  return <WidgetPicker open={open} onOpenChange={onOpenChange} onSelect={addWidget} />;
 }

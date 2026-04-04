@@ -1,4 +1,4 @@
-import { type ReactNode, createElement, useContext, useRef } from "react"
+import { type ReactNode, createElement, use, useRef } from "react"
 import { Atom, ScopedAtom, useAtom } from "@/lib/effect-atom"
 
 interface AutocompleteKeysState {
@@ -38,7 +38,7 @@ export function useAutocompleteContext() {
  * or null if no provider exists. Safe to call unconditionally.
  */
 export function useAutocompleteContextOptional() {
-  const contextAtom = useContext(AutocompleteKeys.Context)
+  const contextAtom = use(AutocompleteKeys.Context)
   const hasProvider = contextAtom !== undefined
   const fallbackRef = useRef(Atom.make<AutocompleteKeysState>(defaultState))
   const atom = hasProvider ? contextAtom : fallbackRef.current
