@@ -80,10 +80,21 @@ function makeTinybirdStub(state: {
   const succeedRows = (rows: ReadonlyArray<Record<string, unknown>>) =>
     Effect.succeed(rows as never)
 
+  // All alert queries now go through sqlQuery (raw SQL via CH query engine).
+  // Route the response based on what data is configured in the test state.
+  const sqlQueryStub = () => {
+    // Return whichever data is configured — tests evaluate one rule type at a time
+    if (state.logsAggregateByServiceRows?.length) return succeedRows(state.logsAggregateByServiceRows)
+    if (state.tracesAggregateRows?.length) return succeedRows(state.tracesAggregateRows)
+    if (state.metricsAggregateRows?.length) return succeedRows(state.metricsAggregateRows)
+    if (state.logsAggregateRows?.length) return succeedRows(state.logsAggregateRows)
+    return succeedRows(emptyTinybirdRows)
+  }
+
   return {
     query: (_tenant, payload) =>
       Effect.fail(new Error(`Unexpected pipe ${payload.pipe}`)) as never,
-    sqlQuery: () => succeedRows(emptyTinybirdRows),
+    sqlQuery: sqlQueryStub,
     customLogsTimeseriesQuery: () => succeedRows(emptyTinybirdRows),
     customLogsBreakdownQuery: () => succeedRows(emptyTinybirdRows),
     alertTracesAggregateQuery: () =>
@@ -1203,7 +1214,7 @@ describe("AlertsService", () => {
 
     const stub: TinybirdServiceShape = {
       ...makeTinybirdStub({ tracesAggregateRows: emptyTinybirdRows }),
-      alertTracesAggregateByServiceQuery: () =>
+      sqlQuery: () =>
         Effect.succeed([breachingRow, healthyRow]) as never,
     }
 

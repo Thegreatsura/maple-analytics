@@ -66,14 +66,6 @@ function makeTinybirdStub(overrides: Partial<Parameters<typeof makeQueryEngineEx
 
   return {
     sqlQuery: unexpected("sqlQuery"),
-    customLogsTimeseriesQuery: unexpected("customLogsTimeseriesQuery"),
-    customLogsBreakdownQuery: unexpected("customLogsBreakdownQuery"),
-    alertTracesAggregateQuery: unexpected("alertTracesAggregateQuery"),
-    alertMetricsAggregateQuery: unexpected("alertMetricsAggregateQuery"),
-    alertLogsAggregateQuery: unexpected("alertLogsAggregateQuery"),
-    alertTracesAggregateByServiceQuery: unexpected("alertTracesAggregateByServiceQuery"),
-    alertMetricsAggregateByServiceQuery: unexpected("alertMetricsAggregateByServiceQuery"),
-    alertLogsAggregateByServiceQuery: unexpected("alertLogsAggregateByServiceQuery"),
     ...overrides,
   } satisfies Parameters<typeof makeQueryEngineExecute>[0]
 }
@@ -455,7 +447,7 @@ describe("makeQueryEngineEvaluate", () => {
   it("evaluates traces error rate alerts from the aggregate path", async () => {
     const evaluate = makeQueryEngineEvaluate(
       makeTinybirdStub({
-        alertTracesAggregateQuery: () =>
+        sqlQuery: () =>
           Effect.succeed([
             {
               count: 200,
@@ -495,14 +487,11 @@ describe("makeQueryEngineEvaluate", () => {
     })
   })
 
-  it("evaluates traces apdex alerts and forwards the apdex threshold", async () => {
-    let receivedParams: Record<string, unknown> | undefined
-
+  it("evaluates traces apdex alerts and returns correct value", async () => {
     const evaluate = makeQueryEngineEvaluate(
       makeTinybirdStub({
-        alertTracesAggregateQuery: (_tenant, params) => {
-          receivedParams = params as Record<string, unknown>
-          return Effect.succeed([
+        sqlQuery: () =>
+          Effect.succeed([
             {
               count: 40,
               avgDuration: 0,
@@ -514,8 +503,7 @@ describe("makeQueryEngineEvaluate", () => {
               toleratingCount: 6,
               apdexScore: 0.825,
             },
-          ])
-        },
+          ]),
       }),
     )
 
@@ -533,9 +521,6 @@ describe("makeQueryEngineEvaluate", () => {
       },
     }))
 
-    expect(receivedParams).toMatchObject({
-      apdex_threshold_ms: 350,
-    })
     expect(response.value).toBe(0.825)
     expect(response.sampleCount).toBe(40)
   })
@@ -543,7 +528,7 @@ describe("makeQueryEngineEvaluate", () => {
   it("evaluates metrics alerts with metric data point sample counts", async () => {
     const evaluate = makeQueryEngineEvaluate(
       makeTinybirdStub({
-        alertMetricsAggregateQuery: () =>
+        sqlQuery: () =>
           Effect.succeed([
             {
               avgValue: 18,
@@ -583,7 +568,7 @@ describe("makeQueryEngineEvaluate", () => {
   it("returns hasData=false when the aggregate response has zero samples", async () => {
     const evaluate = makeQueryEngineEvaluate(
       makeTinybirdStub({
-        alertMetricsAggregateQuery: () =>
+        sqlQuery: () =>
           Effect.succeed([
             {
               avgValue: 0,
@@ -623,7 +608,7 @@ describe("makeQueryEngineEvaluate", () => {
   it("evaluates logs alerts with log-count sample counts", async () => {
     const evaluate = makeQueryEngineEvaluate(
       makeTinybirdStub({
-        alertLogsAggregateQuery: () =>
+        sqlQuery: () =>
           Effect.succeed([
             {
               count: 42,
@@ -686,7 +671,7 @@ describe("makeQueryEngineEvaluateGrouped", () => {
   it("evaluates grouped logs alerts by service", async () => {
     const evaluateGrouped = makeQueryEngineEvaluateGrouped(
       makeTinybirdStub({
-        alertLogsAggregateByServiceQuery: () =>
+        sqlQuery: () =>
           Effect.succeed([
             {
               serviceName: "checkout",

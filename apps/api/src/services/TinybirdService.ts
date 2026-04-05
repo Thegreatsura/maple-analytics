@@ -244,14 +244,19 @@ export class TinybirdService extends ServiceMap.Service<TinybirdService, Tinybir
         tenant: TenantContext,
         pipe: TinybirdQueryRequest["pipe"],
       ) {
+      yield* Effect.annotateCurrentSpan("pipe", pipe)
+      yield* Effect.annotateCurrentSpan("orgId", tenant.orgId)
+
       const override = yield* orgTinybirdSettings
         .resolveRuntimeConfig(tenant.orgId)
         .pipe(Effect.mapError((error) => toTinybirdQueryError(pipe, error)))
 
       if (Option.isSome(override)) {
+        yield* Effect.annotateCurrentSpan("clientSource", "org_override")
         return getCachedOrCreateClient(tenant.orgId, override.value.host, override.value.token)
       }
 
+      yield* Effect.annotateCurrentSpan("clientSource", "managed")
       return getCachedOrCreateClient("__managed__", env.TINYBIRD_HOST, Redacted.value(env.TINYBIRD_TOKEN))
     })
 
@@ -267,6 +272,9 @@ export class TinybirdService extends ServiceMap.Service<TinybirdService, Tinybir
         params: TParams & { org_id: OrgId },
       ) => PromiseLike<{ data: ReadonlyArray<TRow> }>,
     ) {
+      yield* Effect.annotateCurrentSpan("pipe", pipe)
+      yield* Effect.annotateCurrentSpan("orgId", tenant.orgId)
+
       if (!tenant.orgId || tenant.orgId.trim() === "") {
         return yield* new TinybirdQueryError({ pipe, message: "org_id must not be empty" })
       }
@@ -282,6 +290,8 @@ export class TinybirdService extends ServiceMap.Service<TinybirdService, Tinybir
           Effect.logError("TinybirdService.runPipe failed", { pipe, error: String(error) })
         )
       )
+
+      yield* Effect.annotateCurrentSpan("result.rowCount", result.data.length)
       return result.data as ReadonlyArray<TRow>
     })
 
@@ -289,6 +299,9 @@ export class TinybirdService extends ServiceMap.Service<TinybirdService, Tinybir
       tenant: TenantContext,
       payload: TinybirdQueryRequest,
     ) {
+      yield* Effect.annotateCurrentSpan("pipe", payload.pipe)
+      yield* Effect.annotateCurrentSpan("orgId", tenant.orgId)
+
       if (!tenant.orgId || tenant.orgId.trim() === "") {
         return yield* new TinybirdQueryError({ pipe: payload.pipe, message: "org_id must not be empty" })
       }
@@ -324,6 +337,8 @@ export class TinybirdService extends ServiceMap.Service<TinybirdService, Tinybir
           Effect.logError("TinybirdService.query failed", { pipe: payload.pipe, error: String(error) })
         )
       )
+
+      yield* Effect.annotateCurrentSpan("result.rowCount", result.data?.length ?? 0)
 
       return new TinybirdQueryResponse({
         data: Array.from(result.data ?? []),
@@ -426,10 +441,17 @@ export class TinybirdService extends ServiceMap.Service<TinybirdService, Tinybir
       >("alert_logs_aggregate_by_service", tenant, params, client.alert_logs_aggregate_by_service.query)
     })
 
+    const truncateSql = (s: string, maxLen = 1000) =>
+      s.length > maxLen ? s.slice(0, maxLen) + "...[truncated]" : s
+
     const sqlQuery = Effect.fn("TinybirdService.sqlQuery")(function* (
       tenant: TenantContext,
       sql: string,
     ) {
+      yield* Effect.annotateCurrentSpan("db.system", "clickhouse")
+      yield* Effect.annotateCurrentSpan("orgId", tenant.orgId)
+      yield* Effect.annotateCurrentSpan("db.statement", truncateSql(sql))
+
       if (!tenant.orgId || tenant.orgId.trim() === "") {
         return yield* new TinybirdQueryError({ pipe: "custom_traces_timeseries", message: "org_id must not be empty" })
       }
@@ -446,6 +468,8 @@ export class TinybirdService extends ServiceMap.Service<TinybirdService, Tinybir
           Effect.logError("TinybirdService.sqlQuery failed", { error: String(error) })
         ),
       )
+
+      yield* Effect.annotateCurrentSpan("result.rowCount", result.data.length)
       return result.data
     })
 

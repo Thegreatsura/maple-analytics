@@ -104,3 +104,32 @@ export {
   type MetricsBreakdownOpts,
   type MetricsBreakdownOutput,
 } from "./queries/metrics"
+
+// Queries — Logs
+export {
+  logsTimeseriesQuery,
+  logsBreakdownQuery,
+  type LogsTimeseriesOpts,
+  type LogsTimeseriesOutput,
+  type LogsBreakdownOpts,
+  type LogsBreakdownOutput,
+} from "./queries/logs"
+
+// Queries — Alerts
+export {
+  alertTracesAggregateQuery,
+  alertTracesAggregateByServiceQuery,
+  alertMetricsAggregateQuery,
+  alertMetricsAggregateByServiceQuery,
+  alertLogsAggregateQuery,
+  alertLogsAggregateByServiceQuery,
+  type AlertTracesOpts,
+  type AlertTracesAggregateOutput,
+  type AlertTracesAggregateByServiceOutput,
+  type AlertMetricsOpts,
+  type AlertMetricsAggregateOutput,
+  type AlertMetricsAggregateByServiceOutput,
+  type AlertLogsOpts,
+  type AlertLogsAggregateOutput,
+  type AlertLogsAggregateByServiceOutput,
+} from "./queries/alerts"
