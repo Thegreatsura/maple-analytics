@@ -8,6 +8,8 @@ import * as CH from "../expr"
 import { param } from "../param"
 import { from, type CHQuery } from "../query"
 import { Logs } from "../tables"
+import { escapeClickHouseString } from "../../sql/sql-fragment"
+import type { CompiledQuery } from "../compile"
 
 // ---------------------------------------------------------------------------
 // Shared options
@@ -16,6 +18,8 @@ import { Logs } from "../tables"
 interface LogsQueryOpts {
   serviceName?: string
   severity?: string
+  traceId?: string
+  search?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -116,6 +120,130 @@ export function logsBreakdownQuery(
     .groupBy("name")
     .orderBy(["count", "desc"])
     .limit(opts.limit ?? 10)
+    .format("JSON")
+    .withParams<{ orgId: string; startTime: string; endTime: string }>()
+}
+
+// ---------------------------------------------------------------------------
+// Count query
+// ---------------------------------------------------------------------------
+
+export interface LogsCountOutput {
+  readonly total: number
+}
+
+export function logsCountQuery(
+  opts: LogsQueryOpts,
+): CHQuery<any, LogsCountOutput, { orgId: string; startTime: string; endTime: string }> {
+  return from(Logs)
+    .select(() => ({
+      total: CH.count(),
+    }))
+    .where(($) => [
+      $.OrgId.eq(param.string("orgId")),
+      $.Timestamp.gte(param.dateTime("startTime")),
+      $.Timestamp.lte(param.dateTime("endTime")),
+      CH.when(opts.serviceName, (v: string) => $.ServiceName.eq(v)),
+      CH.when(opts.severity, (v: string) => $.SeverityText.eq(v)),
+      CH.when(opts.traceId, (v: string) => $.TraceId.eq(v)),
+      CH.when(opts.search, (v: string) =>
+        CH.rawCond(`Body ILIKE '%${escapeClickHouseString(v)}%'`),
+      ),
+    ])
+    .format("JSON")
+    .withParams<{ orgId: string; startTime: string; endTime: string }>()
+}
+
+// ---------------------------------------------------------------------------
+// List query (raw SQL — needs toJSONString, ILIKE, cursor pagination)
+// ---------------------------------------------------------------------------
+
+export interface LogsListOpts extends LogsQueryOpts {
+  minSeverity?: number
+  spanId?: string
+  cursor?: string
+  limit?: number
+}
+
+export interface LogsListOutput {
+  readonly timestamp: string
+  readonly severityText: string
+  readonly severityNumber: number
+  readonly serviceName: string
+  readonly body: string
+  readonly traceId: string
+  readonly spanId: string
+  readonly logAttributes: string
+  readonly resourceAttributes: string
+}
+
+export function logsListSQL(
+  opts: LogsListOpts,
+  params: { orgId: string; startTime: string; endTime: string },
+): CompiledQuery<LogsListOutput> {
+  const esc = escapeClickHouseString
+  const conditions: string[] = [
+    `OrgId = '${esc(params.orgId)}'`,
+    `Timestamp >= '${esc(params.startTime)}'`,
+    `Timestamp <= '${esc(params.endTime)}'`,
+  ]
+  if (opts.serviceName) conditions.push(`ServiceName = '${esc(opts.serviceName)}'`)
+  if (opts.severity) conditions.push(`SeverityText = '${esc(opts.severity)}'`)
+  if (opts.minSeverity != null) conditions.push(`SeverityNumber >= ${Math.round(opts.minSeverity)}`)
+  if (opts.traceId) conditions.push(`TraceId = '${esc(opts.traceId)}'`)
+  if (opts.spanId) conditions.push(`SpanId = '${esc(opts.spanId)}'`)
+  if (opts.cursor) conditions.push(`Timestamp < '${esc(opts.cursor)}'`)
+  if (opts.search) conditions.push(`Body ILIKE '%${esc(opts.search)}%'`)
+
+  const sql = `SELECT
+  Timestamp AS timestamp,
+  SeverityText AS severityText,
+  SeverityNumber AS severityNumber,
+  ServiceName AS serviceName,
+  Body AS body,
+  TraceId AS traceId,
+  SpanId AS spanId,
+  toJSONString(LogAttributes) AS logAttributes,
+  toJSONString(ResourceAttributes) AS resourceAttributes
+FROM logs
+WHERE ${conditions.join("\n  AND ")}
+ORDER BY Timestamp DESC
+LIMIT ${Math.round(opts.limit ?? 50)}
+FORMAT JSON`
+
+  return {
+    sql,
+    castRows: (rows) => rows as unknown as ReadonlyArray<LogsListOutput>,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Error rate by service
+// ---------------------------------------------------------------------------
+
+export interface ErrorRateByServiceOutput {
+  readonly serviceName: string
+  readonly totalLogs: number
+  readonly errorLogs: number
+  readonly errorRatePercent: number
+}
+
+export function errorRateByServiceQuery(
+): CHQuery<any, ErrorRateByServiceOutput, { orgId: string; startTime: string; endTime: string }> {
+  return from(Logs)
+    .select(($) => ({
+      serviceName: $.ServiceName,
+      totalLogs: CH.count(),
+      errorLogs: CH.countIf(CH.rawCond("SeverityText IN ('ERROR', 'FATAL')")),
+      errorRatePercent: CH.rawExpr<number>("round(countIf(SeverityText IN ('ERROR', 'FATAL')) / count() * 100, 2)"),
+    }))
+    .where(($) => [
+      $.OrgId.eq(param.string("orgId")),
+      $.Timestamp.gte(param.dateTime("startTime")),
+      $.Timestamp.lte(param.dateTime("endTime")),
+    ])
+    .groupBy("serviceName")
+    .orderBy(["errorRatePercent", "desc"])
     .format("JSON")
     .withParams<{ orgId: string; startTime: string; endTime: string }>()
 }

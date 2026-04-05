@@ -95,18 +95,6 @@ function makeTinybirdStub(state: {
     query: (_tenant, payload) =>
       Effect.fail(new Error(`Unexpected pipe ${payload.pipe}`)) as never,
     sqlQuery: sqlQueryStub,
-    customLogsTimeseriesQuery: () => succeedRows(emptyTinybirdRows),
-    customLogsBreakdownQuery: () => succeedRows(emptyTinybirdRows),
-    alertTracesAggregateQuery: () =>
-      succeedRows(state.tracesAggregateRows ?? emptyTinybirdRows),
-    alertMetricsAggregateQuery: () =>
-      succeedRows(state.metricsAggregateRows ?? emptyTinybirdRows),
-    alertLogsAggregateQuery: () =>
-      succeedRows(state.logsAggregateRows ?? emptyTinybirdRows),
-    alertTracesAggregateByServiceQuery: () => succeedRows(emptyTinybirdRows),
-    alertMetricsAggregateByServiceQuery: () => succeedRows(emptyTinybirdRows),
-    alertLogsAggregateByServiceQuery: () =>
-      succeedRows(state.logsAggregateByServiceRows ?? emptyTinybirdRows),
   }
 }
 

@@ -85,11 +85,15 @@ export {
   type TracesRootListOutput,
 } from "./queries/traces"
 
-// Queries — Attribute Keys
+// Queries — Attribute Keys & Values
 export {
   attributeKeysQuery,
+  spanAttributeValuesSQL,
+  resourceAttributeValuesSQL,
   type AttributeKeysQueryOpts,
   type AttributeKeysOutput,
+  type AttributeValuesOpts,
+  type AttributeValuesOutput,
 } from "./queries/attribute-keys"
 
 // Queries — Metrics
@@ -109,11 +113,51 @@ export {
 export {
   logsTimeseriesQuery,
   logsBreakdownQuery,
+  logsCountQuery,
+  logsListSQL,
+  errorRateByServiceQuery,
   type LogsTimeseriesOpts,
   type LogsTimeseriesOutput,
   type LogsBreakdownOpts,
   type LogsBreakdownOutput,
+  type LogsCountOutput,
+  type LogsListOpts,
+  type LogsListOutput,
+  type ErrorRateByServiceOutput,
 } from "./queries/logs"
+
+// Queries — Services
+export {
+  serviceOverviewQuery,
+  serviceReleasesTimelineQuery,
+  serviceApdexTimeseriesQuery,
+  serviceUsageQuery,
+  type ServiceOverviewOpts,
+  type ServiceOverviewOutput,
+  type ServiceReleasesTimelineOpts,
+  type ServiceReleasesTimelineOutput,
+  type ServiceApdexTimeseriesOpts,
+  type ServiceApdexTimeseriesOutput,
+  type ServiceUsageOpts,
+  type ServiceUsageOutput,
+} from "./queries/services"
+
+// Queries — Errors
+export {
+  ERROR_FINGERPRINT_SQL,
+  errorsByTypeQuery,
+  errorsTimeseriesQuery,
+  spanHierarchySQL,
+  tracesDurationStatsSQL,
+  type ErrorsByTypeOpts,
+  type ErrorsByTypeOutput,
+  type ErrorsTimeseriesOpts,
+  type ErrorsTimeseriesOutput,
+  type SpanHierarchyOpts,
+  type SpanHierarchyOutput,
+  type TracesDurationStatsOpts,
+  type TracesDurationStatsOutput,
+} from "./queries/errors"
 
 // Queries — Alerts
 export {
