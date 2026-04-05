@@ -80,6 +80,8 @@ const tenant = {
   authMode: "self_hosted" as const,
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
 describe("Tinybird routing", () => {
   it("uses the env-backed Tinybird client by default for raw queries", async () => {
     const { url } = createTempDbUrl()
@@ -111,10 +113,12 @@ describe("Tinybird routing", () => {
 
   it("uses the org-specific Tinybird client for raw queries when an override exists", async () => {
     const { url } = createTempDbUrl()
-    orgTinybirdTestables.setSyncProjectImpl(async () => ({
+    orgTinybirdTestables.setStartDeploymentImpl(async () => ({
       projectRevision: "rev-1",
-      result: "success",
+      result: "no_changes",
       deploymentId: "dep-1",
+      deploymentStatus: "live",
+      errorMessage: null,
     }))
     orgTinybirdTestables.setGetProjectRevisionImpl(async () => "rev-1")
 
@@ -128,24 +132,29 @@ describe("Tinybird routing", () => {
       },
     } as any))
 
-    const tinybirdLayer = makeTinybirdLayer(url)
-    await Effect.runPromise(
-      OrgTinybirdSettingsService.upsert(
-        tenant.orgId,
-        tenant.userId,
-        tenant.roles,
-        {
-          host: "https://customer.tinybird.co",
-          token: "customer-token",
-        },
-      ).pipe(Effect.provide(makeOrgTinybirdLayer(url))),
+    const combinedLayer = Layer.mergeAll(
+      makeOrgTinybirdLayer(url),
+      makeTinybirdLayer(url),
     )
 
     const rawResult = await Effect.runPromise(
-      TinybirdService.query(tenant, {
-        pipe: "list_logs",
-        params: {},
-      }).pipe(Effect.provide(tinybirdLayer)),
+      Effect.gen(function* () {
+        yield* OrgTinybirdSettingsService.upsert(
+          tenant.orgId,
+          tenant.userId,
+          tenant.roles,
+          {
+            host: "https://customer.tinybird.co",
+            token: "customer-token",
+          },
+        )
+        yield* Effect.promise(() => sleep(50))
+
+        return yield* TinybirdService.query(tenant, {
+          pipe: "list_logs",
+          params: {},
+        })
+      }).pipe(Effect.provide(combinedLayer)),
     )
 
     expect(rawResult.data).toEqual([{ message: "byo" }])
