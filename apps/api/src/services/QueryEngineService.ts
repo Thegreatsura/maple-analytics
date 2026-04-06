@@ -16,9 +16,10 @@ import {
   QueryEngineValidationError,
   TinybirdQueryError,
 } from "@maple/domain/http"
-import { Array as Arr, Cache, Duration, Effect, Layer, Match, Option, Result, ServiceMap } from "effect"
+import { Array as Arr, Cache, Duration, Effect, Layer, Match, Metric, MutableHashMap, Option, Result, ServiceMap } from "effect"
 import type { TenantContext } from "./AuthService"
 import { TinybirdService, type TinybirdServiceShape } from "./TinybirdService"
+import * as QueryEngineMetrics from "./QueryEngineMetrics"
 
 interface TimeRangeBounds {
   readonly startMs: number
@@ -110,6 +111,14 @@ function snapSeconds(dateStr: string): string {
 
 function buildCacheKey(orgId: string, request: QueryEngineExecuteRequest): string {
   return `${orgId}:${snapSeconds(request.startTime)}:${snapSeconds(request.endTime)}:${JSON.stringify(request.query)}`
+}
+
+function buildEvaluateCacheKey(orgId: string, request: QueryEngineEvaluateRequest): string {
+  return `eval:${orgId}:${snapSeconds(request.startTime)}:${snapSeconds(request.endTime)}:${request.reducer}:${request.sampleCountStrategy}:${JSON.stringify(request.query)}`
+}
+
+function buildEvaluateGroupedCacheKey(orgId: string, request: QueryEngineEvaluateRequest, groupBy: string): string {
+  return `evalg:${orgId}:${snapSeconds(request.startTime)}:${snapSeconds(request.endTime)}:${request.reducer}:${request.sampleCountStrategy}:${groupBy}:${JSON.stringify(request.query)}`
 }
 
 const computeBucketSeconds = (startMs: number, endMs: number): number => {
@@ -1163,6 +1172,8 @@ export class QueryEngineService extends ServiceMap.Service<QueryEngineService, Q
     const evaluate = makeQueryEngineEvaluate(tinybird)
     const evaluateGrouped = makeQueryEngineEvaluateGrouped(tinybird)
 
+    // --- Execute cache ---
+    const pendingExecute = MutableHashMap.empty<string, { tenant: TenantContext; request: QueryEngineExecuteRequest }>()
     const executeCache = yield* Cache.make<
       string,
       QueryEngineExecuteResponse,
@@ -1170,29 +1181,85 @@ export class QueryEngineService extends ServiceMap.Service<QueryEngineService, Q
     >({
       capacity: 256,
       timeToLive: "15 seconds",
-      lookup: () => Effect.die("unused"),
+      lookup: (key) => {
+        const ctx = MutableHashMap.get(pendingExecute, key)
+        if (Option.isNone(ctx)) return Effect.die(`No pending request context for cache key: ${key}`)
+        return executeImpl(ctx.value.tenant, ctx.value.request).pipe(
+          Effect.tap(() => Metric.update(QueryEngineMetrics.cacheMissesTotal, 1)),
+        )
+      },
+    })
+
+    // --- Evaluate cache ---
+    const pendingEvaluate = MutableHashMap.empty<string, { tenant: TenantContext; request: QueryEngineEvaluateRequest }>()
+    const evaluateCache = yield* Cache.make<
+      string,
+      QueryEngineEvaluateResponse,
+      QueryEngineValidationError | QueryEngineExecutionError | QueryEngineTimeoutError
+    >({
+      capacity: 64,
+      timeToLive: "30 seconds",
+      lookup: (key) => {
+        const ctx = MutableHashMap.get(pendingEvaluate, key)
+        if (Option.isNone(ctx)) return Effect.die(`No pending evaluate context for cache key: ${key}`)
+        return evaluate(ctx.value.tenant, ctx.value.request)
+      },
+    })
+
+    // --- EvaluateGrouped cache ---
+    const pendingEvaluateGrouped = MutableHashMap.empty<string, { tenant: TenantContext; request: QueryEngineEvaluateRequest; groupBy: "service" }>()
+    const evaluateGroupedCache = yield* Cache.make<
+      string,
+      ReadonlyArray<GroupedAlertObservation>,
+      QueryEngineValidationError | QueryEngineExecutionError | QueryEngineTimeoutError
+    >({
+      capacity: 64,
+      timeToLive: "30 seconds",
+      lookup: (key) => {
+        const ctx = MutableHashMap.get(pendingEvaluateGrouped, key)
+        if (Option.isNone(ctx)) return Effect.die(`No pending evaluateGrouped context for cache key: ${key}`)
+        return evaluateGrouped(ctx.value.tenant, ctx.value.request, ctx.value.groupBy)
+      },
     })
 
     return {
       execute: (tenant, request) =>
         withTimeout(
           Effect.gen(function* () {
+            const startMs = Date.now()
             const key = buildCacheKey(tenant.orgId, request)
-            const cached = yield* Cache.getSuccess(executeCache, key)
-            if (Option.isSome(cached)) {
-              yield* Effect.annotateCurrentSpan("query.cacheHit", true)
-              return cached.value
+            const hadEntry = Option.isSome(yield* Cache.getSuccess(executeCache, key))
+            MutableHashMap.set(pendingExecute, key, { tenant, request })
+            const result = yield* Cache.get(executeCache, key)
+            if (hadEntry) {
+              yield* Metric.update(QueryEngineMetrics.cacheHitsTotal, 1)
             }
-            yield* Effect.annotateCurrentSpan("query.cacheHit", false)
-            const result = yield* executeImpl(tenant, request)
-            yield* Cache.set(executeCache, key, result)
+            yield* Metric.update(QueryEngineMetrics.executeDurationMs, Date.now() - startMs)
             return result
           }).pipe(Effect.withSpan("QueryEngineService.cachedExecute", {
             attributes: { orgId: tenant.orgId },
           })),
         ),
-      evaluate: (tenant, request) => withTimeout(evaluate(tenant, request)),
-      evaluateGrouped: (tenant, request, groupBy) => withTimeout(evaluateGrouped(tenant, request, groupBy)),
+      evaluate: (tenant, request) =>
+        withTimeout(
+          Effect.gen(function* () {
+            const key = buildEvaluateCacheKey(tenant.orgId, request)
+            MutableHashMap.set(pendingEvaluate, key, { tenant, request })
+            return yield* Cache.get(evaluateCache, key)
+          }).pipe(Effect.withSpan("QueryEngineService.cachedEvaluate", {
+            attributes: { orgId: tenant.orgId },
+          })),
+        ),
+      evaluateGrouped: (tenant, request, groupBy) =>
+        withTimeout(
+          Effect.gen(function* () {
+            const key = buildEvaluateGroupedCacheKey(tenant.orgId, request, groupBy)
+            MutableHashMap.set(pendingEvaluateGrouped, key, { tenant, request, groupBy })
+            return yield* Cache.get(evaluateGroupedCache, key)
+          }).pipe(Effect.withSpan("QueryEngineService.cachedEvaluateGrouped", {
+            attributes: { orgId: tenant.orgId },
+          })),
+        ),
     }
   }),
 }) {
