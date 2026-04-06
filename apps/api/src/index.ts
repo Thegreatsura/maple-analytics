@@ -12,6 +12,8 @@ import { AuthorizationLive } from "./services/AuthorizationLive";
 import { CloudflareLogpushService } from "./services/CloudflareLogpushService";
 import { DashboardPersistenceService } from "./services/DashboardPersistenceService";
 import { Database } from "./services/DatabaseLive";
+import { DigestService } from "./services/DigestService";
+import { EmailService } from "./services/EmailService";
 import { Env } from "./services/Env";
 import { OrgIngestKeysService } from "./services/OrgIngestKeysService";
 import { OrgTinybirdSettingsService } from "./services/OrgTinybirdSettingsService";
@@ -35,7 +37,7 @@ const DocsRoute = HttpApiScalar.layer(MapleApi, {
 });
 
 const InfraLive = Database.layer.pipe(
-  Layer.provideMerge(Env.layer),
+  Layer.provideMerge(Env.Default),
 )
 
 const CoreServicesLive = Layer.mergeAll(
@@ -62,11 +64,20 @@ const AlertsServiceLive = AlertsService.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(CoreServicesLive, QueryEngineServiceLive, AlertRuntime.Default)),
 )
 
+const EmailServiceLive = EmailService.Default.pipe(
+  Layer.provide(Env.Default),
+)
+
+const DigestServiceLive = DigestService.Default.pipe(
+  Layer.provideMerge(Layer.mergeAll(InfraLive, TinybirdServiceLive, EmailServiceLive)),
+)
+
 const MainLive = Layer.mergeAll(
   CoreServicesLive,
   TinybirdServiceLive,
   QueryEngineServiceLive,
   AlertsServiceLive,
+  DigestServiceLive,
 )
 
 const AllRoutes = Layer.mergeAll(
@@ -105,7 +116,7 @@ const RuntimeLive = Layer.mergeAll(
 const app = HttpRouter.serve(AllRoutes).pipe(
   Layer.provide(RuntimeLive),
   Layer.provide(MainLive),
-  Layer.provide(AuthorizationLive.pipe(Layer.provideMerge(Env.layer))),
+  Layer.provide(AuthorizationLive.pipe(Layer.provideMerge(Env.Default))),
 );
 
 BunRuntime.runMain(app.pipe(Layer.launch as never));
