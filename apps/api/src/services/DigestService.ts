@@ -14,7 +14,7 @@ import {
 import type { OrgId as OrgIdType, RoleName as RoleNameType } from "@maple/domain/http"
 import { createClerkClient } from "@clerk/backend"
 import { render } from "@react-email/components"
-import { and, eq } from "drizzle-orm"
+import { and, eq, inArray } from "drizzle-orm"
 import { Array as Arr, Cause, Effect, Layer, Option, Redacted, ServiceMap } from "effect"
 import { WeeklyDigest, type WeeklyDigestProps } from "@maple/email/weekly-digest"
 import { Database } from "./DatabaseLive"
@@ -432,61 +432,151 @@ export class DigestService extends ServiceMap.Service<DigestService>()(
         return new DigestPreviewResponse({ html })
       })
 
+      const SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000 // 24 hours
+      let lastSyncAt: number | null = null
+
+      const paginateClerk = <T>(
+        fetchPage: (params: { limit: number; offset: number }) => Promise<{ data: T[]; totalCount: number }>,
+        errorMessage: string,
+      ) =>
+        Effect.gen(function* () {
+          const PAGE_SIZE = 100
+          let offset = 0
+          const all: T[] = []
+
+          while (true) {
+            const page = yield* Effect.tryPromise({
+              try: () => fetchPage({ limit: PAGE_SIZE, offset }),
+              catch: () => new DigestPersistenceError({ message: errorMessage }),
+            })
+            all.push(...page.data)
+            offset += page.data.length
+            if (offset >= page.totalCount || page.data.length === 0) break
+          }
+
+          return all
+        })
+
+      const fetchAllClerkMemberships = Effect.fn("DigestService.fetchAllClerkMemberships")(
+        function* (clerk: ReturnType<typeof createClerkClient>) {
+          const orgs = yield* paginateClerk(
+            (params) => clerk.organizations.getOrganizationList(params),
+            "Failed to list Clerk organizations",
+          )
+
+          const memberships: Array<{ orgId: string; userId: string; email: string }> = []
+
+          for (const org of orgs) {
+            const members = yield* paginateClerk(
+              (params) =>
+                clerk.organizations.getOrganizationMembershipList({
+                  organizationId: org.id,
+                  ...params,
+                }),
+              `Failed to list Clerk members for org ${org.id}`,
+            )
+
+            for (const member of members) {
+              const memberEmail = member.publicUserData?.identifier
+              const memberUserId = member.publicUserData?.userId
+              if (!memberEmail || !memberUserId) continue
+              memberships.push({ orgId: org.id, userId: memberUserId, email: memberEmail })
+            }
+          }
+
+          return memberships
+        },
+      )
+
+      const reconcileSubscriptions = Effect.fn("DigestService.reconcileSubscriptions")(
+        function* (clerkMemberships: Array<{ orgId: string; userId: string; email: string }>) {
+          const now = Date.now()
+
+          // Upsert all current Clerk members (re-enables returning members, updates email)
+          for (const m of clerkMemberships) {
+            yield* database
+              .execute((db) =>
+                db
+                  .insert(digestSubscriptions)
+                  .values({
+                    id: crypto.randomUUID(),
+                    orgId: m.orgId,
+                    userId: m.userId,
+                    email: m.email,
+                    enabled: 1,
+                    dayOfWeek: 1,
+                    timezone: "UTC",
+                    createdAt: now,
+                    updatedAt: now,
+                  })
+                  .onConflictDoUpdate({
+                    target: [digestSubscriptions.orgId, digestSubscriptions.userId],
+                    set: {
+                      email: m.email,
+                      enabled: 1,
+                      updatedAt: now,
+                    },
+                  }),
+              )
+              .pipe(Effect.mapError(toPersistenceError))
+          }
+
+          // Disable subscriptions for members no longer in any Clerk org
+          const activeOrgIds = [...new Set(clerkMemberships.map((m) => m.orgId))]
+          if (activeOrgIds.length === 0) return
+
+          const existingSubs = yield* database
+            .execute((db) =>
+              db
+                .select({ id: digestSubscriptions.id, orgId: digestSubscriptions.orgId, userId: digestSubscriptions.userId })
+                .from(digestSubscriptions)
+                .where(inArray(digestSubscriptions.orgId, activeOrgIds)),
+            )
+            .pipe(Effect.mapError(toPersistenceError))
+
+          const activeKeys = new Set(clerkMemberships.map((m) => `${m.orgId}:${m.userId}`))
+          const staleIds = existingSubs
+            .filter((s) => !activeKeys.has(`${s.orgId}:${s.userId}`))
+            .map((s) => s.id)
+
+          if (staleIds.length > 0) {
+            yield* database
+              .execute((db) =>
+                db
+                  .update(digestSubscriptions)
+                  .set({ enabled: 0, updatedAt: now })
+                  .where(inArray(digestSubscriptions.id, staleIds)),
+              )
+              .pipe(Effect.mapError(toPersistenceError))
+
+            yield* Effect.logInfo("Disabled stale digest subscriptions").pipe(
+              Effect.annotateLogs({ count: staleIds.length }),
+            )
+          }
+        },
+      )
+
       const ensureSubscriptions = Effect.fn("DigestService.ensureSubscriptions")(
         function* () {
           if (env.MAPLE_AUTH_MODE.toLowerCase() !== "clerk") return
           if (Option.isNone(env.CLERK_SECRET_KEY)) return
 
+          // Rate-limit: only sync from Clerk once per 24 hours
+          const now = Date.now()
+          if (lastSyncAt != null && now - lastSyncAt < SYNC_INTERVAL_MS) return
+
           const clerk = createClerkClient({
             secretKey: Redacted.value(env.CLERK_SECRET_KEY.value),
           })
 
-          const orgs = Option.isSome(env.MAPLE_ORG_ID_OVERRIDE)
-            ? [{ id: env.MAPLE_ORG_ID_OVERRIDE.value }]
-            : (yield* Effect.tryPromise({
-                try: () => clerk.organizations.getOrganizationList({ limit: 100 }),
-                catch: () => new DigestPersistenceError({ message: "Failed to list Clerk organizations" }),
-              })).data
+          const memberships = yield* fetchAllClerkMemberships(clerk)
+          yield* reconcileSubscriptions(memberships)
 
-          for (const org of orgs) {
-            const members = yield* Effect.tryPromise({
-              try: () => clerk.organizations.getOrganizationMembershipList({
-                organizationId: org.id,
-                limit: 100,
-              }),
-              catch: () => new DigestPersistenceError({ message: `Failed to list Clerk members for org ${org.id}` }),
-            })
+          lastSyncAt = now
 
-            const now = Date.now()
-            for (const member of members.data) {
-              const memberEmail = member.publicUserData?.identifier
-              const memberUserId = member.publicUserData?.userId
-              if (!memberEmail || !memberUserId) continue
-
-              yield* database
-                .execute((db) =>
-                  db
-                    .insert(digestSubscriptions)
-                    .values({
-                      id: crypto.randomUUID(),
-                      orgId: org.id,
-                      userId: memberUserId,
-                      email: memberEmail,
-                      enabled: 1,
-                      dayOfWeek: 1,
-                      timezone: "UTC",
-                      createdAt: now,
-                      updatedAt: now,
-                    })
-                    .onConflictDoNothing({
-                      target: [digestSubscriptions.orgId, digestSubscriptions.userId],
-                    }),
-                )
-                .pipe(Effect.mapError(toPersistenceError))
-            }
-          }
-
-          yield* Effect.logInfo("Digest subscriptions seeded from Clerk")
+          yield* Effect.logInfo("Digest subscriptions synced from Clerk").pipe(
+            Effect.annotateLogs({ memberCount: memberships.length }),
+          )
         },
       )
 
