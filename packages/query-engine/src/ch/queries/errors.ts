@@ -6,25 +6,35 @@
 
 import * as CH from "../expr"
 import { param } from "../param"
-import { from, type CHQuery, type ColumnAccessor } from "../query"
+import { from, fromQuery, type ColumnAccessor } from "../query"
 import { unionAll, type CHUnionQuery } from "../union"
-import { ErrorSpans, TraceListMv, Traces } from "../tables"
-import { escapeClickHouseString } from "../../sql/sql-fragment"
-import type { CompiledQuery } from "../compile"
+import { compileCH } from "../compile"
+import { ErrorSpans, ServiceUsage, TraceListMv, Traces } from "../tables"
 
 // ---------------------------------------------------------------------------
-// Shared: Error fingerprint SQL expression
+// Shared: Error fingerprint expression (typed DSL)
 // ---------------------------------------------------------------------------
 
-export const ERROR_FINGERPRINT_SQL = `if(StatusMessage = '', 'Unknown Error',
-  left(StatusMessage, multiIf(
-    position(StatusMessage, ': ') > 3, toInt64(position(StatusMessage, ': ')) - 1,
-    position(StatusMessage, ' (') > 3, toInt64(position(StatusMessage, ' (')) - 1,
-    position(StatusMessage, '\\n') > 3, toInt64(position(StatusMessage, '\\n')) - 1,
-    position(StatusMessage, '{') > 10, toInt64(position(StatusMessage, '{')) - 1,
-    least(toInt64(length(StatusMessage)), 150)
-  ))
-)`
+/** Extracts a short error "type" from StatusMessage for grouping. */
+export function errorFingerprint(statusMessage: CH.Expr<string>): CH.Expr<string> {
+  return CH.if_(
+    statusMessage.eq(""),
+    CH.lit("Unknown Error"),
+    CH.left_(
+      statusMessage,
+      CH.multiIf(
+        [
+          [CH.position_(statusMessage, ": ").gt(3), CH.toInt64(CH.position_(statusMessage, ": ")).sub(1)],
+          [CH.position_(statusMessage, " (").gt(3), CH.toInt64(CH.position_(statusMessage, " (")).sub(1)],
+          [CH.position_(statusMessage, "\\n").gt(3), CH.toInt64(CH.position_(statusMessage, "\\n")).sub(1)],
+          [CH.position_(statusMessage, "{").gt(10), CH.toInt64(CH.position_(statusMessage, "{")).sub(1)],
+        ],
+        CH.least_(CH.toInt64(CH.length_(statusMessage)), CH.lit(150)),
+      ),
+    ),
+  )
+}
+
 
 // ---------------------------------------------------------------------------
 // Errors by type
@@ -49,10 +59,10 @@ export interface ErrorsByTypeOutput {
 
 export function errorsByTypeQuery(
   opts: ErrorsByTypeOpts,
-): CHQuery<any, ErrorsByTypeOutput, { orgId: string; startTime: string; endTime: string }> {
+) {
   return from(ErrorSpans)
     .select(($) => ({
-      errorType: CH.rawExpr<string>(ERROR_FINGERPRINT_SQL),
+      errorType: errorFingerprint($.StatusMessage),
       sampleMessage: CH.any_($.StatusMessage),
       count: CH.count(),
       affectedServicesCount: CH.uniq($.ServiceName),
@@ -71,14 +81,13 @@ export function errorsByTypeQuery(
         ? CH.inList($.DeploymentEnv, opts.deploymentEnvs)
         : undefined,
       opts.errorTypes?.length
-        ? CH.inList(CH.rawExpr<string>(ERROR_FINGERPRINT_SQL), opts.errorTypes)
+        ? CH.inList(errorFingerprint($.StatusMessage), opts.errorTypes)
         : undefined,
     ])
     .groupBy("errorType")
     .orderBy(["count", "desc"])
     .limit(opts.limit ?? 50)
     .format("JSON")
-    .withParams<{ orgId: string; startTime: string; endTime: string }>()
 }
 
 // ---------------------------------------------------------------------------
@@ -97,8 +106,7 @@ export interface ErrorsTimeseriesOutput {
 
 export function errorsTimeseriesQuery(
   opts: ErrorsTimeseriesOpts,
-): CHQuery<any, ErrorsTimeseriesOutput, { orgId: string; startTime: string; endTime: string; bucketSeconds: number }> {
-  const esc = escapeClickHouseString
+) {
   return from(ErrorSpans)
     .select(($) => ({
       bucket: CH.toStartOfInterval($.Timestamp, param.int("bucketSeconds")),
@@ -106,7 +114,7 @@ export function errorsTimeseriesQuery(
     }))
     .where(($) => [
       $.OrgId.eq(param.string("orgId")),
-      CH.rawCond(`${ERROR_FINGERPRINT_SQL} = '${esc(opts.errorType)}'`),
+      errorFingerprint($.StatusMessage).eq(opts.errorType),
       $.Timestamp.gte(param.dateTime("startTime")),
       $.Timestamp.lte(param.dateTime("endTime")),
       opts.services?.length
@@ -116,7 +124,6 @@ export function errorsTimeseriesQuery(
     .groupBy("bucket")
     .orderBy(["bucket", "asc"])
     .format("JSON")
-    .withParams<{ orgId: string; startTime: string; endTime: string; bucketSeconds: number }>()
 }
 
 // ---------------------------------------------------------------------------
@@ -144,54 +151,52 @@ export interface SpanHierarchyOutput {
   readonly relationship: string
 }
 
-type SpanHierarchyParams = { orgId: string }
-
 export function spanHierarchyQuery(
   opts: SpanHierarchyOpts,
-): CHQuery<any, SpanHierarchyOutput, SpanHierarchyParams> {
-  // HTTP span name rewriting: "http.server GET" + route → "GET /api/users"
-  const httpRewriteExpr = CH.if_(
-    CH.rawCond(
-      "(SpanName LIKE 'http.server %' OR SpanName IN ('GET','POST','PUT','PATCH','DELETE','HEAD','OPTIONS'))" +
-      " AND (SpanAttributes['http.route'] != '' OR SpanAttributes['url.path'] != '')",
-    ),
-    CH.rawExpr<string>(
-      "concat(" +
-        "if(SpanName LIKE 'http.server %', replaceOne(SpanName, 'http.server ', ''), SpanName), " +
-        "' ', " +
-        "if(SpanAttributes['http.route'] != '', SpanAttributes['http.route'], SpanAttributes['url.path'])" +
-      ")",
-    ),
-    CH.rawExpr<string>("SpanName"),
-  )
-
-  const relationshipExpr = opts.spanId
-    ? CH.if_(CH.rawExpr<string>("SpanId").eq(opts.spanId), CH.lit("target"), CH.lit("related"))
-    : CH.lit("related")
-
+) {
   return from(Traces)
-    .select(($) => ({
-      traceId: $.TraceId,
-      spanId: $.SpanId,
-      parentSpanId: $.ParentSpanId,
-      spanName: httpRewriteExpr,
-      serviceName: $.ServiceName,
-      spanKind: $.SpanKind,
-      durationMs: $.Duration.div(1000000),
-      startTime: $.Timestamp,
-      statusCode: $.StatusCode,
-      statusMessage: $.StatusMessage,
-      spanAttributes: CH.toJSONString($.SpanAttributes),
-      resourceAttributes: CH.toJSONString($.ResourceAttributes),
-      relationship: relationshipExpr,
-    }))
+    .select(($) => {
+      // HTTP span name rewriting: "http.server GET" + route → "GET /api/users"
+      const route = $.SpanAttributes.get("http.route")
+      const urlPath = $.SpanAttributes.get("url.path")
+      const httpRewriteExpr = CH.if_(
+        $.SpanName.like("http.server %")
+          .or($.SpanName.in_("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"))
+          .and(route.neq("").or(urlPath.neq(""))),
+        CH.concat(
+          CH.if_($.SpanName.like("http.server %"), CH.replaceOne($.SpanName, "http.server ", ""), $.SpanName),
+          CH.lit(" "),
+          CH.if_(route.neq(""), route, urlPath),
+        ),
+        $.SpanName,
+      )
+
+      const relationshipExpr = opts.spanId
+        ? CH.if_($.SpanId.eq(opts.spanId), CH.lit("target"), CH.lit("related"))
+        : CH.lit("related")
+
+      return {
+        traceId: $.TraceId,
+        spanId: $.SpanId,
+        parentSpanId: $.ParentSpanId,
+        spanName: httpRewriteExpr,
+        serviceName: $.ServiceName,
+        spanKind: $.SpanKind,
+        durationMs: $.Duration.div(1000000),
+        startTime: $.Timestamp,
+        statusCode: $.StatusCode,
+        statusMessage: $.StatusMessage,
+        spanAttributes: CH.toJSONString($.SpanAttributes),
+        resourceAttributes: CH.toJSONString($.ResourceAttributes),
+        relationship: relationshipExpr,
+      }
+    })
     .where(($) => [
       $.TraceId.eq(opts.traceId),
       $.OrgId.eq(param.string("orgId")),
     ])
     .orderBy(["startTime", "asc"])
     .format("JSON")
-    .withParams<SpanHierarchyParams>()
 }
 
 // ---------------------------------------------------------------------------
@@ -221,11 +226,9 @@ export interface TracesDurationStatsOutput {
   readonly p95DurationMs: number
 }
 
-type TracesDurationStatsParams = { orgId: string; startTime: string; endTime: string }
-
 export function tracesDurationStatsQuery(
   opts: TracesDurationStatsOpts,
-): CHQuery<any, TracesDurationStatsOutput, TracesDurationStatsParams> {
+) {
   const mm = opts.matchModes
 
   return from(TraceListMv)
@@ -261,7 +264,6 @@ export function tracesDurationStatsQuery(
       ),
     ])
     .format("JSON")
-    .withParams<TracesDurationStatsParams>()
 }
 
 // ---------------------------------------------------------------------------
@@ -296,13 +298,9 @@ export interface TracesFacetsOutput {
   readonly facetType: string
 }
 
-type TracesFacetsParams = { orgId: string; startTime: string; endTime: string }
-
 export function tracesFacetsQuery(
   opts: TracesFacetsOpts,
-): CHUnionQuery<TracesFacetsOutput, TracesFacetsParams> {
-  const esc = escapeClickHouseString
-
+): CHUnionQuery<TracesFacetsOutput> {
   const baseWhere = ($: ColumnAccessor<typeof TraceListMv.columns>): Array<CH.Condition | undefined> => {
     const conditions: Array<CH.Condition | undefined> = [
       $.OrgId.eq(param.string("orgId")),
@@ -337,30 +335,46 @@ export function tracesFacetsQuery(
       )
     }
 
-    // Attribute filter EXISTS subqueries (kept as rawCond — involves correlated subquery)
+    // Attribute filter EXISTS subqueries (correlated — references outer TraceId)
     if (opts.attributeFilterKey) {
-      const matchExpr = opts.attributeFilterValueMatchMode === "contains"
-        ? `positionCaseInsensitive(t_attr.SpanAttributes['${esc(opts.attributeFilterKey)}'], '${esc(opts.attributeFilterValue ?? "")}') > 0`
-        : `t_attr.SpanAttributes['${esc(opts.attributeFilterKey)}'] = '${esc(opts.attributeFilterValue ?? "")}'`
-      conditions.push(CH.rawCond(`EXISTS (
-        SELECT 1 FROM traces AS t_attr
-        WHERE t_attr.TraceId = TraceId AND t_attr.OrgId = __PARAM_orgId__
-          AND t_attr.Timestamp >= __PARAM_startTime__
-          AND t_attr.Timestamp <= __PARAM_endTime__
-          AND ${matchExpr}
-      )`))
+      const attrCol = CH.mapGet(CH.dynamicColumn<Record<string, string>>("t_attr.SpanAttributes"), opts.attributeFilterKey)
+      const matchCond = opts.attributeFilterValueMatchMode === "contains"
+        ? CH.positionCaseInsensitive(attrCol, CH.lit(opts.attributeFilterValue ?? "")).gt(0)
+        : attrCol.eq(opts.attributeFilterValue ?? "")
+      const innerSql = compileCH(
+        from(Traces, "t_attr")
+          .select(() => ({ _: CH.lit(1) }))
+          .where(() => [
+            CH.dynamicColumn("t_attr.TraceId").eq(CH.outerRef("TraceId")),
+            CH.dynamicColumn("t_attr.OrgId").eq(param.string("orgId")),
+            CH.dynamicColumn<string>("t_attr.Timestamp").gte(param.dateTime("startTime")),
+            CH.dynamicColumn<string>("t_attr.Timestamp").lte(param.dateTime("endTime")),
+            matchCond,
+          ]),
+        {},
+        { skipFormat: true },
+      )
+      conditions.push(CH.exists(innerSql.sql))
     }
     if (opts.resourceFilterKey) {
-      const matchExpr = opts.resourceFilterValueMatchMode === "contains"
-        ? `positionCaseInsensitive(t_res.ResourceAttributes['${esc(opts.resourceFilterKey)}'], '${esc(opts.resourceFilterValue ?? "")}') > 0`
-        : `t_res.ResourceAttributes['${esc(opts.resourceFilterKey)}'] = '${esc(opts.resourceFilterValue ?? "")}'`
-      conditions.push(CH.rawCond(`EXISTS (
-        SELECT 1 FROM traces AS t_res
-        WHERE t_res.TraceId = TraceId AND t_res.OrgId = __PARAM_orgId__
-          AND t_res.Timestamp >= __PARAM_startTime__
-          AND t_res.Timestamp <= __PARAM_endTime__
-          AND ${matchExpr}
-      )`))
+      const resCol = CH.mapGet(CH.dynamicColumn<Record<string, string>>("t_res.ResourceAttributes"), opts.resourceFilterKey)
+      const matchCond = opts.resourceFilterValueMatchMode === "contains"
+        ? CH.positionCaseInsensitive(resCol, CH.lit(opts.resourceFilterValue ?? "")).gt(0)
+        : resCol.eq(opts.resourceFilterValue ?? "")
+      const innerSql = compileCH(
+        from(Traces, "t_res")
+          .select(() => ({ _: CH.lit(1) }))
+          .where(() => [
+            CH.dynamicColumn("t_res.TraceId").eq(CH.outerRef("TraceId")),
+            CH.dynamicColumn("t_res.OrgId").eq(param.string("orgId")),
+            CH.dynamicColumn<string>("t_res.Timestamp").gte(param.dateTime("startTime")),
+            CH.dynamicColumn<string>("t_res.Timestamp").lte(param.dateTime("endTime")),
+            matchCond,
+          ]),
+        {},
+        { skipFormat: true },
+      )
+      conditions.push(CH.exists(innerSql.sql))
     }
 
     return conditions
@@ -385,7 +399,6 @@ export function tracesFacetsQuery(
       .groupBy("name")
       .orderBy(["count", "desc"])
       .limit(limit)
-      .withParams<TracesFacetsParams>()
 
   return unionAll(
     makeFacetQuery("ServiceName", "service"),
@@ -399,8 +412,7 @@ export function tracesFacetsQuery(
         count: CH.count(),
         facetType: CH.lit("errorCount"),
       }))
-      .where(($) => [...baseWhere($), $.HasError.eq(1)])
-      .withParams<TracesFacetsParams>(),
+      .where(($) => [...baseWhere($), $.HasError.eq(1)]),
   ).format("JSON")
 }
 
@@ -421,11 +433,9 @@ export interface ErrorsFacetsOutput {
   readonly facetType: string
 }
 
-type ErrorsFacetsParams = { orgId: string; startTime: string; endTime: string }
-
 export function errorsFacetsQuery(
   opts: ErrorsFacetsOpts,
-): CHUnionQuery<ErrorsFacetsOutput, ErrorsFacetsParams> {
+): CHUnionQuery<ErrorsFacetsOutput> {
   const baseWhere = ($: ColumnAccessor<typeof ErrorSpans.columns>): Array<CH.Condition | undefined> => [
     $.OrgId.eq(param.string("orgId")),
     $.Timestamp.gte(param.dateTime("startTime")),
@@ -438,7 +448,7 @@ export function errorsFacetsQuery(
       ? CH.inList($.DeploymentEnv, opts.deploymentEnvs)
       : undefined,
     opts.errorTypes?.length
-      ? CH.inList(CH.rawExpr<string>(ERROR_FINGERPRINT_SQL), opts.errorTypes)
+      ? CH.inList(errorFingerprint($.StatusMessage), opts.errorTypes)
       : undefined,
   ]
 
@@ -452,7 +462,6 @@ export function errorsFacetsQuery(
     .groupBy("name")
     .orderBy(["count", "desc"])
     .limit(100)
-    .withParams<ErrorsFacetsParams>()
 
   const envQuery = from(ErrorSpans)
     .select(($) => ({
@@ -464,11 +473,10 @@ export function errorsFacetsQuery(
     .groupBy("name")
     .orderBy(["count", "desc"])
     .limit(100)
-    .withParams<ErrorsFacetsParams>()
 
   const errorTypeQuery = from(ErrorSpans)
-    .select(() => ({
-      name: CH.rawExpr<string>(ERROR_FINGERPRINT_SQL),
+    .select(($) => ({
+      name: errorFingerprint($.StatusMessage),
       count: CH.count(),
       facetType: CH.lit("error_type"),
     }))
@@ -476,14 +484,13 @@ export function errorsFacetsQuery(
     .groupBy("name")
     .orderBy(["count", "desc"])
     .limit(50)
-    .withParams<ErrorsFacetsParams>()
 
   return unionAll(serviceQuery, envQuery, errorTypeQuery)
     .format("JSON")
 }
 
 // ---------------------------------------------------------------------------
-// Errors summary (raw SQL — CROSS JOIN between error_spans and service_usage)
+// Errors summary (CROSS JOIN between error_spans and service_usage)
 // ---------------------------------------------------------------------------
 
 export interface ErrorsSummaryOpts {
@@ -501,58 +508,53 @@ export interface ErrorsSummaryOutput {
   readonly affectedTracesCount: number
 }
 
-export function errorsSummarySQL(
+export function errorsSummaryQuery(
   opts: ErrorsSummaryOpts,
-  params: { orgId: string; startTime: string; endTime: string },
-): CompiledQuery<ErrorsSummaryOutput> {
-  const esc = escapeClickHouseString
-  const errorConditions: string[] = [
-    `OrgId = '${esc(params.orgId)}'`,
-    `Timestamp >= '${esc(params.startTime)}'`,
-    `Timestamp <= '${esc(params.endTime)}'`,
-  ]
-  if (opts.rootOnly) errorConditions.push("ParentSpanId = ''")
-  if (opts.services?.length) {
-    errorConditions.push(`ServiceName IN (${opts.services.map((s) => `'${esc(s)}'`).join(", ")})`)
-  }
-  if (opts.deploymentEnvs?.length) {
-    errorConditions.push(`DeploymentEnv IN (${opts.deploymentEnvs.map((e) => `'${esc(e)}'`).join(", ")})`)
-  }
-  if (opts.errorTypes?.length) {
-    errorConditions.push(`${ERROR_FINGERPRINT_SQL} IN (${opts.errorTypes.map((t) => `'${esc(t)}'`).join(", ")})`)
-  }
+) {
+  const errorSub = from(ErrorSpans)
+    .select(($) => ({
+      totalErrors: CH.count(),
+      affectedServicesCount: CH.uniq($.ServiceName),
+      affectedTracesCount: CH.uniq($.TraceId),
+    }))
+    .where(($) => [
+      $.OrgId.eq(param.string("orgId")),
+      $.Timestamp.gte(param.dateTime("startTime")),
+      $.Timestamp.lte(param.dateTime("endTime")),
+      CH.whenTrue(!!opts.rootOnly, () => $.ParentSpanId.eq("")),
+      opts.services?.length ? CH.inList($.ServiceName, opts.services) : undefined,
+      opts.deploymentEnvs?.length ? CH.inList($.DeploymentEnv, opts.deploymentEnvs) : undefined,
+      opts.errorTypes?.length ? CH.inList(errorFingerprint($.StatusMessage), opts.errorTypes) : undefined,
+    ])
 
-  const sql = `SELECT
-  e.totalErrors AS totalErrors,
-  s.totalSpans AS totalSpans,
-  if(s.totalSpans > 0, round(e.totalErrors / s.totalSpans * 100, 4), 0) AS errorRate,
-  e.affectedServicesCount AS affectedServicesCount,
-  e.affectedTracesCount AS affectedTracesCount
-FROM (
-  SELECT
-    count() AS totalErrors,
-    uniq(ServiceName) AS affectedServicesCount,
-    uniq(TraceId) AS affectedTracesCount
-  FROM error_spans
-  WHERE ${errorConditions.join("\n    AND ")}
-) AS e
-CROSS JOIN (
-  SELECT sum(TraceCount) AS totalSpans
-  FROM service_usage
-  WHERE OrgId = '${esc(params.orgId)}'
-    AND Hour >= '${esc(params.startTime)}'
-    AND Hour <= '${esc(params.endTime)}'
-) AS s
-FORMAT JSON`
+  const usageSub = from(ServiceUsage)
+    .select(($) => ({
+      totalSpans: CH.sum($.TraceCount),
+    }))
+    .where(($) => [
+      $.OrgId.eq(param.string("orgId")),
+      $.Hour.gte(param.dateTime("startTime")),
+      $.Hour.lte(param.dateTime("endTime")),
+    ])
 
-  return {
-    sql,
-    castRows: (rows) => rows as unknown as ReadonlyArray<ErrorsSummaryOutput>,
-  }
+  return fromQuery(errorSub, "e")
+    .crossJoinQuery(usageSub, "s")
+    .select(($) => ({
+      totalErrors: $.totalErrors,
+      totalSpans: $.s.totalSpans,
+      errorRate: CH.if_(
+        $.s.totalSpans.gt(0),
+        CH.round_($.totalErrors.div($.s.totalSpans).mul(100), 4),
+        CH.lit(0),
+      ),
+      affectedServicesCount: $.affectedServicesCount,
+      affectedTracesCount: $.affectedTracesCount,
+    }))
+    .format("JSON")
 }
 
 // ---------------------------------------------------------------------------
-// Error detail traces (raw SQL — subquery + INNER JOIN)
+// Error detail traces (INNER JOIN with error subquery)
 // ---------------------------------------------------------------------------
 
 export interface ErrorDetailTracesOpts {
@@ -567,53 +569,49 @@ export interface ErrorDetailTracesOutput {
   readonly startTime: string
   readonly durationMicros: number
   readonly spanCount: number
-  readonly services: string[]
+  readonly services: readonly string[]
   readonly rootSpanName: string
   readonly errorMessage: string
 }
 
-export function errorDetailTracesSQL(
+export function errorDetailTracesQuery(
   opts: ErrorDetailTracesOpts,
-  params: { orgId: string; startTime: string; endTime: string },
-): CompiledQuery<ErrorDetailTracesOutput> {
-  const esc = escapeClickHouseString
+) {
   const limit = opts.limit ?? 10
-  const errorConditions: string[] = [
-    `OrgId = '${esc(params.orgId)}'`,
-    `${ERROR_FINGERPRINT_SQL} = '${esc(opts.errorType)}'`,
-    `Timestamp >= '${esc(params.startTime)}'`,
-    `Timestamp <= '${esc(params.endTime)}'`,
-  ]
-  if (opts.rootOnly) errorConditions.push("ParentSpanId = ''")
-  if (opts.services?.length) {
-    errorConditions.push(`ServiceName IN (${opts.services.map((s) => `'${esc(s)}'`).join(", ")})`)
-  }
 
-  const sql = `SELECT
-  t.TraceId AS traceId,
-  min(t.Timestamp) AS startTime,
-  intDiv(max(t.Duration), 1000) AS durationMicros,
-  count() AS spanCount,
-  groupUniqArray(t.ServiceName) AS services,
-  anyIf(t.SpanName, t.ParentSpanId = '') AS rootSpanName,
-  any(t.StatusMessage) AS errorMessage
-FROM traces AS t
-INNER JOIN (
-  SELECT DISTINCT TraceId
-  FROM error_spans
-  WHERE ${errorConditions.join("\n    AND ")}
-  ORDER BY Timestamp DESC
-  LIMIT ${Math.round(limit)}
-) AS e ON t.TraceId = e.TraceId
-WHERE t.OrgId = '${esc(params.orgId)}'
-  AND t.Timestamp >= '${esc(params.startTime)}'
-  AND t.Timestamp <= '${esc(params.endTime)}'
-GROUP BY t.TraceId
-ORDER BY startTime DESC
-FORMAT JSON`
+  // Subquery: find distinct matching error TraceIds
+  const errorSub = from(ErrorSpans)
+    .select(($) => ({ TraceId: $.TraceId }))
+    .where(($) => [
+      $.OrgId.eq(param.string("orgId")),
+      errorFingerprint($.StatusMessage).eq(opts.errorType),
+      $.Timestamp.gte(param.dateTime("startTime")),
+      $.Timestamp.lte(param.dateTime("endTime")),
+      CH.whenTrue(!!opts.rootOnly, () => $.ParentSpanId.eq("")),
+      opts.services?.length ? CH.inList($.ServiceName, opts.services) : undefined,
+    ])
+    .groupBy("TraceId")
+    .orderBy(["TraceId", "desc"])
+    .limit(limit)
 
-  return {
-    sql,
-    castRows: (rows) => rows as unknown as ReadonlyArray<ErrorDetailTracesOutput>,
-  }
+  // Outer query: join traces with error subquery
+  return from(Traces)
+    .innerJoinQuery(errorSub, "e", (main, e) => main.TraceId.eq(e.TraceId))
+    .select(($) => ({
+      traceId: $.TraceId,
+      startTime: CH.min_($.Timestamp),
+      durationMicros: CH.intDiv(CH.max_($.Duration), 1000),
+      spanCount: CH.count(),
+      services: CH.groupUniqArray($.ServiceName),
+      rootSpanName: CH.anyIf($.SpanName, $.ParentSpanId.eq("")),
+      errorMessage: CH.any_($.StatusMessage),
+    }))
+    .where(($) => [
+      $.OrgId.eq(param.string("orgId")),
+      $.Timestamp.gte(param.dateTime("startTime")),
+      $.Timestamp.lte(param.dateTime("endTime")),
+    ])
+    .groupBy("traceId")
+    .orderBy(["startTime", "desc"])
+    .format("JSON")
 }

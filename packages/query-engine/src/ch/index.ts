@@ -16,6 +16,8 @@ export {
   type CHNullable,
   type InferTS,
   type ColumnDefs,
+  type OutputToColumnDefs,
+  type NullableColumnDefs,
   string,
   uint8,
   uint64,
@@ -49,6 +51,7 @@ export {
   sumIf,
   groupUniqArray,
   toStartOfInterval,
+  intervalSub,
   toJSONString,
   if_,
   concat,
@@ -57,6 +60,7 @@ export {
   inList,
   positionCaseInsensitive,
   mapContains,
+  mapGet,
   arrayStringConcat,
   arrayFilter,
   extract_ as extract,
@@ -67,9 +71,22 @@ export {
   toUInt16OrZero,
   rawExpr,
   rawCond,
-  dynamicColumn,
   when,
   whenTrue,
+  arrayOf,
+  mapLiteral,
+  toUInt64,
+  toInt64,
+  multiIf,
+  position_ as position,
+  left_ as left,
+  length_ as length,
+  replaceOne,
+  least_ as least,
+  greatest_ as greatest,
+  exists,
+  inSubquery,
+  outerRef,
 } from "./expr"
 
 // Params
@@ -79,15 +96,19 @@ export { param, type ParamMarker } from "./param"
 export {
   type CHQuery,
   type ColumnAccessor,
+  type JoinedColumnAccessor,
+  type JoinOnCallback,
   type InferOutput,
+  type InferQueryOutput,
   from,
+  fromQuery,
 } from "./query"
 
 // Compilation
 export { compileCH as compile, compileUnion, type CompiledQuery, QueryBuilderError } from "./compile"
 
 // Union
-export { unionAll, type CHUnionQuery } from "./union"
+export { unionAll, type CHUnionQuery, type InferUnionOutput } from "./union"
 
 // Tables
 export * as tables from "./tables"
@@ -122,7 +143,7 @@ export {
 // Queries — Metrics
 export {
   metricsTimeseriesQuery,
-  metricsTimeseriesRateSQL,
+  metricsTimeseriesRateQuery,
   metricsBreakdownQuery,
   type MetricsTimeseriesOpts,
   type MetricsTimeseriesOutput,
@@ -177,15 +198,15 @@ export {
 
 // Queries — Errors
 export {
-  ERROR_FINGERPRINT_SQL,
+  errorFingerprint,
   errorsByTypeQuery,
   errorsTimeseriesQuery,
   spanHierarchyQuery,
   tracesDurationStatsQuery,
   tracesFacetsQuery,
   errorsFacetsQuery,
-  errorsSummarySQL,
-  errorDetailTracesSQL,
+  errorsSummaryQuery,
+  errorDetailTracesQuery,
   type ErrorsByTypeOpts,
   type ErrorsByTypeOutput,
   type ErrorsTimeseriesOpts,

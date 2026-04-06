@@ -6,9 +6,10 @@
 
 import * as CH from "../expr"
 import { param } from "../param"
-import { from, type CHQuery, type ColumnAccessor } from "../query"
+import { from, type ColumnAccessor } from "../query"
 import { unionAll, type CHUnionQuery } from "../union"
 import { ServiceOverviewSpans, ServiceUsage, Traces } from "../tables"
+import { apdexExprs } from "./query-helpers"
 
 // ---------------------------------------------------------------------------
 // Service overview
@@ -36,7 +37,7 @@ export interface ServiceOverviewOutput {
 
 export function serviceOverviewQuery(
   opts: ServiceOverviewOpts,
-): CHQuery<any, ServiceOverviewOutput, { orgId: string; startTime: string; endTime: string }> {
+) {
   return from(ServiceOverviewSpans)
     .select(($) => ({
       serviceName: $.ServiceName,
@@ -67,7 +68,6 @@ export function serviceOverviewQuery(
     .orderBy(["throughput", "desc"])
     .limit(100)
     .format("JSON")
-    .withParams<{ orgId: string; startTime: string; endTime: string }>()
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +86,7 @@ export interface ServiceReleasesTimelineOutput {
 
 export function serviceReleasesTimelineQuery(
   opts: ServiceReleasesTimelineOpts,
-): CHQuery<any, ServiceReleasesTimelineOutput, { orgId: string; startTime: string; endTime: string; bucketSeconds: number }> {
+) {
   return from(ServiceOverviewSpans)
     .select(($) => ({
       bucket: CH.toStartOfInterval($.Timestamp, param.int("bucketSeconds")),
@@ -104,7 +104,6 @@ export function serviceReleasesTimelineQuery(
     .orderBy(["bucket", "asc"])
     .limit(1000)
     .format("JSON")
-    .withParams<{ orgId: string; startTime: string; endTime: string; bucketSeconds: number }>()
 }
 
 // ---------------------------------------------------------------------------
@@ -126,21 +125,17 @@ export interface ServiceApdexTimeseriesOutput {
 
 export function serviceApdexTimeseriesQuery(
   opts: ServiceApdexTimeseriesOpts,
-): CHQuery<any, ServiceApdexTimeseriesOutput, { orgId: string; startTime: string; endTime: string; bucketSeconds: number }> {
-  const t = String(opts.apdexThresholdMs ?? 500)
+) {
+  const thresholdMs = opts.apdexThresholdMs ?? 500
 
   return from(Traces)
     .select(($) => ({
       bucket: CH.toStartOfInterval($.Timestamp, param.int("bucketSeconds")),
       totalCount: CH.count(),
-      satisfiedCount: CH.countIf($.Duration.div(1000000).lt(Number(t))),
-      toleratingCount: CH.countIf($.Duration.div(1000000).gte(Number(t)).and($.Duration.div(1000000).lt(Number(t) * 4))),
-      apdexScore: CH.rawExpr<number>(
-        `if(count() > 0, round((countIf(Duration / 1000000 < ${t}) + countIf(Duration / 1000000 >= ${t} AND Duration / 1000000 < ${t} * 4) * 0.5) / count(), 4), 0)`,
-      ),
+      ...apdexExprs($.Duration.div(1000000), thresholdMs),
     }))
     .where(($) => [
-      CH.rawCond("(SpanKind IN ('Server', 'Consumer') OR ParentSpanId = '')"),
+      $.SpanKind.in_("Server", "Consumer").or($.ParentSpanId.eq("")),
       $.OrgId.eq(param.string("orgId")),
       $.ServiceName.eq(opts.serviceName),
       $.Timestamp.gte(param.dateTime("startTime")),
@@ -149,7 +144,6 @@ export function serviceApdexTimeseriesQuery(
     .groupBy("bucket")
     .orderBy(["bucket", "asc"])
     .format("JSON")
-    .withParams<{ orgId: string; startTime: string; endTime: string; bucketSeconds: number }>()
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +173,7 @@ export interface ServiceUsageOutput {
 
 export function serviceUsageQuery(
   opts: ServiceUsageOpts,
-): CHQuery<any, ServiceUsageOutput, { orgId: string; startTime: string; endTime: string }> {
+) {
   return from(ServiceUsage)
     .select(($) => ({
       serviceName: $.ServiceName,
@@ -211,7 +205,6 @@ export function serviceUsageQuery(
     .groupBy("serviceName")
     .orderBy(["totalSizeBytes", "desc"])
     .format("JSON")
-    .withParams<{ orgId: string; startTime: string; endTime: string }>()
 }
 
 // ---------------------------------------------------------------------------
@@ -224,10 +217,8 @@ export interface ServicesFacetsOutput {
   readonly facetType: string
 }
 
-type ServicesFacetsParams = { orgId: string; startTime: string; endTime: string }
-
 export function servicesFacetsQuery(
-): CHUnionQuery<ServicesFacetsOutput, ServicesFacetsParams> {
+): CHUnionQuery<ServicesFacetsOutput> {
   const baseWhere = ($: ColumnAccessor<typeof ServiceOverviewSpans.columns>): Array<CH.Condition | undefined> => [
     $.OrgId.eq(param.string("orgId")),
     $.Timestamp.gte(param.dateTime("startTime")),
@@ -244,7 +235,6 @@ export function servicesFacetsQuery(
     .groupBy("name")
     .orderBy(["count", "desc"])
     .limit(50)
-    .withParams<ServicesFacetsParams>()
 
   const commitQuery = from(ServiceOverviewSpans)
     .select(($) => ({
@@ -256,7 +246,6 @@ export function servicesFacetsQuery(
     .groupBy("name")
     .orderBy(["count", "desc"])
     .limit(50)
-    .withParams<ServicesFacetsParams>()
 
   return unionAll(envQuery, commitQuery)
     .format("JSON")

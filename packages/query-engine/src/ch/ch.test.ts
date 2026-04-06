@@ -159,6 +159,33 @@ describe("CH.from / select / where / compile", () => {
     const { sql } = compileCH(q, {})
     expect(sql).toContain("Name IN ('a', 'b', 'c')")
   })
+
+  it("compiles column shorthand select", () => {
+    const q = CH.from(TestTable).select("Id", "Name", "Value")
+
+    const { sql } = compileCH(q, {})
+    expect(sql).toContain("Id AS Id")
+    expect(sql).toContain("Name AS Name")
+    expect(sql).toContain("Value AS Value")
+    expect(sql).toContain("FROM test_table")
+  })
+
+  it("compiles in_() on expressions", () => {
+    const q = CH.from(TestTable)
+      .select(($) => ({ id: $.Id }))
+      .where(($) => [$.Name.in_("alice", "bob", "charlie")])
+
+    const { sql } = compileCH(q, {})
+    expect(sql).toContain("Name IN ('alice', 'bob', 'charlie')")
+  })
+
+  it("compiles arrayOf()", () => {
+    const q = CH.from(TestTable)
+      .select(($) => ({ names: CH.arrayOf($.Name) }))
+
+    const { sql } = compileCH(q, {})
+    expect(sql).toContain("[Name] AS names")
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -208,7 +235,7 @@ describe("tracesTimeseriesQuery", () => {
   it("builds error_rate timeseries", () => {
     const q = tracesTimeseriesQuery({ metric: "error_rate", needsSampling: false })
     const { sql } = compileCH(q, baseParams)
-    expect(sql).toContain("countIf(StatusCode = 'Error') * 100.0 / count(), 0) AS errorRate")
+    expect(sql).toContain("countIf(StatusCode = 'Error') * 100 / count(), 0) AS errorRate")
   })
 
   it("includes sampling columns when needsSampling is true", () => {
@@ -539,7 +566,6 @@ describe("unionAll", () => {
       }))
       .where(($) => [$.Id.eq("1")])
       .groupBy("name")
-      .withParams<{}>()
 
     const q2 = CH.from(TestTable)
       .select(($) => ({
@@ -549,7 +575,6 @@ describe("unionAll", () => {
       }))
       .where(($) => [$.Id.eq("2")])
       .groupBy("name")
-      .withParams<{}>()
 
     const union = unionAll(q1, q2).format("JSON")
     const { sql } = compileUnion(union, {})
@@ -566,12 +591,10 @@ describe("unionAll", () => {
     const q1 = CH.from(TestTable)
       .select(($) => ({ name: $.Name, count: CH.count() }))
       .groupBy("name")
-      .withParams<{}>()
 
     const q2 = CH.from(TestTable)
       .select(($) => ({ name: $.Id, count: CH.count() }))
       .groupBy("name")
-      .withParams<{}>()
 
     const union = unionAll(q1, q2)
       .orderBy(["count", "desc"])
@@ -583,6 +606,220 @@ describe("unionAll", () => {
     expect(sql).toContain("UNION ALL")
     expect(sql).toContain("ORDER BY count DESC")
     expect(sql).toContain("LIMIT 10")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Subquery support
+// ---------------------------------------------------------------------------
+
+describe("subquery support", () => {
+  const TestTable = CH.table("test_table", {
+    Id: CH.string,
+    Name: CH.string,
+    Value: CH.uint64,
+  })
+
+  it("compiles inSubquery", () => {
+    const innerSql = compileCH(
+      CH.from(TestTable).select(($) => ({ id: $.Id })).where(($) => [$.Value.gt(100)]),
+      {},
+      { skipFormat: true },
+    ).sql
+
+    const outer = CH.from(TestTable)
+      .select(($) => ({ name: $.Name }))
+      .where(($) => [CH.inSubquery($.Id, innerSql)])
+      .format("JSON")
+
+    const { sql } = compileCH(outer, {})
+    expect(sql).toContain("Id IN (SELECT")
+    expect(sql).toContain("Value > 100")
+  })
+
+  it("compiles exists()", () => {
+    const subSql = "SELECT 1 FROM other WHERE other.Id = test_table.Id"
+    const q = CH.from(TestTable)
+      .select(($) => ({ id: $.Id }))
+      .where(() => [CH.exists(subSql)])
+      .format("JSON")
+
+    const { sql } = compileCH(q, {})
+    expect(sql).toContain("EXISTS (SELECT 1 FROM other WHERE other.Id = test_table.Id)")
+  })
+
+  it("compiles fromQuery as typed FROM source", () => {
+    const inner = CH.from(TestTable)
+      .select(($) => ({ id: $.Id, name: $.Name }))
+      .limit(10)
+
+    const outer = CH.fromQuery(inner, "sub")
+      .select(($) => ({
+        id: $.id,
+        name: $.name,
+      }))
+      .format("JSON")
+
+    const { sql } = compileCH(outer, {})
+    expect(sql).toContain("FROM (SELECT")
+    expect(sql).toContain(") AS sub")
+    expect(sql).toContain("LIMIT 10")
+    expect(sql).toContain("id AS id")
+    expect(sql).toContain("name AS name")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Type-safe joins
+// ---------------------------------------------------------------------------
+
+describe("type-safe joins", () => {
+  const Users = CH.table("users", {
+    Id: CH.string,
+    Name: CH.string,
+    OrgId: CH.string,
+  })
+
+  const Orders = CH.table("orders", {
+    Id: CH.string,
+    UserId: CH.string,
+    Amount: CH.uint64,
+    Status: CH.string,
+  })
+
+  it("compiles innerJoin with Table", () => {
+    const q = CH.from(Users)
+      .innerJoin(Orders, "o", (u, o) => u.Id.eq(o.UserId))
+      .select(($) => ({
+        userName: $.Name,
+        orderAmount: $.o.Amount,
+      }))
+      .format("JSON")
+
+    const { sql } = compileCH(q, {})
+    expect(sql).toContain("INNER JOIN orders AS o ON users.Id = o.UserId")
+    expect(sql).toContain("users.Name AS userName")
+    expect(sql).toContain("o.Amount AS orderAmount")
+  })
+
+  it("compiles leftJoin with Table", () => {
+    const q = CH.from(Users)
+      .leftJoin(Orders, "o", (u, o) => u.Id.eq(o.UserId))
+      .select(($) => ({
+        userName: $.Name,
+        orderAmount: $.o.Amount,
+      }))
+      .format("JSON")
+
+    const { sql } = compileCH(q, {})
+    expect(sql).toContain("LEFT JOIN orders AS o ON users.Id = o.UserId")
+  })
+
+  it("compiles crossJoin with Table", () => {
+    const q = CH.from(Users)
+      .crossJoin(Orders, "o")
+      .select(($) => ({
+        userName: $.Name,
+        orderStatus: $.o.Status,
+      }))
+      .format("JSON")
+
+    const { sql } = compileCH(q, {})
+    expect(sql).toContain("CROSS JOIN orders AS o")
+    expect(sql).not.toContain(" ON ")
+  })
+
+  it("compiles innerJoinQuery with subquery", () => {
+    const ordersSub = CH.from(Orders)
+      .select(($) => ({ userId: $.UserId, total: CH.sum($.Amount) }))
+      .groupBy("userId")
+
+    const q = CH.from(Users)
+      .innerJoinQuery(ordersSub, "o", (u, o) => u.Id.eq(o.userId))
+      .select(($) => ({
+        userName: $.Name,
+        orderTotal: $.o.total,
+      }))
+      .format("JSON")
+
+    const { sql } = compileCH(q, {})
+    expect(sql).toContain("INNER JOIN (SELECT")
+    expect(sql).toContain(") AS o ON users.Id = o.userId")
+    expect(sql).toContain("o.total AS orderTotal")
+  })
+
+  it("compiles crossJoinQuery with subquery", () => {
+    const statsSub = CH.from(Orders)
+      .select(() => ({ totalOrders: CH.count() }))
+
+    const q = CH.from(Users)
+      .crossJoinQuery(statsSub, "s")
+      .select(($) => ({
+        userName: $.Name,
+        totalOrders: $.s.totalOrders,
+      }))
+      .format("JSON")
+
+    const { sql } = compileCH(q, {})
+    expect(sql).toContain("CROSS JOIN (SELECT")
+    expect(sql).toContain(") AS s")
+    expect(sql).toContain("s.totalOrders AS totalOrders")
+  })
+
+  it("compiles fromQuery + crossJoinQuery (two subqueries)", () => {
+    const sub1 = CH.from(Users)
+      .select(() => ({ userCount: CH.count() }))
+
+    const sub2 = CH.from(Orders)
+      .select(() => ({ orderCount: CH.count() }))
+
+    const q = CH.fromQuery(sub1, "u")
+      .crossJoinQuery(sub2, "o")
+      .select(($) => ({
+        users: $.userCount,
+        orders: $.o.orderCount,
+      }))
+      .format("JSON")
+
+    const { sql } = compileCH(q, {})
+    expect(sql).toContain("FROM (SELECT")
+    expect(sql).toContain(") AS u")
+    expect(sql).toContain("CROSS JOIN (SELECT")
+    expect(sql).toContain(") AS o")
+    expect(sql).toContain("u.userCount AS users")
+    expect(sql).toContain("o.orderCount AS orders")
+  })
+
+  it("compiles multiple chained joins", () => {
+    const Tags = CH.table("tags", { Id: CH.string, UserId: CH.string, Label: CH.string })
+
+    const q = CH.from(Users)
+      .innerJoin(Orders, "o", (u, o) => u.Id.eq(o.UserId))
+      .innerJoin(Tags, "t", (u, t) => u.Id.eq(t.UserId))
+      .select(($) => ({
+        userName: $.Name,
+        orderAmount: $.o.Amount,
+        tag: $.t.Label,
+      }))
+      .format("JSON")
+
+    const { sql } = compileCH(q, {})
+    expect(sql).toContain("INNER JOIN orders AS o ON users.Id = o.UserId")
+    expect(sql).toContain("INNER JOIN tags AS t ON users.Id = t.UserId")
+    expect(sql).toContain("users.Name AS userName")
+    expect(sql).toContain("o.Amount AS orderAmount")
+    expect(sql).toContain("t.Label AS tag")
+  })
+
+  it("qualifies main table columns in where() with joins", () => {
+    const q = CH.from(Users)
+      .innerJoin(Orders, "o", (u, o) => u.Id.eq(o.UserId))
+      .select(($) => ({ userName: $.Name }))
+      .where(($) => [$.OrgId.eq("org_1")])
+      .format("JSON")
+
+    const { sql } = compileCH(q, {})
+    expect(sql).toContain("users.OrgId = 'org_1'")
   })
 })
 
