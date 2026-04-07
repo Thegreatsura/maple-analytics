@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { createPortal } from "react-dom"
+import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 import * as RechartsPrimitive from "recharts"
 
 import { cn } from "../../lib/utils"
@@ -134,6 +134,14 @@ function ChartTooltipContent({
   }) {
   const { config, containerRef, chartId } = useChart()
 
+  const isOpen = !!active && !!payload?.length
+
+  // Remember last coordinate so the Positioner stays put when closing
+  const lastCoordRef = React.useRef<{ x: number; y: number } | null>(null)
+  if (coordinate?.x != null && coordinate?.y != null) {
+    lastCoordRef.current = { x: coordinate.x, y: coordinate.y }
+  }
+
   const tooltipLabel = React.useMemo(() => {
     if (hideLabel || !payload?.length) {
       return null
@@ -170,123 +178,134 @@ function ChartTooltipContent({
     labelKey,
   ])
 
-  if (!active || !payload?.length) {
-    return null
-  }
+  const nestLabel = isOpen && payload!.length === 1 && indicator !== "dot"
 
-  const nestLabel = payload.length === 1 && indicator !== "dot"
+  const anchor = lastCoordRef.current && containerRef.current
+    ? {
+        getBoundingClientRect: () => {
+          const rect = containerRef.current!.getBoundingClientRect()
+          const coord = lastCoordRef.current!
+          const x = rect.left + coord.x
+          const y = rect.top + coord.y
+          return { x, y, width: 0, height: 0, top: y, left: x, right: x, bottom: y }
+        },
+      }
+    : undefined
 
-  const content = (
-    <div
-      className={cn(
-        "border-border/50 bg-background gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs shadow-xl grid min-w-[8rem] items-start",
-        className
-      )}
-    >
-      {!nestLabel ? tooltipLabel : null}
-      <div className="grid gap-1.5">
-        {payload
-          .filter((item) => item.type !== "none" || !!formatter)
-          .sort((a, b) => {
-            const aVal = typeof a.value === "number" ? a.value : 0
-            const bVal = typeof b.value === "number" ? b.value : 0
-            return bVal - aVal
-          })
-          .map((item, index) => {
-            const key = `${nameKey || item.name || item.dataKey || "value"}`
-            const itemConfig = getPayloadConfigFromPayload(config, item, key)
-            const indicatorColor = color || item.payload.fill || item.color
-
-            if (formatter && item?.value !== undefined && item.name) {
-              const formatted = formatter(item.value, item.name, item, index, item.payload)
-              if (formatted == null) return null
-              return (
-                <div
-                  key={item.dataKey}
-                  className={cn(
-                    "[&>svg]:text-muted-foreground flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5",
-                    indicator === "dot" && "items-center"
-                  )}
-                >
-                  {formatted}
-                </div>
-              )
-            }
-
-            return (
+  return (
+    <TooltipPrimitive.Root open={isOpen}>
+      <TooltipPrimitive.Portal keepMounted>
+        <TooltipPrimitive.Positioner
+          anchor={anchor}
+          side="right"
+          sideOffset={12}
+          className={cn(
+            "z-50 pointer-events-none",
+            "transition-[left,top,right,bottom] duration-200 ease-out",
+            !isOpen && "opacity-0",
+          )}
+        >
+          <TooltipPrimitive.Popup data-chart={chartId}>
+            <TooltipPrimitive.Viewport>
+            {isOpen ? (
               <div
-                key={item.dataKey}
                 className={cn(
-                  "[&>svg]:text-muted-foreground flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5",
-                  indicator === "dot" && "items-center"
+                  "border-border/50 bg-background gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs shadow-xl grid min-w-[8rem] items-start",
+                  className
                 )}
               >
-                {itemConfig?.icon ? (
-                  <itemConfig.icon />
-                ) : (
-                  !hideIndicator && (
-                    <div
-                      className={cn(
-                        "shrink-0 rounded-[2px] border-(--color-border) bg-(--color-bg)",
-                        {
-                          "h-2.5 w-2.5": indicator === "dot",
-                          "w-1": indicator === "line",
-                          "w-0 border-[1.5px] border-dashed bg-transparent":
-                            indicator === "dashed",
-                          "my-0.5": nestLabel && indicator === "dashed",
-                        }
-                      )}
-                      style={
-                        {
-                          "--color-bg": indicatorColor,
-                          "--color-border": indicatorColor,
-                        } as React.CSSProperties
+                {!nestLabel ? tooltipLabel : null}
+                <div className="grid gap-1.5">
+                  {payload!
+                    .filter((item) => item.type !== "none" || !!formatter)
+                    .sort((a, b) => {
+                      const aVal = typeof a.value === "number" ? a.value : 0
+                      const bVal = typeof b.value === "number" ? b.value : 0
+                      return bVal - aVal
+                    })
+                    .map((item, index) => {
+                      const key = `${nameKey || item.name || item.dataKey || "value"}`
+                      const itemConfig = getPayloadConfigFromPayload(config, item, key)
+                      const indicatorColor = color || item.payload.fill || item.color
+
+                      if (formatter && item?.value !== undefined && item.name) {
+                        const formatted = formatter(item.value, item.name, item, index, item.payload)
+                        if (formatted == null) return null
+                        return (
+                          <div
+                            key={item.dataKey}
+                            className={cn(
+                              "[&>svg]:text-muted-foreground flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5",
+                              indicator === "dot" && "items-center"
+                            )}
+                          >
+                            {formatted}
+                          </div>
+                        )
                       }
-                    />
-                  )
-                )}
-                <div
-                  className={cn(
-                    "flex flex-1 justify-between leading-none",
-                    nestLabel ? "items-end" : "items-center"
-                  )}
-                >
-                  <div className="grid gap-1.5">
-                    {nestLabel ? tooltipLabel : null}
-                    <span className="text-muted-foreground">
-                      {itemConfig?.label || item.name}
-                    </span>
-                  </div>
-                  {item.value && (
-                    <span className="text-foreground font-mono font-medium tabular-nums">
-                      {item.value.toLocaleString()}
-                    </span>
-                  )}
+
+                      return (
+                        <div
+                          key={item.dataKey}
+                          className={cn(
+                            "[&>svg]:text-muted-foreground flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5",
+                            indicator === "dot" && "items-center"
+                          )}
+                        >
+                          {itemConfig?.icon ? (
+                            <itemConfig.icon />
+                          ) : (
+                            !hideIndicator && (
+                              <div
+                                className={cn(
+                                  "shrink-0 rounded-[2px] border-(--color-border) bg-(--color-bg)",
+                                  {
+                                    "h-2.5 w-2.5": indicator === "dot",
+                                    "w-1": indicator === "line",
+                                    "w-0 border-[1.5px] border-dashed bg-transparent":
+                                      indicator === "dashed",
+                                    "my-0.5": nestLabel && indicator === "dashed",
+                                  }
+                                )}
+                                style={
+                                  {
+                                    "--color-bg": indicatorColor,
+                                    "--color-border": indicatorColor,
+                                  } as React.CSSProperties
+                                }
+                              />
+                            )
+                          )}
+                          <div
+                            className={cn(
+                              "flex flex-1 justify-between leading-none",
+                              nestLabel ? "items-end" : "items-center"
+                            )}
+                          >
+                            <div className="grid gap-1.5">
+                              {nestLabel ? tooltipLabel : null}
+                              <span className="text-muted-foreground">
+                                {itemConfig?.label || item.name}
+                              </span>
+                            </div>
+                            {item.value && (
+                              <span className="text-foreground font-mono font-medium tabular-nums">
+                                {item.value.toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
                 </div>
               </div>
-            )
-          })}
-      </div>
-    </div>
+            ) : null}
+            </TooltipPrimitive.Viewport>
+          </TooltipPrimitive.Popup>
+        </TooltipPrimitive.Positioner>
+      </TooltipPrimitive.Portal>
+    </TooltipPrimitive.Root>
   )
-
-  if (containerRef.current && coordinate?.x != null && coordinate?.y != null) {
-    const rect = containerRef.current.getBoundingClientRect()
-    return createPortal(
-      <div
-        data-chart={chartId}
-        className="pointer-events-none fixed left-0 top-0 z-50 transition-transform duration-200 ease-out"
-        style={{
-          transform: `translate3d(${rect.left + coordinate.x + 12}px, ${rect.top + coordinate.y}px, 0) translateY(-50%)`,
-        }}
-      >
-        {content}
-      </div>,
-      document.body
-    )
-  }
-
-  return content
 }
 
 const ChartLegend = RechartsPrimitive.Legend
