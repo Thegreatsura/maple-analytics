@@ -134,14 +134,6 @@ function ChartTooltipContent({
   }) {
   const { config, containerRef, chartId } = useChart()
 
-  const isOpen = !!active && !!payload?.length
-
-  // Remember last coordinate so the Positioner stays put when closing
-  const lastCoordRef = React.useRef<{ x: number; y: number } | null>(null)
-  if (coordinate?.x != null && coordinate?.y != null) {
-    lastCoordRef.current = { x: coordinate.x, y: coordinate.y }
-  }
-
   const tooltipLabel = React.useMemo(() => {
     if (hideLabel || !payload?.length) {
       return null
@@ -178,36 +170,34 @@ function ChartTooltipContent({
     labelKey,
   ])
 
-  const nestLabel = isOpen && payload!.length === 1 && indicator !== "dot"
+  if (!active || !payload?.length) {
+    return null
+  }
 
-  const anchor = lastCoordRef.current && containerRef.current
+  const nestLabel = payload.length === 1 && indicator !== "dot"
+
+  const anchor = containerRef.current && coordinate?.x != null && coordinate?.y != null
     ? {
         getBoundingClientRect: () => {
           const rect = containerRef.current!.getBoundingClientRect()
-          const coord = lastCoordRef.current!
-          const x = rect.left + coord.x
-          const y = rect.top + coord.y
+          const x = rect.left + coordinate.x!
+          const y = rect.top + coordinate.y!
           return { x, y, width: 0, height: 0, top: y, left: x, right: x, bottom: y }
         },
       }
     : undefined
 
   return (
-    <TooltipPrimitive.Root open={isOpen}>
-      <TooltipPrimitive.Portal keepMounted>
+    <TooltipPrimitive.Root open>
+      <TooltipPrimitive.Portal>
         <TooltipPrimitive.Positioner
           anchor={anchor}
           side="right"
           sideOffset={12}
-          className={cn(
-            "z-50 pointer-events-none",
-            "transition-[left,top,right,bottom] duration-200 ease-out",
-            !isOpen && "opacity-0",
-          )}
+          className="z-50 pointer-events-none transition-[left,top,right,bottom] duration-200 ease-out"
         >
           <TooltipPrimitive.Popup data-chart={chartId}>
             <TooltipPrimitive.Viewport>
-            {isOpen ? (
               <div
                 className={cn(
                   "border-border/50 bg-background gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs shadow-xl grid min-w-[8rem] items-start",
@@ -216,7 +206,7 @@ function ChartTooltipContent({
               >
                 {!nestLabel ? tooltipLabel : null}
                 <div className="grid gap-1.5">
-                  {payload!
+                  {payload
                     .filter((item) => item.type !== "none" || !!formatter)
                     .sort((a, b) => {
                       const aVal = typeof a.value === "number" ? a.value : 0
@@ -299,7 +289,6 @@ function ChartTooltipContent({
                     })}
                 </div>
               </div>
-            ) : null}
             </TooltipPrimitive.Viewport>
           </TooltipPrimitive.Popup>
         </TooltipPrimitive.Positioner>
