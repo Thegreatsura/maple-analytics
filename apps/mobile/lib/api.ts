@@ -831,6 +831,38 @@ function transformLogRow(row: Record<string, unknown>): Log {
   }
 }
 
+export interface LogsFacets {
+  services: Array<{ name: string; count: number }>
+  severities: Array<{ name: string; count: number }>
+}
+
+export async function fetchLogsFacets(startTime: string, endTime: string): Promise<LogsFacets> {
+  const res = await apiRequest<{
+    result: { kind: string; data: Array<Record<string, unknown>> }
+  }>("/api/query-engine/execute", {
+    startTime,
+    endTime,
+    query: {
+      kind: "facets",
+      source: "logs",
+    },
+  })
+
+  if (res.result.kind !== "facets") return { services: [], severities: [] }
+
+  const toItem = (row: Record<string, unknown>) => ({
+    name: String(row.name ?? ""),
+    count: Number(row.count ?? 0),
+  })
+  const byType = (type: string) =>
+    res.result.data.filter((r) => String(r.facetType) === type).map(toItem)
+
+  return {
+    services: byType("service"),
+    severities: byType("severity"),
+  }
+}
+
 export interface LogsFilters {
   service?: string
   severity?: string
