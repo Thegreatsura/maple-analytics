@@ -10,6 +10,7 @@ import {
 	TextInput,
 	View,
 } from "react-native";
+import { AppleIcon } from "../../components/icons/apple-icon";
 import { GithubIcon } from "../../components/icons/github-icon";
 import { GoogleIcon } from "../../components/icons/google-icon";
 import {
@@ -17,7 +18,7 @@ import {
 	SecondaryButton,
 } from "../../components/ui/button";
 
-type SsoProvider = "google" | "github";
+type SsoProvider = "google" | "github" | "apple";
 
 export default function SignInScreen() {
 	const { isSignedIn } = useAuth();
@@ -83,8 +84,14 @@ function SignInForm() {
 	const handleSsoSignIn = async (provider: SsoProvider) => {
 		setSsoLoading(provider);
 		try {
+			const strategy =
+				provider === "google"
+					? "oauth_google"
+					: provider === "apple"
+						? "oauth_apple"
+						: "oauth_github";
 			const { createdSessionId, setActive } = await startSSOFlow({
-				strategy: provider === "google" ? "oauth_google" : "oauth_github",
+				strategy,
 			});
 			if (createdSessionId && setActive) {
 				await setActive({ session: createdSessionId });
@@ -174,6 +181,14 @@ function SignInForm() {
 
 				{/* SSO providers */}
 				<View className="gap-3 mb-5">
+					<SecondaryButton
+						onPress={() => handleSsoSignIn("apple")}
+						loading={ssoLoading === "apple"}
+						disabled={ssoBusy && ssoLoading !== "apple"}
+						icon={<AppleIcon />}
+					>
+						Continue with Apple
+					</SecondaryButton>
 					<SecondaryButton
 						onPress={() => handleSsoSignIn("google")}
 						loading={ssoLoading === "google"}

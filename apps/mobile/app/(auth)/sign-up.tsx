@@ -11,6 +11,7 @@ import {
 	View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AppleIcon } from "../../components/icons/apple-icon";
 import { GithubIcon } from "../../components/icons/github-icon";
 import { GoogleIcon } from "../../components/icons/google-icon";
 import {
@@ -18,7 +19,7 @@ import {
 	SecondaryButton,
 } from "../../components/ui/button";
 
-type SsoProvider = "google" | "github";
+type SsoProvider = "google" | "github" | "apple";
 
 export default function SignUpScreen() {
 	const { signUp, errors, fetchStatus } = useSignUp();
@@ -58,8 +59,14 @@ export default function SignUpScreen() {
 	const handleSsoSignUp = async (provider: SsoProvider) => {
 		setSsoLoading(provider);
 		try {
+			const strategy =
+				provider === "google"
+					? "oauth_google"
+					: provider === "apple"
+						? "oauth_apple"
+						: "oauth_github";
 			const { createdSessionId, setActive } = await startSSOFlow({
-				strategy: provider === "google" ? "oauth_google" : "oauth_github",
+				strategy,
 			});
 			if (createdSessionId && setActive) {
 				await setActive({ session: createdSessionId });
@@ -167,6 +174,14 @@ export default function SignUpScreen() {
 
 					{/* SSO providers */}
 					<View className="gap-3 mb-5">
+						<SecondaryButton
+							onPress={() => handleSsoSignUp("apple")}
+							loading={ssoLoading === "apple"}
+							disabled={ssoBusy && ssoLoading !== "apple"}
+							icon={<AppleIcon />}
+						>
+							Continue with Apple
+						</SecondaryButton>
 						<SecondaryButton
 							onPress={() => handleSsoSignUp("google")}
 							loading={ssoLoading === "google"}

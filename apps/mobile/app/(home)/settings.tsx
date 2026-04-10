@@ -1,6 +1,6 @@
 import { useClerk, useUser, useUserProfileModal } from "@clerk/expo"
 import { UserButton } from "@clerk/expo/native"
-import { Text, View } from "react-native"
+import { Alert, Linking, Pressable, Text, View } from "react-native"
 import { Screen } from "../../components/ui/screen"
 import { ScreenHeader } from "../../components/ui/screen-header"
 import { SectionHeader } from "../../components/ui/section-header"
@@ -57,8 +57,58 @@ export default function SettingsScreen() {
 					</Card>
 				</View>
 
+				{/* Legal */}
+				<View className="mb-6">
+					<SectionHeader>Legal</SectionHeader>
+					<Card padding="none">
+						<Pressable
+							className="flex-row justify-between items-center px-5 py-3.5 border-b border-border"
+							onPress={() => Linking.openURL("https://maple.dev/privacy")}
+						>
+							<Text className="text-sm text-foreground font-mono">Privacy Policy</Text>
+							<Text className="text-sm text-muted-foreground font-mono">›</Text>
+						</Pressable>
+						<Pressable
+							className="flex-row justify-between items-center px-5 py-3.5"
+							onPress={() => Linking.openURL("https://maple.dev/terms")}
+						>
+							<Text className="text-sm text-foreground font-mono">Terms of Service</Text>
+							<Text className="text-sm text-muted-foreground font-mono">›</Text>
+						</Pressable>
+					</Card>
+				</View>
+
 				{/* Sign Out */}
 				<DestructiveButton onPress={() => signOut()}>Sign Out</DestructiveButton>
+
+				{/* Delete Account */}
+				<View className="mt-4">
+					<DestructiveButton
+						onPress={() => {
+							Alert.alert(
+								"Delete Account",
+								"This will permanently delete your account and all associated data. This action cannot be undone.",
+								[
+									{ text: "Cancel", style: "cancel" },
+									{
+										text: "Delete",
+										style: "destructive",
+										onPress: async () => {
+											try {
+												await user?.delete()
+												signOut()
+											} catch {
+												Alert.alert("Error", "Failed to delete account. Please try again.")
+											}
+										},
+									},
+								],
+							)
+						}}
+					>
+						Delete Account
+					</DestructiveButton>
+				</View>
 			</View>
 		</Screen>
 	)

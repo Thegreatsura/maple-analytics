@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:3472"
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? (__DEV__ ? "http://127.0.0.1:3472" : "https://api.maple.dev")
 
 let getToken: (() => Promise<string | null>) | undefined
 
