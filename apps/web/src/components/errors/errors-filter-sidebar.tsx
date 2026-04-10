@@ -31,6 +31,7 @@ export function ErrorsFilterSidebar() {
         startTime: effectiveStartTime,
         endTime: effectiveEndTime,
         showSpam: search.showSpam,
+        rootOnly: search.rootOnly !== false,
       },
     }),
   )
@@ -79,6 +80,11 @@ export function ErrorsFilterSidebar() {
         <FilterSidebarFrame waiting={result.waiting}>
           <FilterSidebarHeader canClear={hasActiveFilters} onClear={clearAllFilters} />
           <FilterSidebarBody>
+            <SingleCheckboxFilter
+              title="All span errors"
+              checked={search.rootOnly === false}
+              onChange={(checked) => updateFilter("rootOnly", checked ? false : undefined)}
+            />
             <SingleCheckboxFilter
               title="Show scanner noise"
               checked={search.showSpam ?? false}

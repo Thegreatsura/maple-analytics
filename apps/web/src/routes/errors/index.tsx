@@ -20,6 +20,7 @@ const errorsSearchSchema = Schema.Struct({
   endTime: Schema.optional(Schema.String),
   timePreset: Schema.optional(Schema.String),
   showSpam: Schema.optional(Schema.Union([Schema.Boolean, BooleanFromStringParam])),
+  rootOnly: Schema.optional(Schema.Union([Schema.Boolean, BooleanFromStringParam])),
 })
 
 export type ErrorsSearchParams = Schema.Schema.Type<typeof errorsSearchSchema>
@@ -65,6 +66,7 @@ function ErrorsContent() {
     deploymentEnvs: search.deploymentEnvs,
     errorTypes: search.errorTypes,
     showSpam: search.showSpam,
+    rootOnly: search.rootOnly !== false,
   }
 
   return (
