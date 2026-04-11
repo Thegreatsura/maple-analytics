@@ -99,6 +99,19 @@ const QUERY_BUILDER_CHART_DISPLAY = {
   curveType: "linear",
 }
 
+const UNIT_ALIASES: Record<string, string> = {
+  ms: "duration_ms",
+  milliseconds: "duration_ms",
+  us: "duration_us",
+  microseconds: "duration_us",
+  "%": "percent",
+  short: "number",
+}
+
+function normalizeUnit(unit: string): string {
+  return UNIT_ALIASES[unit] ?? unit
+}
+
 function serviceWhereClause(serviceName?: string): string {
   return serviceName ? `service.name = "${serviceName}"` : ""
 }
@@ -115,7 +128,7 @@ function serviceHealthWidgets(serviceName?: string): WidgetDef[] {
         params: serviceName ? { service_name: serviceName } : {},
         transform: { reduceToValue: { field: "throughput", aggregate: "sum" } },
       },
-      display: { title: "Throughput", unit: "short" },
+      display: { title: "Throughput", unit: "number" },
       layout: { x: 0, y: 0, w: 3, h: 2 },
     },
     {
@@ -145,7 +158,7 @@ function serviceHealthWidgets(serviceName?: string): WidgetDef[] {
         params: serviceName ? { service_name: serviceName } : {},
         transform: { reduceToValue: { field: "p50LatencyMs", aggregate: "avg" } },
       },
-      display: { title: "P50 Latency", unit: "ms" },
+      display: { title: "P50 Latency", unit: "duration_ms" },
       layout: { x: 6, y: 0, w: 3, h: 2 },
     },
     {
@@ -156,7 +169,7 @@ function serviceHealthWidgets(serviceName?: string): WidgetDef[] {
         params: serviceName ? { service_name: serviceName } : {},
         transform: { reduceToValue: { field: "p95LatencyMs", aggregate: "avg" } },
       },
-      display: { title: "P95 Latency", unit: "ms" },
+      display: { title: "P95 Latency", unit: "duration_ms" },
       layout: { x: 9, y: 0, w: 3, h: 2 },
     },
     {
@@ -172,7 +185,7 @@ function serviceHealthWidgets(serviceName?: string): WidgetDef[] {
           groupBy,
         }),
       ]),
-      display: { title: "Throughput Over Time", ...QUERY_BUILDER_CHART_DISPLAY, unit: "short" },
+      display: { title: "Throughput Over Time", ...QUERY_BUILDER_CHART_DISPLAY, unit: "number" },
       layout: { x: 0, y: 2, w: 6, h: 4 },
     },
     {
@@ -204,7 +217,7 @@ function serviceHealthWidgets(serviceName?: string): WidgetDef[] {
           groupBy,
         }),
       ]),
-      display: { title: "P95 Latency Over Time", ...QUERY_BUILDER_CHART_DISPLAY, unit: "ms" },
+      display: { title: "P95 Latency Over Time", ...QUERY_BUILDER_CHART_DISPLAY, unit: "duration_ms" },
       layout: { x: 0, y: 6, w: 12, h: 4 },
     },
   ]
@@ -324,7 +337,7 @@ function metricOverviewWidgets(opts: {
           reduceToValue: { field: "value", aggregate: "sum" },
         },
       },
-      display: { title: "Data Points", unit: "short" },
+      display: { title: "Data Points", unit: "number" },
       layout: { x: 8, y: 0, w: 4, h: 2 },
     },
     {
@@ -439,7 +452,7 @@ function simpleSpecToWidget(
   })
 
   const display: Record<string, unknown> = { title: spec.title }
-  if (spec.unit) display.unit = spec.unit
+  if (spec.unit) display.unit = normalizeUnit(spec.unit)
 
   if (viz === "table") {
     const ds = makeQueryBuilderBreakdownDataSource([queryDraft])

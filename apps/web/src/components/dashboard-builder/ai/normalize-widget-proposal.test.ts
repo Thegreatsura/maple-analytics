@@ -526,4 +526,127 @@ describe("normalizeAiWidgetProposal", () => {
     expect(result.proposal.display.chartId).toBe("query-builder-area");
     expect(result.proposal.display.unit).toBe("percent");
   });
+
+  it("infers duration_ms unit for metrics with duration in the name", () => {
+    const result = normalizeAiWidgetProposal({
+      visualization: "chart",
+      dataSource: {
+        endpoint: "custom_query_builder_timeseries",
+        params: {
+          queries: [
+            {
+              dataSource: "metrics",
+              metricName: "http.server.duration",
+              metricType: "histogram",
+              aggregation: "avg",
+            },
+          ],
+        },
+      },
+      display: {},
+    });
+
+    expect(result.kind).toBe("valid");
+    if (result.kind !== "valid") return;
+
+    expect(result.proposal.display.unit).toBe("duration_ms");
+  });
+
+  it("infers bytes unit for metrics with memory in the name", () => {
+    const result = normalizeAiWidgetProposal({
+      visualization: "chart",
+      dataSource: {
+        endpoint: "custom_query_builder_timeseries",
+        params: {
+          queries: [
+            {
+              dataSource: "metrics",
+              metricName: "process.runtime.memory.usage",
+              metricType: "gauge",
+              aggregation: "avg",
+            },
+          ],
+        },
+      },
+      display: {},
+    });
+
+    expect(result.kind).toBe("valid");
+    if (result.kind !== "valid") return;
+
+    expect(result.proposal.display.unit).toBe("bytes");
+  });
+
+  it("humanizes raw metric name titles with dots", () => {
+    const result = normalizeAiWidgetProposal({
+      visualization: "chart",
+      dataSource: {
+        endpoint: "custom_query_builder_timeseries",
+        params: {
+          queries: [
+            {
+              dataSource: "metrics",
+              metricName: "http.server.duration",
+              metricType: "histogram",
+              aggregation: "avg",
+            },
+          ],
+        },
+      },
+      display: { title: "http.server.duration" },
+    });
+
+    expect(result.kind).toBe("valid");
+    if (result.kind !== "valid") return;
+
+    expect(result.proposal.display.title).toBe("HTTP Server Duration");
+  });
+
+  it("strips parenthetical aggregation suffixes from titles", () => {
+    const result = normalizeAiWidgetProposal({
+      visualization: "chart",
+      dataSource: {
+        endpoint: "custom_query_builder_timeseries",
+        params: {
+          queries: [
+            {
+              dataSource: "metrics",
+              metricName: "effect_fiber_lifetimes",
+              metricType: "histogram",
+              aggregation: "avg",
+            },
+          ],
+        },
+      },
+      display: { title: "effect_fiber_lifetimes (avg)" },
+    });
+
+    expect(result.kind).toBe("valid");
+    if (result.kind !== "valid") return;
+
+    expect(result.proposal.display.title).toBe("effect_fiber_lifetimes");
+  });
+
+  it("preserves human-readable titles unchanged", () => {
+    const result = normalizeAiWidgetProposal({
+      visualization: "chart",
+      dataSource: {
+        endpoint: "custom_query_builder_timeseries",
+        params: {
+          queries: [
+            {
+              dataSource: "traces",
+              aggregation: "count",
+            },
+          ],
+        },
+      },
+      display: { title: "P95 Latency by Service" },
+    });
+
+    expect(result.kind).toBe("valid");
+    if (result.kind !== "valid") return;
+
+    expect(result.proposal.display.title).toBe("P95 Latency by Service");
+  });
 });

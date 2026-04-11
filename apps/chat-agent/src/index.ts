@@ -34,6 +34,10 @@ const widgetDisplaySchema = z.object({
       }),
     )
     .optional(),
+  listDataSource: z.enum(["traces", "logs"]).optional().describe("Data source for list visualization"),
+  listLimit: z.number().min(1).max(50).optional().describe("Max items in list visualization"),
+  listWhereClause: z.string().optional().describe("Filter for list visualization"),
+  listRootOnly: z.boolean().optional().describe("Only root spans for trace lists"),
 })
 
 const dashboardWidgetDataSourceSchema = z.object({
@@ -395,7 +399,7 @@ function createDashboardBuilderTools(mcpTools: McpToolSet) {
       description:
         "Add a widget to the user's dashboard. IMPORTANT: You must first call test_widget_query with the same endpoint/params/transform to verify the data exists BEFORE calling this tool. Titles must be specific and non-empty. For charts, use chartId from query-builder-area|query-builder-line|query-builder-bar.",
       inputSchema: z.object({
-        visualization: z.enum(["stat", "chart", "table"]),
+        visualization: z.enum(["stat", "chart", "table", "list"]),
         dataSource: dashboardWidgetDataSourceSchema,
         display: widgetDisplaySchema,
       }),

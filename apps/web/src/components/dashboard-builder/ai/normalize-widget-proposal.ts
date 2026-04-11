@@ -382,6 +382,10 @@ function inferDisplayUnit(
     return "number"
   }
 
+  if (firstQuery.dataSource === "metrics") {
+    return inferMetricDisplayUnit(firstQuery.metricName, firstQuery.aggregation)
+  }
+
   return typeof currentUnit === "string" ? currentUnit : undefined
 }
 
@@ -391,7 +395,13 @@ function inferTitle(
   normalizedFormulas: QueryBuilderFormulaDraft[],
 ): string | undefined {
   if (isNonEmptyString(input.display.title)) {
-    return rewriteFriendlyTraceMetricText(input.display.title.trim())
+    let title = input.display.title.trim()
+    // Strip parenthetical aggregation suffixes like " (avg)" — the derive pipeline handles this
+    title = title.replace(/\s*\([^)]*\)\s*$/, "").trim()
+    if (looksLikeRawMetricName(title)) {
+      title = humanizeMetricName(title)
+    }
+    return rewriteFriendlyTraceMetricText(title)
   }
 
   if (normalizedFormulas.length > 0) {
@@ -573,6 +583,21 @@ function stripTimeParams(params: Record<string, unknown> | undefined): Record<st
   if (!params) return params
   const { startTime, endTime, ...rest } = params
   return rest
+}
+
+function looksLikeRawMetricName(title: string): boolean {
+  return title.includes(".") && !title.includes(" ")
+}
+
+function inferMetricDisplayUnit(
+  metricName: string,
+  aggregation: string,
+): WidgetDisplayConfig["unit"] | undefined {
+  const lower = metricName.toLowerCase()
+  if (/\b(duration|latency|response[._]time)\b/.test(lower)) return "duration_ms"
+  if (/\b(bytes|memory|size)\b/.test(lower)) return "bytes"
+  if (aggregation === "rate") return "requests_per_sec"
+  return undefined
 }
 
 export function normalizeAiWidgetProposal(
