@@ -1,4 +1,4 @@
-import { Duration, Effect, Layer, Option, Redacted, Schema, ServiceMap } from "effect"
+import { Duration, Effect, Layer, Option, Redacted, Schema, Context } from "effect"
 import { Env } from "./Env"
 
 export class EmailDeliveryError extends Schema.TaggedErrorClass<EmailDeliveryError>()(
@@ -19,7 +19,7 @@ export interface EmailServiceShape {
 
 const EMAIL_TIMEOUT = Duration.seconds(15)
 
-export class EmailService extends ServiceMap.Service<EmailService, EmailServiceShape>()(
+export class EmailService extends Context.Service<EmailService, EmailServiceShape>()(
   "EmailService",
   {
     make: Effect.gen(function* () {
@@ -70,7 +70,7 @@ export class EmailService extends ServiceMap.Service<EmailService, EmailServiceS
         }).pipe(
           Effect.timeoutOrElse({
             duration: EMAIL_TIMEOUT,
-            onTimeout: () =>
+            orElse: () =>
               Effect.fail(
                 new EmailDeliveryError({
                   message: "Resend API request timed out after 15s",

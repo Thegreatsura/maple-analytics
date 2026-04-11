@@ -15,15 +15,15 @@ import type { OrgId as OrgIdType, RoleName as RoleNameType } from "@maple/domain
 import { createClerkClient } from "@clerk/backend"
 import { render } from "@react-email/components"
 import { and, eq, inArray } from "drizzle-orm"
-import { Array as Arr, Cause, Effect, Layer, Option, Redacted, ServiceMap } from "effect"
+import { Array as Arr, Cause, Effect, Layer, Option, Redacted, Context } from "effect"
 import { WeeklyDigest, type WeeklyDigestProps } from "@maple/email/weekly-digest"
 import { Database } from "./DatabaseLive"
 import { EmailService } from "./EmailService"
 import { Env } from "./Env"
 import { TinybirdService } from "./TinybirdService"
 
-const SYSTEM_DIGEST_USER = UserId.makeUnsafe("system-digest")
-const ROOT_ROLE = RoleName.makeUnsafe("root")
+const SYSTEM_DIGEST_USER = UserId.make("system-digest")
+const ROOT_ROLE = RoleName.make("root")
 
 const toPersistenceError = (error: unknown) =>
   new DigestPersistenceError({
@@ -61,7 +61,7 @@ interface ErrorsByTypeRow {
   count: number
 }
 
-export class DigestService extends ServiceMap.Service<DigestService>()(
+export class DigestService extends Context.Service<DigestService>()(
   "DigestService",
   {
     make: Effect.gen(function* () {
@@ -625,7 +625,7 @@ export class DigestService extends ServiceMap.Service<DigestService>()(
             Object.entries(byOrg),
             ([rawOrgId, orgSubs]) =>
               Effect.gen(function* () {
-                const orgId = OrgId.makeUnsafe(rawOrgId)
+                const orgId = OrgId.make(rawOrgId)
                 const props = yield* generateDigestData(orgId)
                 if (!hasDigestContent(props)) {
                   yield* Effect.logInfo("Skipping digest for org with no data").pipe(
@@ -711,7 +711,7 @@ function rowToResponse(
   row: typeof digestSubscriptions.$inferSelect,
 ): DigestSubscriptionResponse {
   return new DigestSubscriptionResponse({
-    id: DigestSubscriptionId.makeUnsafe(row.id),
+    id: DigestSubscriptionId.make(row.id),
     email: row.email,
     enabled: row.enabled === 1,
     dayOfWeek: row.dayOfWeek,

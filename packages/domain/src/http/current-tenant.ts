@@ -1,5 +1,5 @@
 import { HttpApiMiddleware, HttpApiSecurity } from "effect/unstable/httpapi"
-import { Schema, ServiceMap } from "effect"
+import { Schema, Context as EffectContext } from "effect"
 import { AuthMode, OrgId, RoleName, UserId } from "../primitives"
 
 export class UnauthorizedError extends Schema.TaggedErrorClass<UnauthorizedError>()(
@@ -17,7 +17,7 @@ export class TenantSchema extends Schema.Class<TenantSchema>("TenantSchema")({
   authMode: AuthMode,
 }) {}
 
-export class Context extends ServiceMap.Service<Context, TenantSchema>()("CurrentTenant") {}
+export class Context extends EffectContext.Service<Context, TenantSchema>()("CurrentTenant") {}
 
 export class Authorization extends HttpApiMiddleware.Service<Authorization, {
   provides: Context

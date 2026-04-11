@@ -5,7 +5,7 @@ import {
 } from "@maple/domain/http"
 import type { OrgId } from "@maple/domain"
 import { Tinybird } from "@tinybirdco/sdk"
-import { Effect, Layer, Option, Redacted, ServiceMap } from "effect"
+import { Effect, Layer, Option, Redacted, Context } from "effect"
 import { Env } from "./Env"
 import type { TenantContext } from "./AuthService"
 import { OrgTinybirdSettingsService } from "./OrgTinybirdSettingsService"
@@ -44,7 +44,7 @@ const createClient = (baseUrl: string, token: string): SqlClient => {
 
 let tinybirdClientFactory: typeof createClient = createClient
 
-export class TinybirdService extends ServiceMap.Service<TinybirdService, TinybirdServiceShape>()("TinybirdService", {
+export class TinybirdService extends Context.Service<TinybirdService, TinybirdServiceShape>()("TinybirdService", {
   make: Effect.gen(function* () {
     const env = yield* Env
     const orgTinybirdSettings = yield* OrgTinybirdSettingsService

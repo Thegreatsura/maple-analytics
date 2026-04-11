@@ -1,4 +1,4 @@
-import { Effect, Layer, Redacted, Schema, ServiceMap } from "effect"
+import { Effect, Layer, Redacted, Schema, Context } from "effect"
 import type { TinybirdPipe } from "@maple/domain/tinybird-pipes"
 import { CliConfig } from "./CliConfig"
 
@@ -32,7 +32,7 @@ export interface MapleClientShape {
 
 let nextId = 1
 
-export class MapleClient extends ServiceMap.Service<MapleClient, MapleClientShape>()(
+export class MapleClient extends Context.Service<MapleClient, MapleClientShape>()(
   "MapleClient",
   {
     make: Effect.gen(function* () {

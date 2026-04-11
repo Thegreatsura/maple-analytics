@@ -1,7 +1,7 @@
-import { Layer, ManagedRuntime } from "effect"
+import { ManagedRuntime } from "effect"
 import { Atom } from "effect/unstable/reactivity"
 import { Maple } from "@maple-dev/effect-sdk/client"
-import { MapleApiAtomClient } from "./atom-client"
+import { mapleApiClientLayer } from "@/lib/registry"
 import { ingestUrl } from "./ingest-url"
 
 // TODO: wire into runtimeLayer once ready
@@ -13,6 +13,4 @@ export const mapleOtelLayer = Maple.layer({
   serviceVersion: import.meta.env.VITE_COMMIT_SHA,
 })
 
-export const runtimeLayer = Layer.merge(MapleApiAtomClient.layer, Layer.empty)
-
-export const runtime = ManagedRuntime.make(MapleApiAtomClient.layer, { memoMap: Atom.defaultMemoMap })
+export const runtime = ManagedRuntime.make(mapleApiClientLayer, { memoMap: Atom.defaultMemoMap })

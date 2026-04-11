@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect"
 import { QueryEngineExecuteRequest, type QuerySpec } from "@maple/query-engine"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
+import { mapleApiClientLayer } from "@/lib/registry"
 import { formatForTinybird } from "@/lib/time-utils"
 import {
   buildFormulaResults,
@@ -294,7 +295,7 @@ async function executeTimeseriesQuery(
   })
 
   const response = await Effect.runPromise(
-    executeTimeseriesQueryEffect(payload).pipe(Effect.provide(MapleApiAtomClient.layer)),
+    executeTimeseriesQueryEffect(payload).pipe(Effect.provide(mapleApiClientLayer)),
   )
 
   if (response.result.kind !== "timeseries") {

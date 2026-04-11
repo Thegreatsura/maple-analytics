@@ -16,7 +16,7 @@ import {
   type ResolvedIngestKey,
 } from "@maple/db"
 import { eq } from "drizzle-orm"
-import { Effect, Layer, Option, Redacted, Schema, ServiceMap } from "effect"
+import { Effect, Layer, Option, Redacted, Schema, Context } from "effect"
 import {
   decryptAes256Gcm,
   encryptAes256Gcm,
@@ -83,7 +83,7 @@ const decryptPrivateKey = (
 const generatePublicKey = () => `maple_pk_${randomBytes(24).toString("base64url")}`
 const generatePrivateKey = () => `maple_sk_${randomBytes(24).toString("base64url")}`
 
-export class OrgIngestKeysService extends ServiceMap.Service<OrgIngestKeysService>()(
+export class OrgIngestKeysService extends Context.Service<OrgIngestKeysService>()(
   "OrgIngestKeysService",
   {
     make: Effect.gen(function* () {

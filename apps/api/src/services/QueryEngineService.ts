@@ -16,7 +16,7 @@ import {
   QueryEngineValidationError,
   TinybirdQueryError,
 } from "@maple/domain/http"
-import { Array as Arr, Cache, Duration, Effect, Layer, Match, Metric, MutableHashMap, Option, Result, ServiceMap } from "effect"
+import { Array as Arr, Cache, Duration, Effect, Layer, Match, Metric, MutableHashMap, Option, Result, Context } from "effect"
 import type { TenantContext } from "./AuthService"
 import { TinybirdService, type TinybirdServiceShape } from "./TinybirdService"
 import * as QueryEngineMetrics from "./QueryEngineMetrics"
@@ -87,7 +87,7 @@ const withTimeout = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.timeoutOrElse({
       duration: QUERY_ENGINE_TIMEOUT,
-      onTimeout: () =>
+      orElse: () =>
         Effect.fail(
           new QueryEngineTimeoutError({
             message: "Query execution timed out after 30 seconds",
@@ -1477,7 +1477,7 @@ export const makeQueryEngineEvaluateGrouped = (tinybird: QueryEngineTinybird) =>
     return []
   })
 
-export class QueryEngineService extends ServiceMap.Service<QueryEngineService, QueryEngineServiceShape>()("QueryEngineService", {
+export class QueryEngineService extends Context.Service<QueryEngineService, QueryEngineServiceShape>()("QueryEngineService", {
   make: Effect.gen(function* () {
     const tinybird = yield* TinybirdService
     const executeImpl = makeQueryEngineExecute(tinybird)

@@ -8,6 +8,7 @@ import {
 } from "@maple/query-engine"
 import { Effect, Schema } from "effect"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
+import { mapleApiClientLayer } from "@/lib/registry"
 
 export const TinybirdDateTimeString = TinybirdDateTime
 
@@ -79,7 +80,7 @@ export function runTinybirdQuery<A>(
 ): Effect.Effect<A, TinybirdQueryError> {
   return Effect.suspend(execute).pipe(
     Effect.withSpan(operation),
-    Effect.provide(MapleApiAtomClient.layer),
+    Effect.provide(mapleApiClientLayer),
     Effect.mapError(
       (cause) =>
         new TinybirdQueryError({
@@ -140,7 +141,7 @@ export function extractCount(response: QueryEngineExecuteResponse): number {
 
 export function executeQueryEngine(operation: string, payload: QueryEngineExecuteRequest) {
   return executeQueryEngineEffect(payload).pipe(
-    Effect.provide(MapleApiAtomClient.layer),
+    Effect.provide(mapleApiClientLayer),
     Effect.mapError(
       (cause) =>
         new TinybirdQueryError({

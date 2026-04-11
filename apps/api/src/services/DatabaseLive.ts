@@ -2,7 +2,7 @@ import { createClient } from "@libsql/client"
 import { ensureMapleDbDirectory, resolveMapleDbConfig, runMigrations } from "@maple/db"
 import * as schema from "@maple/db/schema"
 import { drizzle } from "drizzle-orm/libsql"
-import { Effect, Layer, Option, Redacted, Schema, ServiceMap } from "effect"
+import { Effect, Layer, Option, Redacted, Schema, Context } from "effect"
 import { Env } from "./Env"
 
 const makeClient = (config: { url: string; authToken?: string }) =>
@@ -67,7 +67,7 @@ const makeDatabase = Effect.gen(function* () {
   } satisfies DatabaseShape
 })
 
-export class Database extends ServiceMap.Service<Database, DatabaseShape>()("Database") {
+export class Database extends Context.Service<Database, DatabaseShape>()("Database") {
   static readonly layer = Layer.effect(this, makeDatabase)
   static readonly Live = this.layer
   static readonly Default = this.layer

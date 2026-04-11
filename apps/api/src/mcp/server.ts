@@ -1,5 +1,5 @@
 import { McpSchema, McpServer as EffectMcpServer } from "effect/unstable/ai"
-import { Effect, Layer, Schema, ServiceMap } from "effect"
+import { Effect, Layer, Schema, Context } from "effect"
 import { registerFindErrorsTool } from "./tools/find-errors"
 import { registerInspectTraceTool } from "./tools/inspect-trace"
 import { registerSearchLogsTool } from "./tools/search-logs"
@@ -123,7 +123,7 @@ export const McpToolsLive = Layer.effectDiscard(
           description: definition.description,
           inputSchema: toInputSchema(definition.schema),
         }),
-        annotations: ServiceMap.empty(),
+        annotations: Context.empty(),
         handle: (payload) =>
           Effect.gen(function* () {
             const decoded = yield* Effect.try({

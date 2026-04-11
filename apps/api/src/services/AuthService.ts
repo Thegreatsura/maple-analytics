@@ -10,7 +10,7 @@ import {
   UnauthorizedError,
   UserId,
 } from "@maple/domain/http"
-import { Effect, Layer, Option, Redacted, Schema, ServiceMap } from "effect"
+import { Effect, Layer, Option, Redacted, Schema, Context } from "effect"
 import { Env } from "./Env"
 
 export interface TenantContext {
@@ -469,7 +469,7 @@ export const makeResolveMcpTenant = (
   authenticateClerkRequest = makeClerkAuthenticateRequest(env),
 ) => makeResolveTenant(env, authenticateClerkRequest, "api_key")
 
-export class AuthService extends ServiceMap.Service<AuthService, AuthServiceShape>()("AuthService", {
+export class AuthService extends Context.Service<AuthService, AuthServiceShape>()("AuthService", {
   make: Effect.gen(function* () {
     const env = yield* Env
     const resolveTenant = makeResolveTenant(env)

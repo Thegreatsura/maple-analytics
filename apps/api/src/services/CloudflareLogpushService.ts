@@ -25,7 +25,7 @@ import {
   parseCloudflareLogpushSecretHmacKey,
 } from "@maple/db"
 import { and, eq } from "drizzle-orm"
-import { Effect, Layer, Option, Redacted, Schema, ServiceMap } from "effect"
+import { Effect, Layer, Option, Redacted, Schema, Context } from "effect"
 import {
   decryptAes256Gcm,
   encryptAes256Gcm,
@@ -224,7 +224,7 @@ const cleanOptionalServiceName = (
   return Effect.succeed(trimmed)
 }
 
-export class CloudflareLogpushService extends ServiceMap.Service<CloudflareLogpushService, CloudflareLogpushServiceShape>()(
+export class CloudflareLogpushService extends Context.Service<CloudflareLogpushService, CloudflareLogpushServiceShape>()(
   "CloudflareLogpushService",
   {
     make: Effect.gen(function* () {

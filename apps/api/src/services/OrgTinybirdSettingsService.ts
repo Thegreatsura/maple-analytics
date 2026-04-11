@@ -32,7 +32,7 @@ import {
 } from "@maple/domain/tinybird-project-sync"
 import { orgTinybirdSettings, orgTinybirdSyncRuns } from "@maple/db"
 import { eq } from "drizzle-orm"
-import { Duration, Effect, Layer, Option, Redacted, Schema, Semaphore, ServiceMap } from "effect"
+import { Duration, Effect, Layer, Option, Redacted, Schema, Semaphore, Context } from "effect"
 import {
   decryptAes256Gcm,
   encryptAes256Gcm,
@@ -259,7 +259,7 @@ const mapTinybirdError = (error: unknown) => {
   })
 }
 
-export class OrgTinybirdSettingsService extends ServiceMap.Service<OrgTinybirdSettingsService, OrgTinybirdSettingsServiceShape>()(
+export class OrgTinybirdSettingsService extends Context.Service<OrgTinybirdSettingsService, OrgTinybirdSettingsServiceShape>()(
   "OrgTinybirdSettingsService",
   {
     make: Effect.gen(function* () {

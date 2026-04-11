@@ -2,6 +2,7 @@ import { QueryEngineExecuteRequest, type MetricType } from "@maple/query-engine"
 import { Effect, Schema } from "effect"
 import { ListMetricsRequest, MetricsSummaryRequest } from "@maple/domain/http"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
+import { mapleApiClientLayer } from "@/lib/registry"
 import {
   TinybirdDateTimeString,
   TinybirdQueryError,
@@ -139,7 +140,7 @@ function executeMetricsQueryEngine(payload: QueryEngineExecuteRequest) {
       payload: new QueryEngineExecuteRequest(payload),
     })
   }).pipe(
-    Effect.provide(MapleApiAtomClient.layer),
+    Effect.provide(mapleApiClientLayer),
     Effect.mapError(
       (cause) =>
         new TinybirdQueryError({

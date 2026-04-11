@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect"
 import { QueryEngineExecuteRequest } from "@maple/query-engine"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
+import { mapleApiClientLayer } from "@/lib/registry"
 import {
   buildListQuerySpec,
   type QueryBuilderMetricType,
@@ -100,7 +101,7 @@ async function executeListQueryInternal(
   })
 
   const response = await Effect.runPromise(
-    executeListQueryEffect(payload).pipe(Effect.provide(MapleApiAtomClient.layer)),
+    executeListQueryEffect(payload).pipe(Effect.provide(mapleApiClientLayer)),
   )
 
   if (response.result.kind !== "list") {

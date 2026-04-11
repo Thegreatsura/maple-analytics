@@ -17,7 +17,7 @@ import {
   parseIngestKeyLookupHmacKey,
 } from "@maple/db"
 import { and, desc, eq } from "drizzle-orm"
-import { Effect, Layer, Option, Redacted, Schema, ServiceMap } from "effect"
+import { Effect, Layer, Option, Redacted, Schema, Context } from "effect"
 import { Database } from "./DatabaseLive"
 import { Env } from "./Env"
 
@@ -51,7 +51,7 @@ const rowToResponse = (row: typeof apiKeys.$inferSelect): ApiKeyResponse =>
     createdBy: decodeUserIdSync(row.createdBy),
   })
 
-export class ApiKeysService extends ServiceMap.Service<ApiKeysService>()(
+export class ApiKeysService extends Context.Service<ApiKeysService>()(
   "ApiKeysService",
   {
     make: Effect.gen(function* () {

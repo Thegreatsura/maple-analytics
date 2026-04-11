@@ -83,7 +83,7 @@ import {
   Option,
   Redacted,
   Schema,
-  ServiceMap,
+  Context,
 } from "effect"
 import * as AlertingMetrics from "./AlertingMetrics"
 import type { TenantContext } from "./AuthService"
@@ -304,7 +304,7 @@ export interface AlertRuntimeShape {
   readonly deliveryTimeoutMs: () => number
 }
 
-export class AlertRuntime extends ServiceMap.Service<AlertRuntime, AlertRuntimeShape>()(
+export class AlertRuntime extends Context.Service<AlertRuntime, AlertRuntimeShape>()(
   "AlertRuntime",
   {
     make: Effect.succeed({
@@ -840,7 +840,7 @@ export interface AlertsServiceShape {
   >
 }
 
-export class AlertsService extends ServiceMap.Service<AlertsService, AlertsServiceShape>()(
+export class AlertsService extends Context.Service<AlertsService, AlertsServiceShape>()(
   "AlertsService",
   {
     make: Effect.gen(function* () {

@@ -13,7 +13,7 @@ import {
 } from "@maple/domain/http"
 import { dashboards } from "@maple/db"
 import { and, desc, eq } from "drizzle-orm"
-import { Effect, Layer, Option, Schema, ServiceMap } from "effect"
+import { Effect, Layer, Option, Schema, Context } from "effect"
 import { randomUUID } from "node:crypto"
 import { Database } from "./DatabaseLive"
 
@@ -75,7 +75,7 @@ const createDashboardDocument = (portableDashboard: PortableDashboardDocument) =
   })
 }
 
-export class DashboardPersistenceService extends ServiceMap.Service<DashboardPersistenceService>()(
+export class DashboardPersistenceService extends Context.Service<DashboardPersistenceService>()(
   "DashboardPersistenceService",
   {
     make: Effect.gen(function* () {

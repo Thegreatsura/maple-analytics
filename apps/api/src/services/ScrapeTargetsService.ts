@@ -26,7 +26,7 @@ import {
   Option,
   Redacted,
   Schema,
-  ServiceMap,
+  Context,
 } from "effect"
 import {
   decryptAes256Gcm,
@@ -268,7 +268,7 @@ const validateLabelsJson = (labelsJson: string | null | undefined) => {
   )
 }
 
-export class ScrapeTargetsService extends ServiceMap.Service<ScrapeTargetsService, ScrapeTargetsServiceShape>()(
+export class ScrapeTargetsService extends Context.Service<ScrapeTargetsService, ScrapeTargetsServiceShape>()(
   "ScrapeTargetsService",
   {
     make: Effect.gen(function* () {

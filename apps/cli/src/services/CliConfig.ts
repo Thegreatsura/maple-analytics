@@ -1,12 +1,12 @@
 import * as Config from "effect/Config"
-import { Effect, Layer, Redacted, ServiceMap } from "effect"
+import { Effect, Layer, Redacted, Context } from "effect"
 
 export interface CliConfigShape {
   readonly mcpUrl: string
   readonly apiToken: Redacted.Redacted<string>
 }
 
-export class CliConfig extends ServiceMap.Service<CliConfig, CliConfigShape>()(
+export class CliConfig extends Context.Service<CliConfig, CliConfigShape>()(
   "CliConfig",
   {
     make: Effect.gen(function* () {

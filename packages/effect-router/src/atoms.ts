@@ -90,7 +90,7 @@ export function routeAtom<Params, A, E>(
  */
 export function routeAtomDerived<Params, A, E>(
   atomRuntime: Atom.AtomRuntime<any, any>,
-  deriveParams: (get: Atom.Context) => Params,
+  deriveParams: (get: Atom.AtomContext) => Params,
   effectFn: (params: Params) => Effect.Effect<A, E>,
 ): Atom.Atom<AsyncResult.AsyncResult<A, E>> {
   return atomRuntime.atom((get) => {

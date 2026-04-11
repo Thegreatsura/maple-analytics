@@ -1,4 +1,4 @@
-import { Effect, Schema, ServiceMap } from "effect"
+import { Effect, Schema, Context } from "effect"
 import type { TinybirdPipe } from "@maple/domain/tinybird-pipes"
 
 export class ObservabilityError extends Schema.TaggedErrorClass<ObservabilityError>()(
@@ -25,6 +25,6 @@ export interface TinybirdExecutorShape {
   ) => Effect.Effect<ReadonlyArray<T>, ObservabilityError>
 }
 
-export class TinybirdExecutor extends ServiceMap.Service<TinybirdExecutor, TinybirdExecutorShape>()(
+export class TinybirdExecutor extends Context.Service<TinybirdExecutor, TinybirdExecutorShape>()(
   "TinybirdExecutor",
 ) {}

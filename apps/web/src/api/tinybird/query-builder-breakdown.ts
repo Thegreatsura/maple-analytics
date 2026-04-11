@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect"
 import { QueryEngineExecuteRequest } from "@maple/query-engine"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
+import { mapleApiClientLayer } from "@/lib/registry"
 import {
   buildBreakdownQuerySpec,
   type QueryBuilderMetricType,
@@ -108,7 +109,7 @@ async function executeBreakdownQuery(
 
   try {
     const response = await Effect.runPromise(
-      executeBreakdownQueryEffect(payload).pipe(Effect.provide(MapleApiAtomClient.layer)),
+      executeBreakdownQueryEffect(payload).pipe(Effect.provide(mapleApiClientLayer)),
     )
 
     if (response.result.kind !== "breakdown") {

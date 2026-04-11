@@ -1,5 +1,5 @@
 import * as Config from "effect/Config";
-import { Effect, Layer, Option, Redacted, ServiceMap } from "effect";
+import { Effect, Layer, Option, Redacted, Context } from "effect";
 
 export interface EnvShape {
   readonly PORT: number
@@ -25,7 +25,7 @@ export interface EnvShape {
   readonly RESEND_FROM_EMAIL: string
 }
 
-export class Env extends ServiceMap.Service<Env, EnvShape>()("Env", {
+export class Env extends Context.Service<Env, EnvShape>()("Env", {
   make: Effect.gen(function* () {
     const normalizeOptionalString = (value: Option.Option<string>) =>
       Option.filter(value, (entry) => entry.trim().length > 0)

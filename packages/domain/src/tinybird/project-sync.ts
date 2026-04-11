@@ -1,6 +1,6 @@
 import { datasources, pipes, projectRevision } from "../generated/tinybird-project-manifest"
 import { TinybirdApi, TinybirdApiError } from "@tinybirdco/sdk"
-import { Duration, Effect, Layer, Schema, ServiceMap } from "effect"
+import { Duration, Effect, Layer, Schema, Context } from "effect"
 
 const POLL_INTERVAL_MS = 2_000
 const MAX_POLL_ATTEMPTS = 300
@@ -266,7 +266,7 @@ export interface TinybirdProjectSyncShape {
   readonly getCurrentProjectRevision: () => Effect.Effect<string>
 }
 
-export class TinybirdProjectSync extends ServiceMap.Service<TinybirdProjectSync, TinybirdProjectSyncShape>()(
+export class TinybirdProjectSync extends Context.Service<TinybirdProjectSync, TinybirdProjectSyncShape>()(
   "TinybirdProjectSync",
   {
     make: Effect.gen(function* () {
