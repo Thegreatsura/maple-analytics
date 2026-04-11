@@ -1,4 +1,5 @@
-import { useClerk, useUser, useUserProfileModal } from "@clerk/expo"
+import { useState } from "react"
+import { useClerk, useOrganization, useUser, useUserProfileModal } from "@clerk/expo"
 import { UserButton } from "@clerk/expo/native"
 import { Alert, Linking, Pressable, Text, View } from "react-native"
 import { Screen } from "../../components/ui/screen"
@@ -9,12 +10,16 @@ import {
 	DestructiveButton,
 	SecondaryButton,
 } from "../../components/ui/button"
+import { OrgSwitcherModal } from "../../components/org-switcher-modal"
 import { hapticWarning } from "../../lib/haptics"
+import { colors } from "../../lib/theme"
 
 export default function SettingsScreen() {
 	const { signOut } = useClerk()
 	const { user } = useUser()
 	const { presentUserProfile } = useUserProfileModal()
+	const { organization } = useOrganization()
+	const [orgModalVisible, setOrgModalVisible] = useState(false)
 
 	return (
 		<Screen scroll>
@@ -42,6 +47,41 @@ export default function SettingsScreen() {
 						</SecondaryButton>
 					</Card>
 				</View>
+
+				{/* Organization */}
+				{organization && (
+					<View className="mb-6">
+						<SectionHeader>Organization</SectionHeader>
+						<Card padding="none">
+							<Pressable
+								className="flex-row justify-between items-center px-5 py-3.5"
+								onPress={() => setOrgModalVisible(true)}
+							>
+								<View className="flex-row items-center">
+									<View
+										style={{
+											width: 32,
+											height: 32,
+											borderRadius: 6,
+											backgroundColor: colors.primary,
+											alignItems: "center",
+											justifyContent: "center",
+											marginRight: 12,
+										}}
+									>
+										<Text className="text-xs font-bold text-white font-mono">
+											{organization.name.charAt(0).toUpperCase()}
+										</Text>
+									</View>
+									<Text className="text-sm text-foreground font-mono">
+										{organization.name}
+									</Text>
+								</View>
+								<Text className="text-sm text-muted-foreground font-mono">›</Text>
+							</Pressable>
+						</Card>
+					</View>
+				)}
 
 				{/* App Info */}
 				<View className="mb-6">
@@ -112,6 +152,11 @@ export default function SettingsScreen() {
 					</DestructiveButton>
 				</View>
 			</View>
+
+			<OrgSwitcherModal
+				visible={orgModalVisible}
+				onClose={() => setOrgModalVisible(false)}
+			/>
 		</Screen>
 	)
 }

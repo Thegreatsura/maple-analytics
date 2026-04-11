@@ -1,5 +1,6 @@
 import { useState } from "react"
-import { Text, View } from "react-native"
+import { Pressable, Text, View } from "react-native"
+import { useOrganization } from "@clerk/expo"
 import { UserButton } from "@clerk/expo/native"
 import { useDashboardData } from "../../hooks/use-dashboard-data"
 import type { TimeRangeKey } from "../../lib/time-utils"
@@ -13,6 +14,7 @@ import { Card } from "../../components/ui/card"
 import { TimeRangePicker } from "../../components/ui/time-range-picker"
 import { ErrorView } from "../../components/ui/state-view"
 import { SkeletonBlock, TelemetrySkeleton } from "../../components/ui/skeleton"
+import { OrgSwitcherModal } from "../../components/org-switcher-modal"
 
 const TIME_OPTIONS: TimeRangeKey[] = ["1h", "24h", "7d", "30d"]
 
@@ -85,8 +87,10 @@ function TelemetryRow({
 
 export default function DashboardScreen() {
 	const [selectedIndex, setSelectedIndex] = useState(1)
+	const [orgModalVisible, setOrgModalVisible] = useState(false)
 	const timeKey = TIME_OPTIONS[selectedIndex]
 	const { state, refresh } = useDashboardData(timeKey)
+	const { organization } = useOrganization()
 
 	return (
 		<Screen scroll>
@@ -102,11 +106,15 @@ export default function DashboardScreen() {
 					</Text>
 				</View>
 				<View className="flex-row items-center gap-3">
-					<View className="border border-border rounded-full px-3 py-1">
-						<Text className="text-xs text-muted-foreground font-mono">
-							production
+					<Pressable
+						className="flex-row items-center border border-border rounded-full px-3 py-1 gap-1"
+						onPress={() => setOrgModalVisible(true)}
+					>
+						<Text className="text-xs text-muted-foreground font-mono" numberOfLines={1}>
+							{organization?.name ?? "Organization"}
 						</Text>
-					</View>
+						<Text className="text-xs text-muted-foreground font-mono">▾</Text>
+					</Pressable>
 					<View className="w-7 h-7 rounded-full overflow-hidden">
 						<UserButton />
 					</View>
@@ -156,6 +164,11 @@ export default function DashboardScreen() {
 			) : (
 				<DashboardContent data={state.data} />
 			)}
+
+			<OrgSwitcherModal
+				visible={orgModalVisible}
+				onClose={() => setOrgModalVisible(false)}
+			/>
 		</Screen>
 	)
 }
