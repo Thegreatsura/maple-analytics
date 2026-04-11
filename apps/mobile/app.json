@@ -16,6 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.maple.mobile",
+      "associatedDomains": ["applinks:clerk.maple.dev"],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
