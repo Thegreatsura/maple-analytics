@@ -10,6 +10,7 @@ import {
 	View,
 } from "react-native"
 import type { LogsFacets } from "../../lib/api"
+import { hapticLight, hapticMedium } from "../../lib/haptics"
 import { severityColors } from "../../lib/theme"
 import type { LogsFilterState } from "./filter-bar"
 
@@ -29,11 +30,13 @@ export function FilterModal({ visible, onClose, currentFilters, onApply, facets 
 	}
 
 	const handleApply = () => {
+		hapticMedium()
 		onApply(draft)
 		onClose()
 	}
 
 	const handleReset = () => {
+		hapticLight()
 		setDraft({
 			timeKey: "24h",
 			service: "",
@@ -110,7 +113,7 @@ export function FilterModal({ visible, onClose, currentFilters, onApply, facets 
 											return (
 												<TouchableOpacity
 													key={s.name}
-													onPress={() => setDraft((d) => ({ ...d, severity: s.name }))}
+													onPress={() => { hapticLight(); setDraft((d) => ({ ...d, severity: s.name })) }}
 													className="flex-row items-center justify-between py-2.5 px-1"
 												>
 													<View className="flex-row items-center">
@@ -150,7 +153,7 @@ export function FilterModal({ visible, onClose, currentFilters, onApply, facets 
 										{facets.services.slice(0, 10).map((s) => (
 											<TouchableOpacity
 												key={s.name}
-												onPress={() => setDraft((d) => ({ ...d, service: s.name }))}
+												onPress={() => { hapticLight(); setDraft((d) => ({ ...d, service: s.name })) }}
 												className="flex-row items-center justify-between py-2.5 px-1"
 											>
 												<Text

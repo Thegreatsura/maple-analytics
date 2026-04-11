@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 import { ActivityIndicator, Pressable, Text, View } from "react-native"
+import { hapticLight, hapticMedium, hapticWarning } from "../../lib/haptics"
 import { colors } from "../../lib/theme"
 
 type ButtonVariant = "primary" | "secondary" | "destructive"
@@ -31,6 +32,12 @@ const SPINNER_COLOR: Record<ButtonVariant, string> = {
 	destructive: colors.error,
 }
 
+const HAPTIC: Record<ButtonVariant, () => void> = {
+	primary: hapticMedium,
+	secondary: hapticLight,
+	destructive: hapticWarning,
+}
+
 export function Button({
 	children,
 	onPress,
@@ -40,10 +47,16 @@ export function Button({
 	icon,
 }: ButtonProps) {
 	const isInactive = disabled || loading
+	const handlePress = onPress
+		? () => {
+				HAPTIC[variant]()
+				onPress()
+			}
+		: undefined
 	return (
 		<Pressable
 			className={`h-12 rounded-lg items-center justify-center px-4 ${CONTAINER_CLASS[variant]}`}
-			onPress={onPress}
+			onPress={handlePress}
 			disabled={isInactive}
 			style={isInactive ? { opacity: 0.5 } : undefined}
 		>

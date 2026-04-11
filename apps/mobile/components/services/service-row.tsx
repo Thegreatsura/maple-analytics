@@ -1,6 +1,7 @@
 import { Pressable, Text, View } from "react-native"
 import { Link } from "expo-router"
 import type { ServiceOverview } from "../../lib/api"
+import { hapticLight } from "../../lib/haptics"
 import { SparklineBars } from "../SparklineBars"
 
 function formatLatency(ms: number): string {
@@ -42,7 +43,7 @@ export function ServiceRow({
 
 	return (
 		<Link href={`/(home)/services/${encodeURIComponent(service.serviceName)}`} asChild>
-			<Pressable className="px-5 py-3">
+			<Pressable className="px-5 py-3" onPress={() => hapticLight()}>
 				{/* Row 1: Service name + Error rate pill */}
 				<View className="flex-row justify-between items-center">
 					<Text className="text-sm font-semibold text-foreground font-mono" numberOfLines={1}>

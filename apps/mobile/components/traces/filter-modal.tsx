@@ -11,6 +11,7 @@ import {
 	View,
 } from "react-native"
 import type { TracesFacets } from "../../lib/api"
+import { hapticLight, hapticMedium } from "../../lib/haptics"
 import type { TracesFilterState } from "./filter-bar"
 
 interface FilterModalProps {
@@ -29,11 +30,13 @@ export function FilterModal({ visible, onClose, currentFilters, onApply, facets 
 	}
 
 	const handleApply = () => {
+		hapticMedium()
 		onApply(draft)
 		onClose()
 	}
 
 	const handleReset = () => {
+		hapticLight()
 		setDraft({
 			timeKey: "24h",
 			serviceName: "",
@@ -86,7 +89,7 @@ export function FilterModal({ visible, onClose, currentFilters, onApply, facets 
 									<Text className="text-sm text-foreground font-mono">Errors only</Text>
 									<Switch
 										value={draft.errorsOnly}
-										onValueChange={(v) => setDraft((d) => ({ ...d, errorsOnly: v }))}
+										onValueChange={(v) => { hapticLight(); setDraft((d) => ({ ...d, errorsOnly: v })) }}
 									/>
 								</View>
 
@@ -106,7 +109,7 @@ export function FilterModal({ visible, onClose, currentFilters, onApply, facets 
 										{facets.services.slice(0, 10).map((s) => (
 											<TouchableOpacity
 												key={s.name}
-												onPress={() => setDraft((d) => ({ ...d, serviceName: s.name }))}
+												onPress={() => { hapticLight(); setDraft((d) => ({ ...d, serviceName: s.name })) }}
 												className="flex-row items-center justify-between py-2.5 px-1"
 											>
 												<Text
@@ -139,7 +142,7 @@ export function FilterModal({ visible, onClose, currentFilters, onApply, facets 
 										{facets.spanNames.slice(0, 10).map((s) => (
 											<TouchableOpacity
 												key={s.name}
-												onPress={() => setDraft((d) => ({ ...d, spanName: s.name }))}
+												onPress={() => { hapticLight(); setDraft((d) => ({ ...d, spanName: s.name })) }}
 												className="flex-row items-center justify-between py-2.5 px-1"
 											>
 												<Text

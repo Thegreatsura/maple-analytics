@@ -8,6 +8,7 @@ import {
 	getStatusBgColor,
 	getStatusColor,
 } from "../../../lib/colors"
+import { hapticSelection } from "../../../lib/haptics"
 import { colors } from "../../../lib/theme"
 import { formatDuration } from "../../../lib/format"
 import { flattenSpanTree, collectExpandedIds } from "../../../lib/span-tree"
@@ -200,7 +201,7 @@ function TabButton({
 	onPress: () => void
 }) {
 	return (
-		<Pressable onPress={onPress} className="mr-5 pb-2.5">
+		<Pressable onPress={() => { hapticSelection(); onPress() }} className="mr-5 pb-2.5">
 			<Text
 				className={`text-sm font-mono ${active ? "text-foreground font-medium" : "text-muted-foreground"}`}
 			>

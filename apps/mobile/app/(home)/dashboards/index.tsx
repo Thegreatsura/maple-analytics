@@ -1,5 +1,6 @@
 import { Pressable, ScrollView, Text, View } from "react-native"
 import { Link } from "expo-router"
+import { hapticLight } from "../../../lib/haptics"
 import { useDashboards } from "../../../hooks/use-dashboards"
 import { formatRelativeTime } from "../../../lib/format"
 import { Screen, useScreenBottomPadding } from "../../../components/ui/screen"
@@ -69,7 +70,7 @@ function DashboardRow({ dashboard }: { dashboard: DashboardDocument }) {
 			}}
 			asChild
 		>
-			<Pressable>
+			<Pressable onPress={() => hapticLight()}>
 				{({ pressed }) => (
 					<View className="px-5 py-4" style={{ opacity: pressed ? 0.6 : 1 }}>
 						<View className="flex-row justify-between items-baseline mb-1">

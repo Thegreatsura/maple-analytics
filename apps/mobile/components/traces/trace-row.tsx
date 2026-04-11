@@ -1,6 +1,7 @@
 import { Pressable, Text, View } from "react-native"
 import { useRouter } from "expo-router"
 import type { Trace } from "../../lib/api"
+import { hapticLight } from "../../lib/haptics"
 import { HTTP_METHOD_COLORS, getServiceColor, getStatusColor, getStatusBgColor } from "../../lib/colors"
 import { formatDuration, formatRelativeTime } from "../../lib/format"
 
@@ -14,7 +15,10 @@ export function TraceRow({ trace }: { trace: Trace }) {
 
 	return (
 		<Pressable
-			onPress={() => router.push(`/(home)/traces/${trace.traceId}`)}
+			onPress={() => {
+				hapticLight()
+				router.push(`/(home)/traces/${trace.traceId}`)
+			}}
 			style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
 		>
 			<View className="px-5 py-3">

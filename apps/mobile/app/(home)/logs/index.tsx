@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import { ActivityIndicator, RefreshControl, View } from "react-native"
+import { hapticSuccess } from "../../../lib/haptics"
 import { LegendList } from "@legendapp/list"
 import { useInfiniteLogs } from "../../../hooks/use-infinite-logs"
 import { useLogsFacets } from "../../../hooks/use-logs-facets"
@@ -72,7 +73,7 @@ export default function LogsScreen() {
 					estimatedItemSize={65}
 					recycleItems
 					refreshControl={
-						<RefreshControl refreshing={false} onRefresh={refresh} />
+						<RefreshControl refreshing={false} onRefresh={() => { hapticSuccess(); refresh() }} />
 					}
 					renderItem={({ item }) => <LogRow item={item} />}
 					onEndReached={fetchNextPage}

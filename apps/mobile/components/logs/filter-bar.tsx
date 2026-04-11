@@ -1,4 +1,5 @@
 import { ScrollView, Text, TouchableOpacity, View } from "react-native"
+import { hapticLight } from "../../lib/haptics"
 import type { TimeRangeKey } from "../../lib/time-utils"
 
 export interface LogsFilterState {
@@ -33,7 +34,7 @@ export function FilterBar({ filterState, onRemoveFilter, onOpenFilters }: Filter
 			<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2">
 				{/* Filter button */}
 				<TouchableOpacity
-					onPress={onOpenFilters}
+					onPress={() => { hapticLight(); onOpenFilters() }}
 					className="flex-row items-center rounded-lg border border-border bg-card px-3 py-1.5"
 				>
 					<Text className="text-xs text-foreground font-mono">Filters</Text>
@@ -76,7 +77,7 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
 			<Text className="text-xs text-foreground font-mono mr-1.5" numberOfLines={1}>
 				{label}
 			</Text>
-			<TouchableOpacity onPress={onRemove} hitSlop={8}>
+			<TouchableOpacity onPress={() => { hapticLight(); onRemove() }} hitSlop={8}>
 				<Text className="text-xs text-muted-foreground font-mono">{"\u2715"}</Text>
 			</TouchableOpacity>
 		</View>

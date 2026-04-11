@@ -1,6 +1,7 @@
 import { Pressable, Text, View } from "react-native"
 import { useRouter } from "expo-router"
 import type { Log } from "../../lib/api"
+import { hapticLight } from "../../lib/haptics"
 import { severityColors } from "../../lib/theme"
 import { formatLogTimestamp } from "../../lib/format"
 import { setSelectedLog } from "../../lib/log-detail-store"
@@ -13,6 +14,7 @@ export function LogRow({ item }: { item: Log }) {
 	return (
 		<Pressable
 			onPress={() => {
+				hapticLight()
 				setSelectedLog(item)
 				router.push("/(home)/logs/detail")
 			}}

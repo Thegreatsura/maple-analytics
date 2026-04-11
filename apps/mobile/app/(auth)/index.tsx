@@ -17,6 +17,7 @@ import {
 	PrimaryButton,
 	SecondaryButton,
 } from "../../components/ui/button";
+import { hapticError, hapticSuccess } from "../../lib/haptics";
 
 type SsoProvider = "google" | "github";
 
@@ -64,6 +65,7 @@ function SignInForm() {
 			if (error) return;
 
 			if (signIn.status === "complete") {
+				hapticSuccess();
 				await finalize();
 			} else if (signIn.status === "needs_client_trust") {
 				const emailCodeFactor = signIn.supportedSecondFactors?.find(
@@ -74,6 +76,7 @@ function SignInForm() {
 				}
 			}
 		} catch (err) {
+			hapticError();
 			Alert.alert("Sign in failed", err instanceof Error ? err.message : "An unexpected error occurred");
 		}
 	};
@@ -81,6 +84,7 @@ function SignInForm() {
 	const handleVerify = async () => {
 		await signIn.mfa.verifyEmailCode({ code });
 		if (signIn.status === "complete") {
+			hapticSuccess();
 			await finalize();
 		}
 	};
@@ -92,9 +96,11 @@ function SignInForm() {
 				strategy: provider === "google" ? "oauth_google" : "oauth_github",
 			});
 			if (createdSessionId && setActive) {
+				hapticSuccess();
 				await setActive({ session: createdSessionId });
 			}
 		} catch (err) {
+			hapticError();
 			console.error(`${provider} sign-in error:`, err);
 			Alert.alert("Sign in failed", err instanceof Error ? err.message : "An unexpected error occurred");
 		} finally {

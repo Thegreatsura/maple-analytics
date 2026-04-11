@@ -9,6 +9,7 @@ import {
 	DestructiveButton,
 	SecondaryButton,
 } from "../../components/ui/button"
+import { hapticWarning } from "../../lib/haptics"
 
 export default function SettingsScreen() {
 	const { signOut } = useClerk()
@@ -94,6 +95,7 @@ export default function SettingsScreen() {
 										text: "Delete",
 										style: "destructive",
 										onPress: async () => {
+											hapticWarning()
 											try {
 												await user?.delete()
 												signOut()

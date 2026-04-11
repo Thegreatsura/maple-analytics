@@ -1,5 +1,6 @@
 import { Pressable, Text, View } from "react-native"
 import type { SpanNode } from "../../lib/api"
+import { hapticLight } from "../../lib/haptics"
 import { getServiceColor, getStatusColor, getStatusBgColor } from "../../lib/colors"
 import { formatDuration } from "../../lib/format"
 import { DurationBar } from "./duration-bar"
@@ -77,7 +78,7 @@ export function SpanRowDetail({
 
 	return (
 		<Pressable
-			onPress={hasChildren ? onToggle : undefined}
+			onPress={hasChildren ? () => { hapticLight(); onToggle() } : undefined}
 			style={({ pressed }) => ({ opacity: pressed && hasChildren ? 0.7 : 1 })}
 		>
 			<View className="py-3 px-5" style={{ paddingLeft: 20 + span.depth * 16 }}>

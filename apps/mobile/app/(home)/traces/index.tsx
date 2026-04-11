@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import { ActivityIndicator, RefreshControl, View } from "react-native"
+import { hapticSuccess } from "../../../lib/haptics"
 import { LegendList } from "@legendapp/list"
 import { useInfiniteTraces } from "../../../hooks/use-infinite-traces"
 import { useTracesFacets } from "../../../hooks/use-traces-facets"
@@ -72,7 +73,7 @@ export default function TracesScreen() {
 					estimatedItemSize={85}
 					recycleItems
 					refreshControl={
-						<RefreshControl refreshing={false} onRefresh={refresh} />
+						<RefreshControl refreshing={false} onRefresh={() => { hapticSuccess(); refresh() }} />
 					}
 					ItemSeparatorComponent={() => <View className="h-px bg-border mx-5" />}
 					renderItem={({ item }) => <TraceRow trace={item} />}
