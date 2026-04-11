@@ -92,11 +92,35 @@ function makeQueryBuilderBreakdownDataSource(
   }
 }
 
-const QUERY_BUILDER_CHART_DISPLAY = {
+const CHART_DISPLAY_AREA = {
+  chartId: "query-builder-area",
+  chartPresentation: { legend: "visible" },
+  stacked: true,
+  curveType: "monotone",
+}
+
+const CHART_DISPLAY_LINE = {
+  chartId: "query-builder-line",
+  chartPresentation: { legend: "visible" },
+  stacked: false,
+  curveType: "monotone",
+}
+
+const CHART_DISPLAY_BAR = {
   chartId: "query-builder-bar",
   chartPresentation: { legend: "visible" },
   stacked: true,
   curveType: "linear",
+}
+
+function chartDisplayForMetric(aggregation: string): Record<string, unknown> {
+  if (["count", "error_rate", "rate", "increase"].includes(aggregation)) {
+    return CHART_DISPLAY_AREA
+  }
+  if (["avg_duration", "p50_duration", "p95_duration", "p99_duration", "avg", "max", "min"].includes(aggregation)) {
+    return CHART_DISPLAY_LINE
+  }
+  return CHART_DISPLAY_BAR
 }
 
 const UNIT_ALIASES: Record<string, string> = {
@@ -185,7 +209,7 @@ function serviceHealthWidgets(serviceName?: string): WidgetDef[] {
           groupBy,
         }),
       ]),
-      display: { title: "Throughput Over Time", ...QUERY_BUILDER_CHART_DISPLAY, unit: "number" },
+      display: { title: "Throughput Over Time", ...CHART_DISPLAY_AREA, unit: "number" },
       layout: { x: 0, y: 2, w: 6, h: 4 },
     },
     {
@@ -201,7 +225,7 @@ function serviceHealthWidgets(serviceName?: string): WidgetDef[] {
           groupBy,
         }),
       ]),
-      display: { title: "Error Rate Over Time", ...QUERY_BUILDER_CHART_DISPLAY },
+      display: { title: "Error Rate Over Time", ...CHART_DISPLAY_AREA },
       layout: { x: 6, y: 2, w: 6, h: 4 },
     },
     {
@@ -217,7 +241,7 @@ function serviceHealthWidgets(serviceName?: string): WidgetDef[] {
           groupBy,
         }),
       ]),
-      display: { title: "P95 Latency Over Time", ...QUERY_BUILDER_CHART_DISPLAY, unit: "duration_ms" },
+      display: { title: "P95 Latency Over Time", ...CHART_DISPLAY_LINE, unit: "duration_ms" },
       layout: { x: 0, y: 6, w: 12, h: 4 },
     },
   ]
@@ -240,7 +264,7 @@ function errorTrackingWidgets(serviceName?: string): WidgetDef[] {
           groupBy,
         }),
       ]),
-      display: { title: "Error Rate Over Time", ...QUERY_BUILDER_CHART_DISPLAY },
+      display: { title: "Error Rate Over Time", ...CHART_DISPLAY_AREA },
       layout: { x: 0, y: 0, w: 12, h: 4 },
     },
     {
@@ -355,7 +379,7 @@ function metricOverviewWidgets(opts: {
           metricType: opts.metricType,
         }),
       ]),
-      display: { title: `${opts.metricName} Over Time`, ...QUERY_BUILDER_CHART_DISPLAY },
+      display: { title: `${opts.metricName} Over Time`, ...chartDisplayForMetric(agg) },
       layout: { x: 0, y: 2, w: 12, h: 4 },
     },
     {
@@ -385,10 +409,315 @@ function metricOverviewWidgets(opts: {
   ]
 }
 
+function platformOverviewWidgets(): WidgetDef[] {
+  return [
+    {
+      id: "total-throughput",
+      visualization: "stat",
+      dataSource: {
+        endpoint: "service_usage",
+        transform: { reduceToValue: { field: "totalTraceCount", aggregate: "sum" } },
+      },
+      display: { title: "Total Traces", unit: "number" },
+      layout: { x: 0, y: 0, w: 3, h: 2 },
+    },
+    {
+      id: "total-errors",
+      visualization: "stat",
+      dataSource: {
+        endpoint: "errors_summary",
+        transform: { reduceToValue: { field: "totalErrors", aggregate: "first" } },
+      },
+      display: { title: "Total Errors", unit: "number" },
+      layout: { x: 3, y: 0, w: 3, h: 2 },
+    },
+    {
+      id: "error-rate",
+      visualization: "stat",
+      dataSource: {
+        endpoint: "errors_summary",
+        transform: { reduceToValue: { field: "errorRate", aggregate: "first" } },
+      },
+      display: { title: "Error Rate", unit: "percent" },
+      layout: { x: 6, y: 0, w: 3, h: 2 },
+    },
+    {
+      id: "affected-services",
+      visualization: "stat",
+      dataSource: {
+        endpoint: "errors_summary",
+        transform: { reduceToValue: { field: "affectedServicesCount", aggregate: "first" } },
+      },
+      display: { title: "Affected Services", unit: "number" },
+      layout: { x: 9, y: 0, w: 3, h: 2 },
+    },
+    {
+      id: "service-overview",
+      visualization: "table",
+      dataSource: { endpoint: "service_overview" },
+      display: {
+        title: "Service Overview",
+        columns: [
+          { field: "serviceName", header: "Service" },
+          { field: "throughput", header: "Throughput", align: "right" },
+          { field: "p95LatencyMs", header: "P95", unit: "duration_ms", align: "right" },
+          { field: "errorCount", header: "Errors", align: "right" },
+        ],
+      },
+      layout: { x: 0, y: 2, w: 12, h: 5 },
+    },
+    {
+      id: "throughput-by-service",
+      visualization: "chart",
+      dataSource: makeQueryBuilderTimeseriesDataSource([
+        makeQueryDraft({
+          id: "throughput",
+          name: "Throughput",
+          dataSource: "traces",
+          aggregation: "count",
+          groupBy: ["service.name"],
+        }),
+      ]),
+      display: { title: "Throughput by Service", ...CHART_DISPLAY_AREA, unit: "number" },
+      layout: { x: 0, y: 7, w: 6, h: 4 },
+    },
+    {
+      id: "error-rate-by-service",
+      visualization: "chart",
+      dataSource: makeQueryBuilderTimeseriesDataSource([
+        makeQueryDraft({
+          id: "error-rate",
+          name: "Error Rate",
+          dataSource: "traces",
+          aggregation: "error_rate",
+          groupBy: ["service.name"],
+        }),
+      ]),
+      display: { title: "Error Rate by Service", ...CHART_DISPLAY_AREA },
+      layout: { x: 6, y: 7, w: 6, h: 4 },
+    },
+    {
+      id: "recent-error-traces",
+      visualization: "list",
+      dataSource: {
+        endpoint: "list_traces",
+        params: { hasError: true, limit: 10 },
+      },
+      display: {
+        title: "Recent Error Traces",
+        listDataSource: "traces",
+        listWhereClause: "has_error = true",
+        listLimit: 10,
+      },
+      layout: { x: 0, y: 11, w: 12, h: 5 },
+    },
+  ]
+}
+
+function httpEndpointsWidgets(serviceName?: string): WidgetDef[] {
+  const where = serviceWhereClause(serviceName)
+  return [
+    {
+      id: "top-endpoints-throughput",
+      visualization: "table",
+      dataSource: makeQueryBuilderBreakdownDataSource([
+        makeQueryDraft({
+          id: "top-throughput",
+          name: "Throughput",
+          dataSource: "traces",
+          aggregation: "count",
+          whereClause: where,
+          groupBy: ["span_name"],
+        }),
+      ]),
+      display: {
+        title: "Top Endpoints by Throughput",
+        columns: [
+          { field: "name", header: "Endpoint" },
+          { field: "value", header: "Requests", align: "right" },
+        ],
+      },
+      layout: { x: 0, y: 0, w: 6, h: 5 },
+    },
+    {
+      id: "slowest-endpoints",
+      visualization: "table",
+      dataSource: makeQueryBuilderBreakdownDataSource([
+        makeQueryDraft({
+          id: "slowest",
+          name: "P95 Latency",
+          dataSource: "traces",
+          aggregation: "p95_duration",
+          whereClause: where,
+          groupBy: ["span_name"],
+        }),
+      ]),
+      display: {
+        title: "Slowest Endpoints (P95)",
+        columns: [
+          { field: "name", header: "Endpoint" },
+          { field: "value", header: "P95 Latency", unit: "duration_ms", align: "right" },
+        ],
+      },
+      layout: { x: 6, y: 0, w: 6, h: 5 },
+    },
+    {
+      id: "endpoint-error-rate",
+      visualization: "chart",
+      dataSource: makeQueryBuilderTimeseriesDataSource([
+        makeQueryDraft({
+          id: "error-rate",
+          name: "Error Rate",
+          dataSource: "traces",
+          aggregation: "error_rate",
+          whereClause: where,
+          groupBy: ["span_name"],
+        }),
+      ]),
+      display: { title: "Error Rate by Endpoint", ...CHART_DISPLAY_AREA },
+      layout: { x: 0, y: 5, w: 12, h: 4 },
+    },
+    {
+      id: "recent-traces",
+      visualization: "list",
+      dataSource: {
+        endpoint: "list_traces",
+        params: {
+          ...(serviceName && { service: serviceName }),
+          limit: 10,
+        },
+      },
+      display: {
+        title: "Recent Traces",
+        listDataSource: "traces",
+        listLimit: 10,
+      },
+      layout: { x: 0, y: 9, w: 12, h: 5 },
+    },
+  ]
+}
+
+function topErrorsWidgets(serviceName?: string): WidgetDef[] {
+  const where = serviceWhereClause(serviceName)
+  return [
+    {
+      id: "total-errors",
+      visualization: "stat",
+      dataSource: {
+        endpoint: "errors_summary",
+        params: serviceName ? { services: [serviceName] } : {},
+        transform: { reduceToValue: { field: "totalErrors", aggregate: "first" } },
+      },
+      display: { title: "Total Errors", unit: "number" },
+      layout: { x: 0, y: 0, w: 4, h: 2 },
+    },
+    {
+      id: "error-rate",
+      visualization: "stat",
+      dataSource: {
+        endpoint: "errors_summary",
+        params: serviceName ? { services: [serviceName] } : {},
+        transform: { reduceToValue: { field: "errorRate", aggregate: "first" } },
+      },
+      display: { title: "Error Rate", unit: "percent" },
+      layout: { x: 4, y: 0, w: 4, h: 2 },
+    },
+    {
+      id: "affected-services",
+      visualization: "stat",
+      dataSource: {
+        endpoint: "errors_summary",
+        params: serviceName ? { services: [serviceName] } : {},
+        transform: { reduceToValue: { field: "affectedServicesCount", aggregate: "first" } },
+      },
+      display: { title: "Affected Services", unit: "number" },
+      layout: { x: 8, y: 0, w: 4, h: 2 },
+    },
+    {
+      id: "errors-by-type",
+      visualization: "table",
+      dataSource: {
+        endpoint: "errors_by_type",
+        params: {
+          ...(serviceName && { services: [serviceName] }),
+          limit: 20,
+        },
+      },
+      display: {
+        title: "Errors by Type",
+        columns: [
+          { field: "errorType", header: "Error Type" },
+          { field: "count", header: "Count", align: "right" },
+          { field: "affectedServicesCount", header: "Services", align: "right" },
+        ],
+      },
+      layout: { x: 0, y: 2, w: 12, h: 5 },
+    },
+    {
+      id: "error-rate-ts",
+      visualization: "chart",
+      dataSource: makeQueryBuilderTimeseriesDataSource([
+        makeQueryDraft({
+          id: "error-rate",
+          name: "Error Rate",
+          dataSource: "traces",
+          aggregation: "error_rate",
+          whereClause: where,
+          groupBy: ["service.name"],
+        }),
+      ]),
+      display: { title: "Error Rate Over Time", ...CHART_DISPLAY_AREA },
+      layout: { x: 0, y: 7, w: 12, h: 4 },
+    },
+    {
+      id: "recent-error-traces",
+      visualization: "list",
+      dataSource: {
+        endpoint: "list_traces",
+        params: {
+          ...(serviceName && { service: serviceName }),
+          hasError: true,
+          limit: 10,
+        },
+      },
+      display: {
+        title: "Recent Error Traces",
+        listDataSource: "traces",
+        listWhereClause: "has_error = true",
+        listLimit: 10,
+      },
+      layout: { x: 0, y: 11, w: 12, h: 5 },
+    },
+  ]
+}
+
 const DASHBOARD_TEMPLATES: Record<string, (serviceName?: string) => WidgetDef[]> = {
   service_health: serviceHealthWidgets,
   error_tracking: errorTrackingWidgets,
+  platform_overview: platformOverviewWidgets,
+  http_endpoints: httpEndpointsWidgets,
+  top_errors: topErrorsWidgets,
   blank: () => [],
+}
+
+function generateDescription(template: string, serviceName?: string): string {
+  const scope = serviceName ? ` for ${serviceName}` : ""
+  switch (template) {
+    case "service_health":
+      return `Service health overview${scope} — throughput, error rate, and latency.`
+    case "error_tracking":
+      return `Error tracking${scope} — error rate trends, error types, and recent error traces.`
+    case "metric_overview":
+      return `Metric overview${scope} — current values, time series, and service breakdown.`
+    case "platform_overview":
+      return "Platform overview — cross-service health, throughput, error rates, and recent errors."
+    case "http_endpoints":
+      return `HTTP endpoint performance${scope} — top endpoints, slowest endpoints, and error rates.`
+    case "top_errors":
+      return `Error investigation${scope} — error counts, types, trends, and recent error traces.`
+    default:
+      return ""
+  }
 }
 
 const TIME_RANGE_MAP: Record<string, string> = {
@@ -470,6 +799,32 @@ function simpleSpecToWidget(
     }
   }
 
+  if (viz === "list") {
+    const listSource = source === "logs" ? "logs" : "traces"
+    const listEndpoint = listSource === "logs" ? "list_logs" : "list_traces"
+    const listParams: Record<string, unknown> = { limit: 10 }
+    if (spec.service_name) listParams.service = spec.service_name
+    if (listSource === "traces" && metric === "error_rate") {
+      listParams.hasError = true
+      display.listWhereClause = "has_error = true"
+    }
+
+    return {
+      id,
+      visualization: viz,
+      dataSource: {
+        endpoint: listEndpoint,
+        params: listParams,
+      },
+      display: {
+        ...display,
+        listDataSource: listSource,
+        listLimit: 10,
+      },
+      layout,
+    }
+  }
+
   if (viz === "stat") {
     // Stats still use custom_timeseries + flattenSeries for simplicity
     const metricsFilters: Record<string, unknown> | undefined =
@@ -506,7 +861,7 @@ function simpleSpecToWidget(
 
   // Chart — use query builder
   const ds = makeQueryBuilderTimeseriesDataSource([queryDraft])
-  Object.assign(display, QUERY_BUILDER_CHART_DISPLAY)
+  Object.assign(display, chartDisplayForMetric(metric))
 
   return {
     id,
@@ -533,6 +888,13 @@ function computeAutoLayout(
       }
       layouts.push({ x, y, w: 4, h: 2 })
       x += 4
+    } else if (viz === "table" || viz === "list") {
+      if (x > 0) {
+        y += 2
+        x = 0
+      }
+      layouts.push({ x: 0, y, w: 12, h: 5 })
+      y += 5
     } else {
       if (x > 0) {
         y += 2
@@ -589,17 +951,20 @@ export function registerCreateDashboardTool(server: McpToolRegistrar) {
       "Templates (just provide name + optional service_name):\n" +
       "  service_health — throughput, error rate, latency stats + charts\n" +
       "  error_tracking — error rate chart + errors by type + recent error traces\n" +
+      "  platform_overview — cross-service health: throughput, errors, service table, charts, error traces\n" +
+      "  http_endpoints — top endpoints by throughput, slowest endpoints, error rate by endpoint, slow traces\n" +
+      "  top_errors — total errors, error types table, error rate trend, recent error traces\n" +
       "  metric_overview — requires metric_name + metric_type: current value stats + timeseries chart + service breakdown\n" +
       "  blank — empty dashboard\n\n" +
       "Simplified widgets (provide name + widgets JSON array, same params as query_data):\n" +
-      '  Each: { title, visualization?: "chart"|"stat"|"table", source: "traces"|"logs"|"metrics", metric?, metric_name?, metric_type?, service_name?, group_by?, unit? }\n' +
+      '  Each: { title, visualization?: "chart"|"stat"|"table"|"list", source: "traces"|"logs"|"metrics", metric?, metric_name?, metric_type?, service_name?, group_by?, unit? }\n' +
       "  Layouts auto-computed. Example:\n" +
       '  widgets=\'[{"title":"HTTP Duration","source":"metrics","metric":"avg","metric_name":"http.server.duration","metric_type":"histogram"}]\'\n\n' +
       "Custom JSON: provide dashboard_json with full widget definitions (use get_dashboard to see schema).",
     Schema.Struct({
       name: requiredStringParam("Dashboard name"),
       template: optionalStringParam(
-        "Template: service_health, error_tracking, metric_overview, blank, or custom. " +
+        "Template: service_health, error_tracking, platform_overview, http_endpoints, top_errors, metric_overview, blank, or custom. " +
           "Templates auto-generate widgets. Default: service_health (if no widgets or dashboard_json provided).",
       ),
       service_name: optionalStringParam("Scope template widgets to a specific service"),
@@ -614,7 +979,7 @@ export function registerCreateDashboardTool(server: McpToolRegistrar) {
       ),
       widgets: optionalStringParam(
         "JSON array of simplified widget specs (alternative to templates and dashboard_json). " +
-          'Each: { title, visualization?: "chart"|"stat"|"table", source: "traces"|"logs"|"metrics", ' +
+          'Each: { title, visualization?: "chart"|"stat"|"table"|"list", source: "traces"|"logs"|"metrics", ' +
           "metric?, metric_name?, metric_type?, service_name?, group_by?, unit? }. " +
           "Uses same params as query_data. Layouts auto-computed.",
       ),
@@ -640,7 +1005,7 @@ export function registerCreateDashboardTool(server: McpToolRegistrar) {
                   text: "Provide dashboard_json for custom template, or use a different approach:\n\n" +
                     "Simplified widgets example:\n" +
                     '  widgets=\'[{"title":"HTTP Duration","visualization":"chart","source":"metrics","metric":"avg","metric_name":"http.server.duration","metric_type":"histogram"}]\'\n\n' +
-                    "Templates: service_health, error_tracking, metric_overview (requires metric_name + metric_type), blank\n\n" +
+                    "Templates: service_health, error_tracking, platform_overview, http_endpoints, top_errors, metric_overview (requires metric_name + metric_type), blank\n\n" +
                     "For full custom JSON, use get_dashboard on an existing dashboard to see the expected schema.",
                 },
               ],
@@ -672,10 +1037,11 @@ export function registerCreateDashboardTool(server: McpToolRegistrar) {
             serviceName: params.service_name,
           })
 
+          const description = params.description || generateDescription("metric_overview", params.service_name)
           portable = yield* Effect.try({
             try: () => decodePortableDashboard({
               name: params.name,
-              ...(params.description && { description: params.description }),
+              ...(description && { description }),
               timeRange: { type: "relative", value: timeRangeValue },
               widgets,
             }),
@@ -718,11 +1084,12 @@ export function registerCreateDashboardTool(server: McpToolRegistrar) {
 
           const timeRangeValue = TIME_RANGE_MAP[params.time_range ?? "1h"] ?? "1h"
           const widgets = templateFn(params.service_name)
+          const description = params.description || generateDescription(templateName, params.service_name)
 
           portable = yield* Effect.try({
             try: () => decodePortableDashboard({
               name: params.name,
-              ...(params.description && { description: params.description }),
+              ...(description && { description }),
               timeRange: { type: "relative", value: timeRangeValue },
               widgets,
             }),
