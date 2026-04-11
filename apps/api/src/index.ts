@@ -103,7 +103,9 @@ const RuntimeLive = Layer.mergeAll(
   Layer.succeed(
     HttpMiddleware.TracerDisabledWhen,
     (request: { url: string; method: string }) =>
-      request.url === "/health" || request.method === "OPTIONS",
+      request.url === "/health" ||
+      request.method === "OPTIONS" ||
+      /\.(png|ico|jpg|jpeg|gif|css|js|svg|webp|woff2?)(\?.*)?$/i.test(request.url),
   ),
   BunHttpServer.layerConfig(
     Config.all({

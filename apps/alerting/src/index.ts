@@ -68,6 +68,7 @@ const alertLoop = Effect.gen(function* () {
         }),
       ),
     ),
+    Effect.withSpan("alerting.scheduler_tick"),
     Effect.catchCause((cause) =>
       Effect.logError("Alerting worker tick failed").pipe(
         Effect.annotateLogs({ error: Cause.pretty(cause) }),
@@ -94,6 +95,7 @@ const digestLoop = Effect.gen(function* () {
         }),
       ),
     ),
+    Effect.withSpan("alerting.digest_tick"),
     Effect.catchCause((cause) =>
       Effect.logError("Digest tick failed").pipe(
         Effect.annotateLogs({ error: Cause.pretty(cause) }),
