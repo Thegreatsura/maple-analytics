@@ -205,7 +205,6 @@ export function QueryBuilderAreaChart({ data, className, legend, tooltip, stacke
             connectNulls
             legendType="none"
             isAnimationActive={false}
-            {...(stacked ? { stackId: "a" } : {})}
           />
         ))}
       </AreaChart>
