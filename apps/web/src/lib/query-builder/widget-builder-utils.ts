@@ -56,6 +56,60 @@ export interface QueryBuilderWidgetState {
   listRootOnly: boolean
 }
 
+export function inferDisplayUnitForQuery(
+  query: QueryBuilderQueryDraft,
+): ValueUnit | undefined {
+  if (query.dataSource === "traces") {
+    if (query.aggregation === "error_rate") return "percent"
+    if (
+      query.aggregation === "avg_duration" ||
+      query.aggregation === "p50_duration" ||
+      query.aggregation === "p95_duration" ||
+      query.aggregation === "p99_duration"
+    ) {
+      return "duration_ms"
+    }
+    if (query.aggregation === "count") return "number"
+    return undefined
+  }
+
+  if (query.dataSource === "logs") {
+    return "number"
+  }
+
+  if (query.dataSource === "metrics") {
+    const lower = query.metricName.toLowerCase()
+    if (/\b(error[._ -]?rate|percentage|percent)\b/.test(lower)) return "percent"
+    if (/\b(duration|latency|response[._]time)\b/.test(lower)) return "duration_ms"
+    if (/\b(bytes|memory|size)\b/.test(lower)) return "bytes"
+    if (query.aggregation === "rate") return "requests_per_sec"
+    if (
+      query.aggregation === "count" ||
+      query.aggregation === "sum" ||
+      query.aggregation === "avg" ||
+      query.aggregation === "min" ||
+      query.aggregation === "max" ||
+      query.aggregation === "increase"
+    ) {
+      return "number"
+    }
+  }
+
+  return undefined
+}
+
+export function inferDefaultUnitForQueries(
+  queries: QueryBuilderQueryDraft[],
+): ValueUnit | undefined {
+  const activeQueries = queries.filter((query) => query.enabled !== false && !query.hidden)
+  if (activeQueries.length === 0) return undefined
+
+  const inferredUnits = activeQueries.map(inferDisplayUnitForQuery)
+  const [firstUnit] = inferredUnits
+  if (!firstUnit) return undefined
+  return inferredUnits.every((unit) => unit === firstUnit) ? firstUnit : undefined
+}
+
 export function parsePositiveNumber(raw: string): number | undefined {
   const parsed = Number.parseInt(raw.trim(), 10)
   if (!Number.isFinite(parsed) || parsed <= 0) return undefined
@@ -175,7 +229,7 @@ export function toInitialState(widget: DashboardWidget): QueryBuilderWidgetState
     debug: params.debug === true,
     statAggregate: widget.dataSource.transform?.reduceToValue?.aggregate ?? "first",
     statValueField: widget.dataSource.transform?.reduceToValue?.field ?? "",
-    unit: widget.display.unit ?? "number",
+    unit: widget.display.unit ?? inferDefaultUnitForQueries((params.queries as QueryBuilderQueryDraft[] | undefined) ?? []) ?? "number",
     legendPosition,
     tableLimit:
       typeof widget.dataSource.transform?.limit === "number"
@@ -465,7 +519,7 @@ export function buildWidgetDisplay(
         {
           field: "value",
           header: groupByQuery.aggregation ?? "value",
-          unit: "number",
+          unit: inferDisplayUnitForQuery(groupByQuery) ?? "number",
           align: "right" as const,
         },
       ]

@@ -3,6 +3,8 @@ import { createFormulaDraft, createQueryDraft } from "@/lib/query-builder/model"
 import {
   buildWidgetDataSource,
   buildWidgetDisplay,
+  inferDisplayUnitForQuery,
+  inferDefaultUnitForQueries,
   type QueryBuilderWidgetState,
 } from "@/lib/query-builder/widget-builder-utils"
 import type { DashboardWidget } from "@/components/dashboard-builder/types"
@@ -94,8 +96,69 @@ describe("widget-builder hidden series behavior", () => {
 
     expect(display.columns).toEqual([
       { field: "name", header: "status.code", align: "left" },
-      { field: "value", header: "error_rate", unit: "number", align: "right" },
+      { field: "value", header: "error_rate", unit: "percent", align: "right" },
     ])
+  })
+
+  it("defaults the widget unit to percent when all active queries use error rate", () => {
+    const state = makeState()
+    state.queries = state.queries.map((query) => ({
+      ...query,
+      aggregation: "error_rate",
+    }))
+
+    expect(inferDefaultUnitForQueries(state.queries)).toBe("percent")
+  })
+
+  it("defaults traces latency queries to duration units", () => {
+    const state = makeState()
+    state.queries = [
+      {
+        ...state.queries[0],
+        aggregation: "p95_duration",
+      },
+    ]
+
+    expect(inferDefaultUnitForQueries(state.queries)).toBe("duration_ms")
+  })
+
+  it("defaults metric rate queries to requests/sec", () => {
+    const query = {
+      ...createQueryDraft(0),
+      dataSource: "metrics" as const,
+      metricName: "http.server.requests",
+      metricType: "sum" as const,
+      isMonotonic: true,
+      aggregation: "rate",
+    }
+
+    expect(inferDisplayUnitForQuery(query)).toBe("requests_per_sec")
+  })
+
+  it("defaults memory-like metrics to bytes", () => {
+    const query = {
+      ...createQueryDraft(0),
+      dataSource: "metrics" as const,
+      metricName: "system.memory.usage",
+      metricType: "gauge" as const,
+      aggregation: "avg",
+    }
+
+    expect(inferDisplayUnitForQuery(query)).toBe("bytes")
+  })
+
+  it("does not default the widget unit to percent for mixed aggregations", () => {
+    const state = makeState()
+    state.queries[0] = {
+      ...state.queries[0],
+      aggregation: "error_rate",
+    }
+    state.queries[1] = {
+      ...state.queries[1],
+      aggregation: "count",
+    }
+
+    expect(inferDefaultUnitForQueries(state.queries)).toBeUndefined()
   })
 
   it("writes hidden query and formula names into the shared transform", () => {

@@ -20,11 +20,17 @@ import { useDashboardTimeRange } from "@/components/dashboard-builder/dashboard-
 import { useWidgetData } from "@/hooks/use-widget-data"
 import { useWidgetBuilder } from "@/hooks/use-widget-builder"
 import { useWidgetBuilderData } from "@/hooks/use-widget-builder-data"
-import { resetQueryForDataSource } from "@/lib/query-builder/model"
+import {
+  resetAggregationForMetricType,
+  resetQueryForDataSource,
+  type QueryBuilderDataSource,
+  type QueryBuilderMetricType,
+} from "@/lib/query-builder/model"
 import {
   toSeriesFieldOptions,
   buildWidgetDataSource,
   buildWidgetDisplay,
+  inferDefaultUnitForQueries,
 } from "@/lib/query-builder/widget-builder-utils"
 
 export { type QueryBuilderWidgetState } from "@/lib/query-builder/widget-builder-utils"
@@ -68,6 +74,7 @@ export function WidgetQueryBuilderPage({
     stagedState,
     initialSnapshot,
     actions: {
+      setState,
       updateQuery,
       addQuery,
       cloneQuery,
@@ -114,6 +121,70 @@ export function WidgetQueryBuilderPage({
     apply: applyChanges,
     isDirty: () => JSON.stringify(state) !== JSON.stringify(initialSnapshot),
   }))
+
+  const handleAggregationChange = React.useCallback((queryId: string, aggregation: string) => {
+    setState((current) => {
+      const queries = current.queries.map((query) =>
+        query.id === queryId ? { ...query, aggregation } : query,
+      )
+      const nextUnit = inferDefaultUnitForQueries(queries)
+
+      return {
+        ...current,
+        queries,
+        unit: nextUnit ?? current.unit,
+      }
+    })
+  }, [setState])
+
+  const handleMetricSelectionChange = React.useCallback((
+    queryId: string,
+    selection: {
+      metricName: string
+      metricType: QueryBuilderMetricType
+      isMonotonic: boolean
+    },
+  ) => {
+    setState((current) => {
+      const queries = current.queries.map((query) =>
+        query.id === queryId
+          ? {
+              ...query,
+              metricName: selection.metricName,
+              metricType: selection.metricType,
+              isMonotonic: selection.isMonotonic,
+              aggregation: resetAggregationForMetricType(
+                query.aggregation,
+                selection.metricType,
+                selection.isMonotonic,
+              ),
+            }
+          : query,
+      )
+      const nextUnit = inferDefaultUnitForQueries(queries)
+
+      return {
+        ...current,
+        queries,
+        unit: nextUnit ?? current.unit,
+      }
+    })
+  }, [setState])
+
+  const handleDataSourceChange = React.useCallback((queryId: string, dataSource: QueryBuilderDataSource) => {
+    setState((current) => {
+      const queries = current.queries.map((query) =>
+        query.id === queryId ? resetQueryForDataSource(query, dataSource) : query,
+      )
+      const nextUnit = inferDefaultUnitForQueries(queries)
+
+      return {
+        ...current,
+        queries,
+        unit: nextUnit ?? current.unit,
+      }
+    })
+  }, [setState])
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-200 flex flex-1 min-h-0 -m-4">
@@ -171,13 +242,11 @@ export function WidgetQueryBuilderPage({
                     onMetricSearch={setMetricSearch}
                     autocompleteValues={autocompleteValuesBySource}
                     onUpdate={(updater) => updateQuery(query.id, updater)}
+                    onAggregationChange={(aggregation) => handleAggregationChange(query.id, aggregation)}
+                    onMetricSelectionChange={(selection) => handleMetricSelectionChange(query.id, selection)}
                     onClone={() => cloneQuery(query.id)}
                     onRemove={() => removeQuery(query.id)}
-                    onDataSourceChange={(ds) =>
-                      updateQuery(query.id, (current) =>
-                        resetQueryForDataSource(current, ds)
-                      )
-                    }
+                    onDataSourceChange={(ds) => handleDataSourceChange(query.id, ds)}
                   />
                 ))}
               </div>

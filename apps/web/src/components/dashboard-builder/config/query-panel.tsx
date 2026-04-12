@@ -31,7 +31,6 @@ import {
   GROUP_BY_OPTIONS,
   QUERY_BUILDER_METRIC_TYPES,
   getMetricsAggregations,
-  resetAggregationForMetricType,
   queryBadgeColor,
   type QueryBuilderAddOnKey,
   type QueryBuilderDataSource,
@@ -63,6 +62,12 @@ interface QueryPanelProps {
   onMetricSearch?: (search: string) => void;
   autocompleteValues: AutocompleteValues;
   onUpdate: (updater: (q: QueryBuilderQueryDraft) => QueryBuilderQueryDraft) => void;
+  onAggregationChange: (aggregation: string) => void;
+  onMetricSelectionChange: (selection: {
+    metricName: string;
+    metricType: QueryBuilderMetricType;
+    isMonotonic: boolean;
+  }) => void;
   onClone: () => void;
   onRemove: () => void;
   onDataSourceChange: (ds: QueryBuilderDataSource) => void;
@@ -154,6 +159,8 @@ export function QueryPanel({
   onMetricSearch,
   autocompleteValues,
   onUpdate,
+  onAggregationChange,
+  onMetricSelectionChange,
   onClone,
   onRemove,
   onDataSourceChange,
@@ -239,6 +246,8 @@ export function QueryPanel({
               onMetricSearch={onMetricSearch}
               autocompleteValues={autocompleteValues}
               onUpdate={onUpdate}
+              onMetricSelectionChange={onMetricSelectionChange}
+              onAggregationChange={onAggregationChange}
             />
           ) : (
             <TracesLogsBody
@@ -246,6 +255,7 @@ export function QueryPanel({
               aggregateOptions={aggregateOptions}
               autocompleteValues={autocompleteValues}
               onUpdate={onUpdate}
+              onAggregationChange={onAggregationChange}
             />
           )}
 
@@ -297,11 +307,13 @@ function TracesLogsBody({
   aggregateOptions,
   autocompleteValues,
   onUpdate,
+  onAggregationChange,
 }: {
   query: QueryBuilderQueryDraft;
   aggregateOptions: Array<{ label: string; value: string }>;
   autocompleteValues: AutocompleteValues;
   onUpdate: (updater: (q: QueryBuilderQueryDraft) => QueryBuilderQueryDraft) => void;
+  onAggregationChange: (aggregation: string) => void;
 }) {
   return (
     <>
@@ -360,12 +372,7 @@ function TracesLogsBody({
         <Select
           items={aggregateOptions}
           value={query.aggregation}
-          onValueChange={(value) =>
-            onUpdate((current) => ({
-              ...current,
-              aggregation: value ?? current.aggregation,
-            }))
-          }
+          onValueChange={(value) => onAggregationChange(value ?? query.aggregation)}
         >
           <SelectTrigger className="h-8 w-[160px] text-xs">
             <SelectValue />
@@ -411,6 +418,8 @@ function MetricsBody({
   onMetricSearch,
   autocompleteValues,
   onUpdate,
+  onMetricSelectionChange,
+  onAggregationChange,
 }: {
   query: QueryBuilderQueryDraft;
   aggregateOptions: Array<{ label: string; value: string }>;
@@ -419,6 +428,12 @@ function MetricsBody({
   onMetricSearch?: (search: string) => void;
   autocompleteValues: AutocompleteValues;
   onUpdate: (updater: (q: QueryBuilderQueryDraft) => QueryBuilderQueryDraft) => void;
+  onMetricSelectionChange: (selection: {
+    metricName: string;
+    metricType: QueryBuilderMetricType;
+    isMonotonic: boolean;
+  }) => void;
+  onAggregationChange: (aggregation: string) => void;
 }) {
   return (
     <>
@@ -432,17 +447,11 @@ function MetricsBody({
             if (!parsed) return;
             const selectedOption = metricSelectionOptions.find((o) => o.value === value);
             const isMonotonic = selectedOption?.isMonotonic ?? parsed.metricType === "sum";
-            onUpdate((current) => ({
-              ...current,
+            onMetricSelectionChange({
               metricName: parsed.metricName,
               metricType: parsed.metricType,
               isMonotonic,
-              aggregation: resetAggregationForMetricType(
-                current.aggregation,
-                parsed.metricType,
-                isMonotonic,
-              ),
-            }));
+            });
           }}
         >
           <ComboboxInput
@@ -493,12 +502,7 @@ function MetricsBody({
         <Select
           items={aggregateOptions}
           value={query.aggregation}
-          onValueChange={(value) =>
-            onUpdate((current) => ({
-              ...current,
-              aggregation: value ?? current.aggregation,
-            }))
-          }
+          onValueChange={(value) => onAggregationChange(value ?? query.aggregation)}
         >
           <SelectTrigger className="h-8 w-24 text-xs">
             <SelectValue />
@@ -538,12 +542,7 @@ function MetricsBody({
         <Select
           items={aggregateOptions}
           value={query.aggregation}
-          onValueChange={(value) =>
-            onUpdate((current) => ({
-              ...current,
-              aggregation: value ?? current.aggregation,
-            }))
-          }
+          onValueChange={(value) => onAggregationChange(value ?? query.aggregation)}
         >
           <SelectTrigger className="h-8 w-24 text-xs">
             <SelectValue />
