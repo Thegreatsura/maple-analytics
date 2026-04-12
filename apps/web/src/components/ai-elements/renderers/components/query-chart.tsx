@@ -14,6 +14,11 @@ const CHART_COLORS = [
   "var(--chart-5)",
 ]
 
+/** Sanitize a series key into a valid CSS variable segment */
+function cssKey(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "-")
+}
+
 interface QueryChartProps {
   data: Array<{ bucket: string; series: Record<string, number> }>
   metric: string
@@ -27,32 +32,54 @@ export function QueryChart({ props }: BaseComponentProps<QueryChartProps>) {
   const id = useId()
   const cleanId = id.replace(/:/g, "")
 
-  const seriesKeys = useMemo(() => {
-    const keys = new Set<string>()
+  // Collect original series keys and build a stable mapping to CSS-safe keys
+  const { originalKeys, keyMap } = useMemo(() => {
+    const seen = new Set<string>()
     for (const point of data) {
       for (const key of Object.keys(point.series)) {
-        keys.add(key)
+        seen.add(key)
       }
     }
-    return Array.from(keys)
+    const originals = Array.from(seen)
+    const map = new Map<string, string>()
+    for (const key of originals) {
+      map.set(key, cssKey(key))
+    }
+    return { originalKeys: originals, keyMap: map }
   }, [data])
 
+  // Re-key data so dataKey props use CSS-safe names
   const chartData = useMemo(
-    () => data.map((point) => ({ bucket: point.bucket, ...point.series })),
-    [data],
+    () =>
+      data.map((point) => {
+        const row: Record<string, unknown> = { bucket: point.bucket }
+        for (const [orig, safe] of keyMap) {
+          if (orig in point.series) {
+            row[safe] = point.series[orig]
+          }
+        }
+        return row
+      }),
+    [data, keyMap],
   )
 
   const chartConfig = useMemo(() => {
     const config: ChartConfig = {}
-    for (let i = 0; i < seriesKeys.length; i++) {
-      const key = seriesKeys[i]
-      config[key] = {
-        label: key,
-        color: getSemanticSeriesColor(key) ?? CHART_COLORS[i % CHART_COLORS.length],
+    for (let i = 0; i < originalKeys.length; i++) {
+      const orig = originalKeys[i]
+      const safe = keyMap.get(orig)!
+      config[safe] = {
+        label: orig,
+        color: getSemanticSeriesColor(orig) ?? CHART_COLORS[i % CHART_COLORS.length],
       }
     }
     return config
-  }, [seriesKeys])
+  }, [originalKeys, keyMap])
+
+  const safeKeys = useMemo(
+    () => originalKeys.map((k) => keyMap.get(k)!),
+    [originalKeys, keyMap],
+  )
 
   const axisContext = useMemo(
     () => ({
@@ -76,7 +103,7 @@ export function QueryChart({ props }: BaseComponentProps<QueryChartProps>) {
       <ChartContainer config={chartConfig} className="h-[140px] w-full">
         <AreaChart data={chartData} accessibilityLayer>
           <defs>
-            {seriesKeys.map((key, i) => (
+            {safeKeys.map((key, i) => (
               <VerticalGradient
                 key={key}
                 id={`gradient-${cleanId}-${i}`}
@@ -114,7 +141,7 @@ export function QueryChart({ props }: BaseComponentProps<QueryChartProps>) {
               />
             }
           />
-          {seriesKeys.map((key, i) => (
+          {safeKeys.map((key, i) => (
             <Area
               key={key}
               type="monotone"
