@@ -184,12 +184,12 @@ export function QueryPanel({
         </button>
 
         <Checkbox
-          id={`query-enabled-${query.id}`}
-          checked={query.enabled}
+          id={`query-visible-${query.id}`}
+          checked={!query.hidden}
           onCheckedChange={(checked) =>
             onUpdate((current) => ({
               ...current,
-              enabled: checked === true,
+              hidden: checked !== true,
             }))
           }
           className="shrink-0"

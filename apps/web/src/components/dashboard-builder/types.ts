@@ -42,6 +42,9 @@ export interface WidgetDataSource {
   params?: Record<string, unknown>
   transform?: {
     fieldMap?: Record<string, string>
+    hideSeries?: {
+      baseNames: string[]
+    }
     flattenSeries?: {
       valueField: string
     }

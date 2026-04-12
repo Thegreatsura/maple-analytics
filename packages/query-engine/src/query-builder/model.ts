@@ -15,6 +15,7 @@ export interface QueryBuilderQueryDraft {
   id: string
   name: string
   enabled: boolean
+  hidden: boolean
   dataSource: QueryBuilderDataSource
   signalSource: "default" | "meter"
   metricName: string
@@ -160,6 +161,7 @@ export function createQueryDraft(index: number): QueryBuilderQueryDraft {
     id: crypto.randomUUID(),
     name: queryLabel(index),
     enabled: true,
+    hidden: false,
     dataSource: "traces",
     signalSource: "default",
     metricName: "",
@@ -189,6 +191,7 @@ export interface QueryBuilderFormulaDraft {
   name: string
   expression: string
   legend: string
+  hidden: boolean
 }
 
 export function createFormulaDraft(
@@ -202,6 +205,7 @@ export function createFormulaDraft(
     name: formulaLabel(index),
     expression: `${first} / ${second}`,
     legend: "Error ratio",
+    hidden: false,
   }
 }
 

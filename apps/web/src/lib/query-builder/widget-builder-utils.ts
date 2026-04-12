@@ -116,9 +116,35 @@ export function toSeriesFieldOptions(state: QueryBuilderWidgetState): string[] {
     usedNames.add(next)
     options.push(next)
   }
-  for (const query of state.queries) addUnique(query.legend.trim() || query.name)
-  for (const formula of state.formulas) addUnique(formula.legend.trim() || formula.name)
+  for (const query of state.queries) {
+    if (!query.hidden) addUnique(query.legend.trim() || query.name)
+  }
+  for (const formula of state.formulas) {
+    if (!formula.hidden) addUnique(formula.legend.trim() || formula.name)
+  }
   return options
+}
+
+function isVisibleQuery(query: QueryBuilderQueryDraft): boolean {
+  return query.enabled !== false && !query.hidden
+}
+
+function hasActiveGroupBy(query: QueryBuilderQueryDraft): boolean {
+  return (
+    query.addOns.groupBy &&
+    query.groupBy.some((g) => g.trim() !== "" && g.trim().toLowerCase() !== "none")
+  )
+}
+
+function toHiddenSeriesBaseNames(state: QueryBuilderWidgetState): string[] {
+  const names = new Set<string>()
+  for (const query of state.queries) {
+    if (query.hidden) names.add(query.legend.trim() || query.name)
+  }
+  for (const formula of state.formulas) {
+    if (formula.hidden) names.add(formula.legend.trim() || formula.name)
+  }
+  return [...names]
 }
 
 export function toInitialState(widget: DashboardWidget): QueryBuilderWidgetState {
@@ -193,7 +219,7 @@ export function toInitialState(widget: DashboardWidget): QueryBuilderWidgetState
               typeof (formula as QueryBuilderFormulaDraft).expression === "string" &&
               typeof (formula as QueryBuilderFormulaDraft).legend === "string"
           )
-          .map((formula, index) => ({ ...formula, name: formula.name || formulaLabel(index) }))
+          .map((formula, index) => ({ ...formula, name: formula.name || formulaLabel(index), hidden: formula.hidden ?? false }))
       : []
 
     if (loadedQueries.length > 0) {
@@ -327,6 +353,15 @@ export function buildWidgetDataSource(
     }
   }
 
+  const hiddenSeriesBaseNames = toHiddenSeriesBaseNames(state)
+  const sharedTransform = hiddenSeriesBaseNames.length > 0
+    ? {
+        hideSeries: {
+          baseNames: hiddenSeriesBaseNames,
+        },
+      }
+    : undefined
+
   const base: WidgetDataSource = {
     endpoint: "custom_query_builder_timeseries",
     params: {
@@ -338,12 +373,14 @@ export function buildWidgetDataSource(
       },
       debug: state.debug,
     },
+    transform: sharedTransform,
   }
 
   if (state.visualization === "stat") {
     return {
       ...base,
       transform: {
+        ...sharedTransform,
         reduceToValue: {
           field: state.statValueField || seriesFieldOptions[0] || "A",
           aggregate: state.statAggregate,
@@ -354,25 +391,25 @@ export function buildWidgetDataSource(
 
   if (state.visualization === "table") {
     const limit = parsePositiveNumber(state.tableLimit)
-    const hasGroupBy = state.queries.some(
-      (q) =>
-        q.enabled &&
-        q.addOns.groupBy &&
-        q.groupBy.some(
-          (g) => g.trim() !== "" && g.trim().toLowerCase() !== "none",
-        ),
-    )
+    const visibleQueries = state.queries.filter(isVisibleQuery)
+    const hasGroupBy = visibleQueries.some(hasActiveGroupBy)
 
     if (hasGroupBy) {
       return {
         endpoint: "custom_query_builder_breakdown",
-        params: { queries: state.queries },
+        params: { queries: visibleQueries },
         transform: limit ? { limit } : undefined,
       }
     }
 
     if (!limit) return base
-    return { ...base, transform: { limit } }
+    return {
+      ...base,
+      transform: {
+        ...sharedTransform,
+        limit,
+      },
+    }
   }
 
   return base
@@ -416,12 +453,7 @@ export function buildWidgetDisplay(
   if (state.visualization === "stat") display.unit = state.unit
   if (state.visualization === "table") {
     const groupByQuery = state.queries.find(
-      (q) =>
-        q.enabled &&
-        q.addOns.groupBy &&
-        q.groupBy.some(
-          (g) => g.trim() !== "" && g.trim().toLowerCase() !== "none",
-        ),
+      (query) => isVisibleQuery(query) && hasActiveGroupBy(query),
     )
     if (groupByQuery) {
       const groupLabel =
@@ -446,9 +478,9 @@ export function buildWidgetDisplay(
 
 export function validateQueries(state: QueryBuilderWidgetState): string | null {
   if (state.visualization === "list") return null
-  const enabledQueries = state.queries.filter((query) => query.enabled)
-  if (enabledQueries.length === 0) return "Enable at least one query"
-  for (const query of enabledQueries) {
+  const activeQueries = state.queries.filter((query) => query.enabled !== false)
+  if (activeQueries.length === 0) return "Add at least one query"
+  for (const query of activeQueries) {
     const built = buildTimeseriesQuerySpec(query)
     if (!built.query) return `${query.name}: ${built.error ?? "invalid query"}`
   }

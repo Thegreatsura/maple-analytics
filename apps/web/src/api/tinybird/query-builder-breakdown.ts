@@ -26,6 +26,7 @@ const QueryDraftSchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   enabled: Schema.Boolean,
+  hidden: Schema.optionalKey(Schema.Boolean),
   dataSource: Schema.Literals(["traces", "logs", "metrics"]),
   signalSource: Schema.Literals(["default", "meter"]),
   metricName: Schema.String,
@@ -87,6 +88,7 @@ async function executeBreakdownQuery(
 ): Promise<BreakdownQueryResult> {
   const built = buildBreakdownQuerySpec({
     ...query,
+    hidden: false,
     metricType: query.metricType as QueryBuilderMetricType,
     isMonotonic: query.isMonotonic ?? (query.metricType === "sum"),
   })
@@ -199,7 +201,7 @@ function mergeBreakdownResults(
 async function getQueryBuilderBreakdownInternal(
   input: QueryBuilderBreakdownInput,
 ): Promise<QueryBuilderBreakdownResponse> {
-  const enabledQueries = input.queries.filter((query) => query.enabled)
+  const enabledQueries = input.queries.filter((query) => query.enabled !== false)
   if (enabledQueries.length === 0) {
     throw new Error("No enabled queries to run")
   }

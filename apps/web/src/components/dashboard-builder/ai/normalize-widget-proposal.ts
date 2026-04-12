@@ -576,6 +576,7 @@ function normalizeFormulaEntry(
         : formulaLabel(index),
     expression: formula.expression,
     legend: formula.legend,
+    hidden: false,
   }
 }
 

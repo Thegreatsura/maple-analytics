@@ -26,6 +26,7 @@ const QueryDraftSchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   enabled: Schema.Boolean,
+  hidden: Schema.optionalKey(Schema.Boolean),
   dataSource: Schema.Literals(["traces", "logs", "metrics"]),
   signalSource: Schema.Literals(["default", "meter"]),
   metricName: Schema.String,
@@ -77,7 +78,7 @@ const executeListQueryEffect = Effect.fn("Tinybird.executeListQuery")(
 async function executeListQueryInternal(
   input: QueryBuilderListInput,
 ): Promise<QueryBuilderListResponse> {
-  const enabledQueries = input.queries.filter((q) => q.enabled)
+  const enabledQueries = input.queries.filter((q) => q.enabled !== false)
   if (enabledQueries.length === 0) {
     throw new Error("No enabled queries to run")
   }
@@ -85,7 +86,7 @@ async function executeListQueryInternal(
   // Use the first enabled query for the list
   const query = enabledQueries[0]
   const built = buildListQuerySpec(
-    { ...query, metricType: query.metricType as QueryBuilderMetricType, isMonotonic: query.isMonotonic ?? (query.metricType === "sum") },
+    { ...query, hidden: false, metricType: query.metricType as QueryBuilderMetricType, isMonotonic: query.isMonotonic ?? (query.metricType === "sum") },
     input.limit,
     input.columns as string[] | undefined,
   )

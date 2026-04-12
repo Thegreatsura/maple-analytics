@@ -9,6 +9,35 @@ import { disabledResultAtom } from "@/lib/services/atoms/disabled-result-atom"
 import type { WidgetDataState } from "@/components/dashboard-builder/types"
 import { encodeKey } from "@/lib/cache-key"
 
+function isSeriesNameHidden(seriesName: string, hiddenBaseNames: Set<string>): boolean {
+  for (const base of hiddenBaseNames) {
+    if (seriesName === base) return true
+    if (seriesName.startsWith(`${base}: `)) return true
+    if (seriesName === `${base} (prev)`) return true
+    if (seriesName.startsWith(`${base}: `) && seriesName.endsWith(" (prev)")) return true
+  }
+  return false
+}
+
+function filterHiddenSeriesRows(
+  rows: Array<Record<string, unknown>>,
+  baseNames: string[],
+): Array<Record<string, unknown>> {
+  if (baseNames.length === 0) return rows
+
+  const hiddenBaseNames = new Set(baseNames)
+
+  return rows.map((row) => {
+    const filtered: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(row)) {
+      if (key === "bucket" || !isSeriesNameHidden(key, hiddenBaseNames)) {
+        filtered[key] = value
+      }
+    }
+    return filtered
+  })
+}
+
 function interpolateParams(
   params: Record<string, unknown>,
   resolvedTime: { startTime: string; endTime: string }
@@ -43,6 +72,13 @@ function applyTransform(
   // Handle both { data: [...] } and raw array responses
   let rows = Array.isArray(data) ? data : data.data
   if (!Array.isArray(rows)) return data
+
+  if (transform.hideSeries?.baseNames.length) {
+    rows = filterHiddenSeriesRows(
+      rows as Array<Record<string, unknown>>,
+      transform.hideSeries.baseNames,
+    )
+  }
 
   // fieldMap: remap response fields
   if (transform.fieldMap) {
@@ -267,4 +303,10 @@ export function useWidgetData(widget: DashboardWidget) {
   return {
     dataState,
   }
+}
+
+export const __testables = {
+  applyTransform,
+  filterHiddenSeriesRows,
+  isSeriesNameHidden,
 }

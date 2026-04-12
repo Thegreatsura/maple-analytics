@@ -1,5 +1,6 @@
 import { Badge } from "@maple/ui/components/ui/badge"
 import { Button } from "@maple/ui/components/ui/button"
+import { Checkbox } from "@maple/ui/components/ui/checkbox"
 import { Input } from "@maple/ui/components/ui/input"
 import type { QueryBuilderFormulaDraft } from "@/lib/query-builder/model"
 
@@ -13,12 +14,21 @@ export function FormulaPanel({ formula, onUpdate, onRemove }: FormulaPanelProps)
   return (
     <div className="border border-dashed border-l-2 border-l-chart-3 p-3 space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <Badge
-          variant="outline"
-          className="font-mono text-xs bg-chart-3/10 border-chart-3/30"
-        >
-          {formula.name}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id={`formula-visible-${formula.id}`}
+            checked={!formula.hidden}
+            onCheckedChange={(checked) =>
+              onUpdate((current) => ({ ...current, hidden: checked !== true }))
+            }
+          />
+          <Badge
+            variant="outline"
+            className="font-mono text-xs bg-chart-3/10 border-chart-3/30"
+          >
+            {formula.name}
+          </Badge>
+        </div>
         <Button variant="ghost" size="xs" onClick={onRemove}>
           Remove
         </Button>
