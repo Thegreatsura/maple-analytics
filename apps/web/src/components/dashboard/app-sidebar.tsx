@@ -270,57 +270,6 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <Collapsible defaultOpen className="group/dashboards">
-          <SidebarGroup>
-            <SidebarGroupLabel render={<CollapsibleTrigger />}>
-              <GridIcon size={14} className="mr-1 !size-3.5" />
-              Dashboards
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">
-                Beta
-              </Badge>
-              <ChevronRightIcon
-                size={14}
-                className="ml-auto !size-3.5 transition-transform group-data-[open]/dashboards:rotate-90"
-              />
-            </SidebarGroupLabel>
-            <CollapsibleContent>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      render={<Link to="/dashboards" />}
-                      tooltip="All Dashboards"
-                      isActive={currentPath === "/dashboards" || currentPath === "/dashboards/"}
-                    >
-                      <GridIcon size={18} />
-                      <span>All Dashboards</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  {!isLoading && dashboards.length > 0 && (
-                    <SidebarMenuSub>
-                      {dashboards.map((dashboard) => (
-                        <SidebarMenuSubItem key={dashboard.id}>
-                          <SidebarMenuSubButton
-                            render={
-                              <Link
-                                to="/dashboards/$dashboardId"
-                                params={{ dashboardId: dashboard.id }}
-                              />
-                            }
-                            isActive={activeDashboardId === dashboard.id}
-                          >
-                            <span>{dashboard.name}</span>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      ))}
-                    </SidebarMenuSub>
-                  )}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </CollapsibleContent>
-          </SidebarGroup>
-        </Collapsible>
-
         {[topologyNavItems, signalsNavItems, investigateNavItems].map((group) => (
           <SidebarGroup key={group[0].title}>
             <SidebarGroupContent>
@@ -355,7 +304,56 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
 
-        <div className="flex-1" />
+        <Collapsible defaultOpen className="group/dashboards flex flex-1 min-h-0 flex-col">
+          <SidebarGroup className="flex flex-1 min-h-0 flex-col">
+            <SidebarGroupLabel render={<CollapsibleTrigger />}>
+              <GridIcon size={14} className="mr-1 !size-3.5" />
+              Dashboards
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">
+                Beta
+              </Badge>
+              <ChevronRightIcon
+                size={14}
+                className="ml-auto !size-3.5 transition-transform group-data-[open]/dashboards:rotate-90"
+              />
+            </SidebarGroupLabel>
+            <CollapsibleContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <SidebarGroupContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <SidebarMenu className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      render={<Link to="/dashboards" />}
+                      tooltip="All Dashboards"
+                      isActive={currentPath === "/dashboards" || currentPath === "/dashboards/"}
+                    >
+                      <GridIcon size={18} />
+                      <span>All Dashboards</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  {!isLoading && dashboards.length > 0 && (
+                    <SidebarMenuSub className="min-h-0 flex-1 overflow-y-auto">
+                      {dashboards.map((dashboard) => (
+                        <SidebarMenuSubItem key={dashboard.id}>
+                          <SidebarMenuSubButton
+                            render={
+                              <Link
+                                to="/dashboards/$dashboardId"
+                                params={{ dashboardId: dashboard.id }}
+                              />
+                            }
+                            isActive={activeDashboardId === dashboard.id}
+                          >
+                            <span>{dashboard.name}</span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  )}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </SidebarGroup>
+        </Collapsible>
 
         <SidebarGroup>
           <SidebarGroupContent>
