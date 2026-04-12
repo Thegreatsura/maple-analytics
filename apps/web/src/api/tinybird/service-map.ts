@@ -49,7 +49,7 @@ function transformEdge(row: Record<string, unknown>, durationSeconds: number): S
     callCount,
     estimatedCallCount,
     errorCount,
-    errorRate: callCount > 0 ? (errorCount / callCount) * 100 : 0,
+    errorRate: callCount > 0 ? errorCount / callCount : 0,
     avgDurationMs: Number(row.avgDurationMs ?? 0),
     p95DurationMs: Number(row.p95DurationMs ?? 0),
     hasSampling: sampling.hasSampling,

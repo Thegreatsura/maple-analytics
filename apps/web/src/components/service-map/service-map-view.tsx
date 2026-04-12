@@ -89,8 +89,8 @@ function formatLatency(ms: number): string {
 }
 
 function getHealthDotClass(errorRate: number): string {
-  if (errorRate > 5) return "bg-severity-error"
-  if (errorRate > 1) return "bg-severity-warn"
+  if (errorRate > 0.05) return "bg-severity-error"
+  if (errorRate > 0.01) return "bg-severity-warn"
   return "bg-severity-info"
 }
 
@@ -166,9 +166,9 @@ function ServiceDetailPanel({
                 <span className="text-[10px] text-muted-foreground">Error Rate</span>
                 <p className={cn(
                   "text-xl font-semibold tabular-nums font-mono",
-                  errorRate > 5 ? "text-severity-error" : errorRate > 1 ? "text-severity-warn" : "text-foreground",
+                  errorRate > 0.05 ? "text-severity-error" : errorRate > 0.01 ? "text-severity-warn" : "text-foreground",
                 )}>
-                  {errorRate.toFixed(1)}%
+                  {(errorRate * 100).toFixed(1)}%
                 </p>
               </div>
               <div className="space-y-0.5">
@@ -198,7 +198,7 @@ function ServiceDetailPanel({
                 {dependencies.map((dep) => {
                   const depColor = getServiceLegendColor(dep.targetService, services)
                   const depErrorRate = dep.errorRate
-                  const isError = depErrorRate > 5
+                  const isError = depErrorRate > 0.05
                   const safeDuration = Math.max(durationSeconds, 1)
                   const depReqPerSec = dep.hasSampling
                     ? dep.estimatedCallCount / safeDuration
@@ -229,14 +229,14 @@ function ServiceDetailPanel({
                         <span
                           className={cn(
                             "tabular-nums font-mono",
-                            depErrorRate > 5
+                            depErrorRate > 0.05
                               ? "text-severity-error"
-                              : depErrorRate > 1
+                              : depErrorRate > 0.01
                                 ? "text-severity-warn"
                                 : "text-severity-info",
                           )}
                         >
-                          {depErrorRate.toFixed(1)}%
+                          {(depErrorRate * 100).toFixed(1)}%
                         </span>
                       </div>
                     </div>
@@ -280,14 +280,14 @@ function ServiceDetailPanel({
                         <span
                           className={cn(
                             "tabular-nums font-mono",
-                            callerErrorRate > 5
+                            callerErrorRate > 0.05
                               ? "text-severity-error"
-                              : callerErrorRate > 1
+                              : callerErrorRate > 0.01
                                 ? "text-severity-warn"
                                 : "text-severity-info",
                           )}
                         >
-                          {callerErrorRate.toFixed(1)}%
+                          {(callerErrorRate * 100).toFixed(1)}%
                         </span>
                       </div>
                     </div>

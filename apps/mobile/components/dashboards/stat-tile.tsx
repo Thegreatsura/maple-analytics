@@ -12,7 +12,10 @@ function formatNumber(n: number, unit?: string): string {
 	if (!Number.isFinite(n)) return "—"
 	if (unit === "ms") return formatDuration(n)
 	if (unit === "s") return formatDuration(n * 1000)
-	if (unit === "%") return `${n.toFixed(n < 10 ? 2 : 1)}%`
+	if (unit === "%" || unit === "percent") {
+		const pct = unit === "percent" ? n * 100 : n
+		return `${pct.toFixed(pct < 10 ? 2 : 1)}%`
+	}
 
 	const abs = Math.abs(n)
 	if (abs >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`

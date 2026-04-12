@@ -349,8 +349,8 @@ export function buildSpec(output: StructuredToolOutput): Spec {
           s.name,
           String(s.previous.throughput),
           String(s.current.throughput),
-          `${s.previous.errorRate.toFixed(2)}%`,
-          `${s.current.errorRate.toFixed(2)}%`,
+          `${(s.previous.errorRate * 100).toFixed(2)}%`,
+          `${(s.current.errorRate * 100).toFixed(2)}%`,
         ])
         children.push(
           addElement(elements, "DataTable", { headers, rows, title: "Per-Service Comparison" })
@@ -397,7 +397,7 @@ export function buildSpec(output: StructuredToolOutput): Spec {
       const rows = d.services.map((s) => [
         s.name,
         String(s.throughput),
-        `${s.errorRate.toFixed(2)}%`,
+        `${(s.errorRate * 100).toFixed(2)}%`,
         `${s.p95Ms.toFixed(1)}ms`,
       ])
       const root = addElement(elements, "DataTable", {

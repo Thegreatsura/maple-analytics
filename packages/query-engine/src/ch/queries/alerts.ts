@@ -51,7 +51,7 @@ function alertTracesSelectExprs($: ColumnAccessor<typeof Traces.columns>, apdexT
     p50Duration: CH.quantile(0.5)($.Duration).div(1000000),
     p95Duration: CH.quantile(0.95)($.Duration).div(1000000),
     p99Duration: CH.quantile(0.99)($.Duration).div(1000000),
-    errorRate: CH.if_(CH.count().gt(0), CH.countIf($.StatusCode.eq("Error")).mul(100.0).div(CH.count()), CH.lit(0)),
+    errorRate: CH.if_(CH.count().gt(0), CH.countIf($.StatusCode.eq("Error")).div(CH.count()), CH.lit(0)),
     ...apdexExprs($.Duration.div(1000000), apdexThresholdMs),
   }
 }

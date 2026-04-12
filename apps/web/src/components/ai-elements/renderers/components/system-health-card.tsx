@@ -57,9 +57,9 @@ export function SystemHealthCard({
           label="Error Rate"
           value={formatErrorRate(errorRate)}
           color={
-            errorRate >= 5
+            errorRate >= 0.05
               ? "text-severity-error"
-              : errorRate >= 1
+              : errorRate >= 0.01
                 ? "text-severity-warn"
                 : "text-severity-info"
           }

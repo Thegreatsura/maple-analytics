@@ -35,7 +35,7 @@ const ALERT_TEMPLATES: Record<string, AlertTemplate> = {
   high_error_rate: {
     signalType: "error_rate",
     comparator: "gt",
-    defaultThreshold: 5,
+    defaultThreshold: 0.05,
     defaults: {},
   },
   slow_p95: {
@@ -118,9 +118,9 @@ function buildAlertRuleRequest(
     templateDefaults = tmpl.defaults
   }
 
-  if (!signalType) return { error: 'signal_type is required (or use a template).\n\nExample:\n  signal_type="error_rate" comparator="gt" threshold=5\n  OR template="high_error_rate"' }
-  if (!comparator) return { error: 'comparator is required (or use a template). Values: gt (>), gte (>=), lt (<), lte (<=).\n\nExample:\n  comparator="gt" threshold=5' }
-  if (threshold === undefined) return { error: 'threshold is required (or use a template).\n\nExample:\n  threshold=5 (for 5% error rate)' }
+  if (!signalType) return { error: 'signal_type is required (or use a template).\n\nExample:\n  signal_type="error_rate" comparator="gt" threshold=0.05\n  OR template="high_error_rate"' }
+  if (!comparator) return { error: 'comparator is required (or use a template). Values: gt (>), gte (>=), lt (<), lte (<=).\n\nExample:\n  comparator="gt" threshold=0.05' }
+  if (threshold === undefined) return { error: 'threshold is required (or use a template).\n\nExample:\n  threshold=0.05 (for 5% error rate)' }
 
   if (signalType === "metric") {
     if (!params.metric_name || !params.metric_type || !params.metric_aggregation) {
@@ -206,13 +206,13 @@ export function registerCreateAlertRuleTool(server: McpToolRegistrar) {
       ),
       template: optionalStringParam(
         "Template to auto-fill signal_type, comparator, and threshold. " +
-        "high_error_rate: error_rate > 5%. slow_p95: p95_latency > 1s. slow_p99: p99_latency > 2s. " +
+        "high_error_rate: error_rate > 0.05 (5%). slow_p95: p95_latency > 1s. slow_p99: p99_latency > 2s. " +
         "low_apdex: apdex < 0.8. throughput_drop: throughput < 100rpm. " +
         "Use 'custom' for full control over signal_type/comparator/threshold. Default: custom.",
       ),
       severity: optionalStringParam("Alert severity: warning or critical (default: warning)"),
       threshold: optionalNumberParam(
-        "Threshold value (overrides template default). E.g. 5 for 5% error rate, 1000 for 1s latency",
+        "Threshold value (overrides template default). E.g. 0.05 for 5% error rate, 1000 for 1s latency",
       ),
       window_minutes: optionalNumberParam("Evaluation window in minutes (default: 5)"),
       service_name: optionalStringParam("Scope the alert to a specific service"),

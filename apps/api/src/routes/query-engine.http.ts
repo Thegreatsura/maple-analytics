@@ -136,7 +136,7 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
               serviceName: row.serviceName,
               totalLogs: Number(row.totalLogs),
               errorLogs: Number(row.errorLogs),
-              errorRatePercent: Number(row.errorRatePercent),
+              errorRate: Number(row.errorRate),
             })),
           })
         }),

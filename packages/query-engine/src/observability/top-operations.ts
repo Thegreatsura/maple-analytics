@@ -15,7 +15,7 @@ const METRIC_EXPRESSIONS: Record<string, string> = {
   p50_duration: "quantile(0.5)(Duration) / 1000000",
   p95_duration: "quantile(0.95)(Duration) / 1000000",
   p99_duration: "quantile(0.99)(Duration) / 1000000",
-  error_rate: "if(count() > 0, countIf(StatusCode = 'Error') * 100.0 / count(), 0)",
+  error_rate: "if(count() > 0, countIf(StatusCode = 'Error') / count(), 0)",
   apdex: "if(count() > 0, round((countIf(Duration / 1000000 < 500) + countIf(Duration / 1000000 >= 500 AND Duration / 1000000 < 2000) * 0.5) / count(), 4), 0)",
 }
 

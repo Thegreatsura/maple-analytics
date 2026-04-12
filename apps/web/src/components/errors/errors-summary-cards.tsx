@@ -23,13 +23,14 @@ function formatNumber(num: number): string {
 }
 
 function formatPercentage(rate: number): string {
-  if (rate < 0.01) {
+  const pct = rate * 100
+  if (pct < 0.01) {
     return "0%"
   }
-  if (rate < 1) {
-    return `${rate.toFixed(2)}%`
+  if (pct < 1) {
+    return `${pct.toFixed(2)}%`
   }
-  return `${rate.toFixed(1)}%`
+  return `${pct.toFixed(1)}%`
 }
 
 interface ErrorsSummaryCardsProps {

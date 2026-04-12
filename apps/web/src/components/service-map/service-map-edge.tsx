@@ -259,15 +259,15 @@ export const ServiceMapEdge = memo(function ServiceMapEdge({
             {errorRate > 0 && (
               <span
                 className={
-                  errorRate > 5
+                  errorRate > 0.05
                     ? " text-severity-error"
-                    : errorRate > 1
+                    : errorRate > 0.01
                       ? " text-severity-warn"
                       : ""
                 }
               >
                 {" "}
-                {errorRate.toFixed(1)}%
+                {(errorRate * 100).toFixed(1)}%
               </span>
             )}
           </span>

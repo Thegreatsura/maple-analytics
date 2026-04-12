@@ -541,7 +541,7 @@ export function errorsSummaryQuery(
         totalSpans: $.s.totalSpans,
         errorRate: CH.if_(
           $.s.totalSpans.gt(0),
-          CH.round_($.totalErrors.div($.s.totalSpans).mul(100), 4),
+          CH.round_($.totalErrors.div($.s.totalSpans), 6),
           CH.lit(0),
         ),
         affectedServicesCount: $.affectedServicesCount,

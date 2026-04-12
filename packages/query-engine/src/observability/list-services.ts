@@ -25,7 +25,7 @@ export const listServices = (
         name,
         throughput: svc.throughput,
         errorCount: svc.errorCount,
-        errorRate: svc.throughput > 0 ? (svc.errorCount / svc.throughput) * 100 : 0,
+        errorRate: svc.throughput > 0 ? svc.errorCount / svc.throughput : 0,
         p50Ms: weightedAvg(svc.weightedP50, svc.throughput),
         p95Ms: weightedAvg(svc.weightedP95, svc.throughput),
         p99Ms: weightedAvg(svc.weightedP99, svc.throughput),

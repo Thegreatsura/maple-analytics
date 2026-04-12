@@ -29,8 +29,9 @@ function formatThroughput(rps: number): string {
 }
 
 function formatPercent(rate: number): string {
-	if (rate >= 10) return `${Math.round(rate)}%`
-	return `${rate.toFixed(1)}%`
+	const pct = rate * 100
+	if (pct >= 10) return `${Math.round(pct)}%`
+	return `${pct.toFixed(1)}%`
 }
 
 export default function ServiceDetailScreen() {
@@ -92,8 +93,8 @@ function ServiceDetailContent({ data }: { data: ServiceDetailData }) {
 			? timeseries.reduce((sum, p) => sum + p.throughput, 0) / timeseries.length
 			: 0
 	const hasSamplingData = timeseries.some((p) => p.hasSampling)
-	// errorRate from the query engine is already a percentage (0–100), so we
-	// average the per-bucket values directly without further scaling.
+	// errorRate from the query engine is a 0–1 ratio; average the per-bucket
+	// values and formatPercent handles the display conversion.
 	const avgErrorRate =
 		timeseries.length > 0
 			? timeseries.reduce((sum, p) => sum + p.errorRate, 0) / timeseries.length

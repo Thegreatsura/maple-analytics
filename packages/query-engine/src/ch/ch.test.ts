@@ -234,7 +234,7 @@ describe("tracesTimeseriesQuery", () => {
   it("builds error_rate timeseries", () => {
     const q = tracesTimeseriesQuery({ metric: "error_rate", needsSampling: false })
     const { sql } = compileCH(q, baseParams)
-    expect(sql).toContain("countIf(StatusCode = 'Error') * 100 / count(), 0) AS errorRate")
+    expect(sql).toContain("countIf(StatusCode = 'Error') / count(), 0) AS errorRate")
   })
 
   it("includes sampling columns when needsSampling is true", () => {

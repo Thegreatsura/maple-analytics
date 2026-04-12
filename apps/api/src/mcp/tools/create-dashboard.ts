@@ -206,7 +206,7 @@ function serviceHealthWidgets(serviceName?: string): WidgetDef[] {
         ]),
         transform: { reduceToValue: { field: "Error Rate", aggregate: "avg" } },
       },
-      display: { title: "Error Rate", suffix: "%" },
+      display: { title: "Error Rate", unit: "percent" },
       layout: { x: 3, y: 0, w: 3, h: 2 },
     },
     {
@@ -494,9 +494,9 @@ function platformOverviewWidgets(): WidgetDef[] {
         title: "Service Overview",
         columns: [
           { field: "serviceName", header: "Service" },
-          { field: "throughput", header: "Throughput", align: "right" },
+          { field: "throughput", header: "Throughput", unit: "number", align: "right" },
           { field: "p95LatencyMs", header: "P95", unit: "duration_ms", align: "right" },
-          { field: "errorCount", header: "Errors", align: "right" },
+          { field: "errorCount", header: "Errors", unit: "number", align: "right" },
         ],
       },
       layout: { x: 0, y: 2, w: 12, h: 5 },
@@ -562,7 +562,7 @@ function httpEndpointsWidgets(serviceName?: string): WidgetDef[] {
           dataSource: "traces",
           aggregation: "count",
           whereClause: where,
-          groupBy: ["span_name"],
+          groupBy: ["span.name"],
         }),
       ]),
       display: {
@@ -584,7 +584,7 @@ function httpEndpointsWidgets(serviceName?: string): WidgetDef[] {
           dataSource: "traces",
           aggregation: "p95_duration",
           whereClause: where,
-          groupBy: ["span_name"],
+          groupBy: ["span.name"],
         }),
       ]),
       display: {
@@ -606,7 +606,7 @@ function httpEndpointsWidgets(serviceName?: string): WidgetDef[] {
           dataSource: "traces",
           aggregation: "error_rate",
           whereClause: where,
-          groupBy: ["span_name"],
+          groupBy: ["span.name"],
         }),
       ]),
       display: { title: "Error Rate by Endpoint", ...CHART_DISPLAY_AREA },
@@ -825,8 +825,58 @@ function simpleSpecToWidget(
   const display: Record<string, unknown> = { title: spec.title }
   display.unit = spec.unit ? normalizeUnit(spec.unit) : inferUnit(metric)
 
-  if (viz === "table" || viz === "list") {
-    return `Widget "${spec.title}": "${viz}" visualization is not supported in simplified specs. Use a template (e.g. error_tracking, platform_overview) or provide full dashboard_json.`
+  if (viz === "table") {
+    // Tables use breakdown queries grouped by the specified dimension
+    if (groupBy.length === 0 || groupBy[0] === "none") {
+      return `Widget "${spec.title}": table visualization requires a group_by field (e.g. service.name, span.name).`
+    }
+    const ds = makeQueryBuilderBreakdownDataSource([queryDraft])
+    return {
+      id,
+      visualization: viz,
+      dataSource: ds,
+      display: {
+        title: spec.title,
+        columns: [
+          { field: "name", header: groupBy[0]?.replace(".", " ").replace(/\b\w/g, (c: string) => c.toUpperCase()) ?? "Name" },
+          { field: "value", header: spec.title, unit: display.unit as string, align: "right" },
+        ],
+      },
+      layout,
+    }
+  }
+
+  if (viz === "list") {
+    // Lists show recent traces or logs
+    if (source === "logs") {
+      return {
+        id,
+        visualization: viz,
+        dataSource: {
+          endpoint: "list_logs",
+          params: {
+            ...(spec.service_name && { service: spec.service_name }),
+            limit: 10,
+          },
+        },
+        display: { title: spec.title, listDataSource: "logs", listLimit: 10 },
+        layout,
+      }
+    }
+    // Default to traces list
+    return {
+      id,
+      visualization: viz,
+      dataSource: {
+        endpoint: "list_traces",
+        params: {
+          ...(spec.service_name && { service: spec.service_name }),
+          limit: 10,
+        },
+      },
+      display: { title: spec.title, listDataSource: "traces", listLimit: 10 },
+      layout,
+    }
   }
 
   if (viz === "stat") {
@@ -892,6 +942,13 @@ function computeAutoLayout(
       }
       layouts.push({ x, y, w: 4, h: 2 })
       x += 4
+    } else if (viz === "table" || viz === "list") {
+      if (x > 0) {
+        y += 2
+        x = 0
+      }
+      layouts.push({ x: 0, y, w: 12, h: 5 })
+      y += 5
     } else {
       if (x > 0) {
         y += 2
@@ -954,14 +1011,14 @@ export function registerCreateDashboardTool(server: McpToolRegistrar) {
       "  metric_overview — requires metric_name + metric_type: current value stats + timeseries chart + service breakdown\n" +
       "  blank — empty dashboard\n\n" +
       "Simplified widgets (provide name + widgets JSON array, same params as query_data):\n" +
-      '  Each: { title, visualization?: "chart"|"stat", source: "traces"|"logs"|"metrics", metric?, metric_name?, metric_type?, service_name?, group_by?, unit? }\n' +
+      '  Each: { title, visualization?: "chart"|"stat"|"table"|"list", source: "traces"|"logs"|"metrics", metric?, metric_name?, metric_type?, service_name?, group_by?, unit? }\n' +
       "  group_by values (use exact format):\n" +
       "    traces: service.name, span.name, status.code, http.method, none\n" +
       "    logs: service.name, severity, none\n" +
       "    metrics: service.name, attr.<key> (e.g. attr.signal, attr.status), none\n" +
       "    Aliases accepted: service, span_name, status_code, http_method\n" +
       "  unit: auto-inferred from metric if omitted (duration_ms for latency, percent for error_rate, number otherwise). Override with: ms, %, number, duration_us.\n" +
-      "  Note: table and list visualizations require templates or full dashboard_json.\n" +
+      "  Note: table requires a group_by field. list shows recent traces or logs.\n" +
       "  Layouts auto-computed. Example:\n" +
       '  widgets=\'[{"title":"HTTP Duration","source":"metrics","metric":"avg","metric_name":"http.server.duration","metric_type":"histogram","group_by":"attr.method"}]\'\n\n' +
       "Custom JSON: provide dashboard_json with full widget definitions (use get_dashboard to see schema).",

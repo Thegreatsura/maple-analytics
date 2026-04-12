@@ -209,7 +209,7 @@ export interface ErrorRateByServiceOutput {
   readonly serviceName: string
   readonly totalLogs: number
   readonly errorLogs: number
-  readonly errorRatePercent: number
+  readonly errorRate: number
 }
 
 export function errorRateByServiceQuery(
@@ -219,7 +219,7 @@ export function errorRateByServiceQuery(
       serviceName: $.ServiceName,
       totalLogs: CH.count(),
       errorLogs: CH.countIf(CH.inList($.SeverityText, ["ERROR", "FATAL"])),
-      errorRatePercent: CH.round_(CH.countIf(CH.inList($.SeverityText, ["ERROR", "FATAL"])).div(CH.count()).mul(100), 2),
+      errorRate: CH.round_(CH.countIf(CH.inList($.SeverityText, ["ERROR", "FATAL"])).div(CH.count()), 6),
     }))
     .where(($) => [
       $.OrgId.eq(param.string("orgId")),
@@ -227,7 +227,7 @@ export function errorRateByServiceQuery(
       $.Timestamp.lte(param.dateTime("endTime")),
     ])
     .groupBy("serviceName")
-    .orderBy(["errorRatePercent", "desc"])
+    .orderBy(["errorRate", "desc"])
     .format("JSON")
 }
 

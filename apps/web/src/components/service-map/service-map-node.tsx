@@ -21,14 +21,14 @@ function formatLatency(ms: number): string {
 }
 
 function getHealthDotClass(errorRate: number): string {
-  if (errorRate > 5) return "bg-severity-error"
-  if (errorRate > 1) return "bg-severity-warn"
+  if (errorRate > 0.05) return "bg-severity-error"
+  if (errorRate > 0.01) return "bg-severity-warn"
   return "bg-severity-info"
 }
 
 function getSelectedBorderClass(errorRate: number): string {
-  if (errorRate > 5) return "border-severity-error shadow-[0_0_0_3px_oklch(0.5_0.2_25/0.15)]"
-  if (errorRate > 1) return "border-severity-warn shadow-[0_0_0_3px_oklch(0.6_0.15_60/0.15)]"
+  if (errorRate > 0.05) return "border-severity-error shadow-[0_0_0_3px_oklch(0.5_0.2_25/0.15)]"
+  if (errorRate > 0.01) return "border-severity-warn shadow-[0_0_0_3px_oklch(0.6_0.15_60/0.15)]"
   return "border-border-active shadow-[0_0_0_3px_oklch(0.3_0.02_60/0.2)]"
 }
 
@@ -97,14 +97,14 @@ export const ServiceMapNode = memo(function ServiceMapNode({
               <span
                 className={cn(
                   "text-[11px] font-medium font-mono tabular-nums",
-                  errorRate > 5
+                  errorRate > 0.05
                     ? "text-severity-error"
-                    : errorRate > 1
+                    : errorRate > 0.01
                       ? "text-severity-warn"
                       : "text-secondary-foreground",
                 )}
               >
-                {errorRate.toFixed(1)}%
+                {(errorRate * 100).toFixed(1)}%
               </span>
             </div>
 

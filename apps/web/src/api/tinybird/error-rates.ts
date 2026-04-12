@@ -11,7 +11,7 @@ export interface ErrorRateByService {
   serviceName: string
   totalLogs: number
   errorLogs: number
-  errorRatePercent: number
+  errorRate: number
 }
 
 export interface ErrorRateByServiceResponse {
@@ -62,7 +62,7 @@ export const getErrorRateByService = Effect.fn("QueryEngine.getErrorRateByServic
         serviceName: row.serviceName,
         totalLogs: Number(row.totalLogs),
         errorLogs: Number(row.errorLogs),
-        errorRatePercent: Number(row.errorRatePercent),
+        errorRate: Number(row.errorRate),
       })),
     }
   },

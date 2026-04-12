@@ -71,7 +71,15 @@ function applyTransform(
 
   // Handle both { data: [...] } and raw array responses
   let rows = Array.isArray(data) ? data : data.data
-  if (!Array.isArray(rows)) return data
+  if (!Array.isArray(rows)) {
+    // If data is a plain object (e.g. errors_summary returns a scalar object),
+    // wrap it in an array so reduceToValue and other transforms can process it
+    if (typeof data === "object" && data !== null && transform.reduceToValue) {
+      rows = [data]
+    } else {
+      return data
+    }
+  }
 
   if (transform.hideSeries?.baseNames.length) {
     rows = filterHiddenSeriesRows(

@@ -39,7 +39,7 @@ function metricSelectExprs(
     p95Duration: needs.has("quantiles") ? CH.quantile(0.95)($.Duration).div(1000000) : CH.lit(0),
     p99Duration: needs.has("quantiles") ? CH.quantile(0.99)($.Duration).div(1000000) : CH.lit(0),
     errorRate: needs.has("error_rate")
-      ? CH.if_(CH.count().gt(0), CH.countIf($.StatusCode.eq("Error")).mul(100.0).div(CH.count()), CH.lit(0))
+      ? CH.if_(CH.count().gt(0), CH.countIf($.StatusCode.eq("Error")).div(CH.count()), CH.lit(0))
       : CH.lit(0),
     ...apdex,
     sampledSpanCount: needsSampling

@@ -58,7 +58,7 @@ export const diagnoseService = Effect.fn("Observability.diagnoseService")(
       )
 
     const agg = aggregateServiceRows(overviewResult.data, input.serviceName)
-    const errorRate = agg.throughput > 0 ? (agg.errorCount / agg.throughput) * 100 : 0
+    const errorRate = agg.throughput > 0 ? agg.errorCount / agg.throughput : 0
 
     const avgApdex = pipe(
       apdexResult.data,

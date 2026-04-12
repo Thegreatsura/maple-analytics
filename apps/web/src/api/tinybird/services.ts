@@ -155,7 +155,7 @@ function aggregateByServiceEnvironment(
       p50LatencyMs: p50,
       p95LatencyMs: p95,
       p99LatencyMs: p99,
-      errorRate: totalSpans > 0 ? (totalErrors / totalSpans) * 100 : 0,
+      errorRate: totalSpans > 0 ? totalErrors / totalSpans : 0,
       throughput: sampling.hasSampling ? sampling.estimated : sampling.traced,
       tracedThroughput: sampling.traced,
       hasSampling: sampling.hasSampling,

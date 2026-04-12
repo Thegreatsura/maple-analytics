@@ -62,7 +62,7 @@ export function registerServiceMapTool(server: McpToolRegistrar) {
 
         const headers = ["Source → Target", "Calls", "Errors", "Error Rate", "Avg Duration", "P95 Duration"]
         const rows = Arr.map(edges, (e) => {
-          const errorRate = e.callCount > 0 ? (e.errorCount / e.callCount) * 100 : 0
+          const errorRate = e.callCount > 0 ? e.errorCount / e.callCount : 0
           return [
             `${e.sourceService} → ${e.targetService}`,
             formatNumber(e.callCount),
@@ -77,8 +77,8 @@ export function registerServiceMapTool(server: McpToolRegistrar) {
 
         const nextSteps: string[] = []
         const errorEdges = Arr.filter(
-          Arr.map(edges, (e) => ({ service: e.targetService, errorRate: e.callCount > 0 ? e.errorCount / e.callCount * 100 : 0 })),
-          (e) => e.errorRate > 1,
+          Arr.map(edges, (e) => ({ service: e.targetService, errorRate: e.callCount > 0 ? e.errorCount / e.callCount : 0 })),
+          (e) => e.errorRate > 0.01,
         ).sort((a, b) => b.errorRate - a.errorRate)
 
         for (const e of Arr.take(errorEdges, 2)) {

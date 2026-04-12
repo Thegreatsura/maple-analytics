@@ -36,7 +36,8 @@ function formatDuration(ms: number): string {
 	return `${Math.round(ms)}ms`
 }
 
-function formatErrorRate(pct: number): string {
+function formatErrorRate(rate: number): string {
+	const pct = rate * 100
 	if (pct < 0.01) return "0%"
 	if (pct < 1) return `${pct.toFixed(2)}%`
 	if (pct >= 10) return `${Math.round(pct)}%`
@@ -191,9 +192,8 @@ function DashboardContent({
 	}))
 
 	const points = timeseries
-	// error_rate from the query engine is already a percentage (0–100); weight
-	// per-bucket values by throughput so the displayed value reflects the true
-	// overall error rate across the selected time range.
+	// error_rate from the query engine is a 0–1 ratio; weight per-bucket values
+	// by throughput so the displayed value reflects the true overall error rate.
 	const totalCount = points.reduce((sum, p) => sum + p.throughput, 0)
 	const overallErrorRate =
 		totalCount > 0

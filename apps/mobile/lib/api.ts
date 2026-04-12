@@ -150,7 +150,7 @@ export interface ServiceOverview {
   p50LatencyMs: number
   p95LatencyMs: number
   p99LatencyMs: number
-  errorRate: number // percentage 0-100
+  errorRate: number // ratio 0-1
   /** req/s. Sampling-extrapolated value when `hasSampling` is true, else raw root-span count/sec. */
   throughput: number
   /** req/s of actually-traced spans. Equals `throughput` when `hasSampling` is false. */
@@ -288,7 +288,7 @@ export async function fetchServiceOverview(startTime: string, endTime: string): 
       p50LatencyMs: p50,
       p95LatencyMs: p95,
       p99LatencyMs: p99,
-      errorRate: totalSpans > 0 ? (totalErrors / totalSpans) * 100 : 0,
+      errorRate: totalSpans > 0 ? totalErrors / totalSpans : 0,
       throughput: sampling.hasSampling ? sampling.estimated : sampling.traced,
       tracedThroughput: sampling.traced,
       hasSampling: sampling.hasSampling,

@@ -163,8 +163,8 @@ export function registerComparePeriodsTool(server: McpToolRegistrar) {
 
             const curTp = cur?.throughput ?? 0
             const prevTp = prev?.throughput ?? 0
-            const curEr = cur && cur.throughput > 0 ? (cur.errorCount / cur.throughput) * 100 : 0
-            const prevEr = prev && prev.throughput > 0 ? (prev.errorCount / prev.throughput) * 100 : 0
+            const curEr = cur && cur.throughput > 0 ? cur.errorCount / cur.throughput : 0
+            const prevEr = prev && prev.throughput > 0 ? prev.errorCount / prev.throughput : 0
             const curP95 = cur && cur.totalWeight > 0 ? cur.p95 / cur.totalWeight : 0
             const prevP95 = prev && prev.totalWeight > 0 ? prev.p95 / prev.totalWeight : 0
 
@@ -194,7 +194,7 @@ export function registerComparePeriodsTool(server: McpToolRegistrar) {
           for (const svc of Arr.take(regressions, 3)) {
             nextSteps.push(`\`diagnose_service service_name="${svc}"\` — investigate regression`)
           }
-          if (curErrorRate > prevErrorRate && curErrorRate > 1) {
+          if (curErrorRate > prevErrorRate && curErrorRate > 0.01) {
             nextSteps.push('`find_errors` — categorize new errors')
           }
           if (nextSteps.length === 0) {
@@ -220,12 +220,12 @@ export function registerComparePeriodsTool(server: McpToolRegistrar) {
                   name,
                   current: {
                     throughput: cur?.throughput ?? 0,
-                    errorRate: cur && cur.throughput > 0 ? (cur.errorCount / cur.throughput) * 100 : 0,
+                    errorRate: cur && cur.throughput > 0 ? cur.errorCount / cur.throughput : 0,
                     p95Ms: cur && cur.totalWeight > 0 ? cur.p95 / cur.totalWeight : 0,
                   },
                   previous: {
                     throughput: prev?.throughput ?? 0,
-                    errorRate: prev && prev.throughput > 0 ? (prev.errorCount / prev.throughput) * 100 : 0,
+                    errorRate: prev && prev.throughput > 0 ? prev.errorCount / prev.throughput : 0,
                     p95Ms: prev && prev.totalWeight > 0 ? prev.p95 / prev.totalWeight : 0,
                   },
                 }

@@ -117,7 +117,7 @@ export class ErrorRateByServiceResponse extends Schema.Class<ErrorRateByServiceR
     serviceName: Schema.String,
     totalLogs: Schema.Number,
     errorLogs: Schema.Number,
-    errorRatePercent: Schema.Number,
+    errorRate: Schema.Number,
   })),
 }) {}
 

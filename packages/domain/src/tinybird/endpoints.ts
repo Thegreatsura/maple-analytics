@@ -155,7 +155,7 @@ export interface ErrorRateByServiceOutput {
   readonly serviceName: string
   readonly totalLogs: number
   readonly errorLogs: number
-  readonly errorRatePercent: number
+  readonly errorRate: number
 }
 
 export interface ErrorRateByServiceParams {

@@ -22,9 +22,9 @@ export function InlineService({ data }: { data: InlineServiceData }) {
         <span
           className={cn(
             "font-mono text-[10px]",
-            data.errorRate < 1 && "text-severity-info",
-            data.errorRate >= 1 && data.errorRate < 5 && "text-severity-warn",
-            data.errorRate >= 5 && "text-severity-error",
+            data.errorRate < 0.01 && "text-severity-info",
+            data.errorRate >= 0.01 && data.errorRate < 0.05 && "text-severity-warn",
+            data.errorRate >= 0.05 && "text-severity-error",
           )}
         >
           {formatErrorRate(data.errorRate)} err

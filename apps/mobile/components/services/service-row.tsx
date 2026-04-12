@@ -14,20 +14,21 @@ function formatThroughput(rps: number): string {
 	return `${rps.toFixed(1)}/s`
 }
 
-function formatErrorRate(pct: number): string {
+function formatErrorRate(rate: number): string {
+	const pct = rate * 100
 	if (pct >= 10) return `${Math.round(pct)}%`
 	return `${pct.toFixed(1)}%`
 }
 
 function getErrorColor(errorRate: number): string {
-	if (errorRate >= 5) return "#c45a3c"
-	if (errorRate >= 1) return "#d4873b"
+	if (errorRate >= 0.05) return "#c45a3c"
+	if (errorRate >= 0.01) return "#d4873b"
 	return "#5cb88a"
 }
 
 function getErrorBgColor(errorRate: number): string {
-	if (errorRate >= 5) return "rgba(196, 90, 60, 0.2)"
-	if (errorRate >= 1) return "rgba(212, 135, 59, 0.2)"
+	if (errorRate >= 0.05) return "rgba(196, 90, 60, 0.2)"
+	if (errorRate >= 0.01) return "rgba(212, 135, 59, 0.2)"
 	return "rgba(92, 184, 138, 0.2)"
 }
 

@@ -42,8 +42,9 @@ function formatLatency(ms: number): string {
 }
 
 function formatPercent(rate: number): string {
-	if (rate >= 10) return `${Math.round(rate)}%`
-	return `${rate.toFixed(1)}%`
+	const pct = rate * 100
+	if (pct >= 10) return `${Math.round(pct)}%`
+	return `${pct.toFixed(1)}%`
 }
 
 export default function ServicesScreen() {
