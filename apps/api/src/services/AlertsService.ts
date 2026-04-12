@@ -866,7 +866,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
         return yield* Effect.fail(
           new AlertForbiddenError({
             message: "Only org admins can manage alerts",
-            roles: roles.length > 0 ? [...roles] : undefined,
+            ...(roles.length > 0 ? { roles: [...roles] } : {}),
           }),
         )
       })

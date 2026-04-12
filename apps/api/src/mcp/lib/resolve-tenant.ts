@@ -4,13 +4,15 @@ import type { TenantContext as McpTenantContext } from "@/lib/tenant-context"
 import { AuthService } from "@/services/AuthService"
 import { ApiKeysService } from "@/services/ApiKeysService"
 import { Env } from "@/services/Env"
-import { OrgId, UserId } from "@maple/domain/http"
+import { OrgId, RoleName, UserId } from "@maple/domain/http"
 import { API_KEY_PREFIX } from "@maple/db"
 import { McpAuthMissingError, McpAuthInvalidError, McpInvalidTenantError, McpTenantError } from "../tools/types"
 
 const INTERNAL_SERVICE_PREFIX = "maple_svc_"
 const decodeOrgId = Schema.decodeUnknownEffect(OrgId)
 const decodeUserId = Schema.decodeUnknownEffect(UserId)
+const decodeRoleNameSync = Schema.decodeUnknownSync(RoleName)
+const apiKeyDefaultRoles = [decodeRoleNameSync("root")]
 
 const toHeaderRecord = (headers: Headers): Record<string, string> => {
   const record: Record<string, string> = {}
@@ -119,7 +121,7 @@ export const resolveMcpTenantContext = (
           field: "userId",
         })),
       )
-      return { orgId: validOrgId, userId: validUserId, roles: [], authMode: "self_hosted" } as McpTenantContext
+      return { orgId: validOrgId, userId: validUserId, roles: apiKeyDefaultRoles, authMode: "self_hosted" } as McpTenantContext
     }
   }
 
