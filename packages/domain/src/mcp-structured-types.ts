@@ -434,6 +434,83 @@ export interface GetIncidentTimelineData {
   resolvedCount: number
 }
 
+// ---------------------------------------------------------------------------
+// Inspect chart data types
+// ---------------------------------------------------------------------------
+
+export type InspectChartFlag =
+  | "EMPTY"
+  | "ALL_NULLS"
+  | "ALL_ZEROS"
+  | "SINGLE_POINT"
+  | "FLAT_LINE"
+  | "SUSPICIOUS_GAP"
+  | "NEGATIVE_VALUES"
+  | "UNREALISTIC_MAGNITUDE"
+  | "SINGLE_SERIES_DOMINATES"
+  | "CARDINALITY_EXPLOSION"
+  | "UNIT_MISMATCH"
+  | "BROKEN_BREAKDOWN"
+
+export type InspectChartVerdict = "looks_healthy" | "suspicious" | "broken"
+
+export interface InspectChartSeriesSample {
+  bucket?: string
+  value: number | null
+}
+
+export interface InspectChartSeriesStat {
+  name: string
+  min: number | null
+  max: number | null
+  avg: number | null
+  validCount: number
+  nullCount: number
+  zeroCount: number
+  negativeCount: number
+  samples: InspectChartSeriesSample[]
+}
+
+export interface InspectChartQueryStats {
+  rowCount: number
+  seriesCount: number
+  firstBucket?: string
+  lastBucket?: string
+  seriesStats: InspectChartSeriesStat[]
+}
+
+export interface InspectChartQueryResult {
+  queryId: string
+  queryName: string
+  status: "ok" | "error" | "skipped"
+  error?: string
+  spec?: unknown
+  stats: InspectChartQueryStats
+  reducedValue?: number | null
+  flags: InspectChartFlag[]
+}
+
+export interface InspectChartDataData {
+  widget: {
+    id: string
+    title?: string
+    visualization: string
+    endpoint: string
+    displayUnit?: string
+    hasFormulaWarning: boolean
+    hasUnsupportedTransform: boolean
+  }
+  timeRange: {
+    startTime: string
+    endTime: string
+    source: "override" | "dashboard" | "fallback"
+  }
+  queries: InspectChartQueryResult[]
+  verdict: InspectChartVerdict
+  flags: InspectChartFlag[]
+  notes: string[]
+}
+
 export type StructuredToolOutput =
   | { tool: "search_traces"; data: SearchTracesData }
   | { tool: "find_slow_traces"; data: FindSlowTracesData }
@@ -458,3 +535,4 @@ export type StructuredToolOutput =
   | { tool: "list_services"; data: ListServicesData }
   | { tool: "get_service_top_operations"; data: GetServiceTopOperationsData }
   | { tool: "get_incident_timeline"; data: GetIncidentTimelineData }
+  | { tool: "inspect_chart_data"; data: InspectChartDataData }

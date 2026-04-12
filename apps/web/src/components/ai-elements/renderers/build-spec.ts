@@ -467,5 +467,39 @@ export function buildSpec(output: StructuredToolOutput): Spec {
       })
       return { root, elements }
     }
+
+    case "inspect_chart_data": {
+      const d = output.data
+      const children: string[] = []
+
+      children.push(
+        addElement(elements, "StatCards", {
+          cards: [
+            { label: "Verdict", value: d.verdict, format: "text" },
+            { label: "Queries", value: d.queries.length, format: "number" },
+            { label: "Flags", value: d.flags.length, format: "number" },
+          ],
+        }),
+      )
+
+      const headers = ["Query", "Status", "Rows", "Series", "Flags"]
+      const rows = d.queries.map((q) => [
+        q.queryName,
+        q.status,
+        String(q.stats.rowCount),
+        String(q.stats.seriesCount),
+        q.flags.join(", ") || "—",
+      ])
+      children.push(
+        addElement(elements, "DataTable", {
+          headers,
+          rows,
+          title: `${d.widget.title ?? d.widget.id} — ${d.widget.endpoint}`,
+        }),
+      )
+
+      const root = buildStack(elements, children)
+      return { root, elements }
+    }
   }
 }

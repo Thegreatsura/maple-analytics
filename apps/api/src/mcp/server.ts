@@ -18,6 +18,7 @@ import { registerListDashboardsTool } from "./tools/list-dashboards"
 import { registerGetDashboardTool } from "./tools/get-dashboard"
 import { registerCreateDashboardTool } from "./tools/create-dashboard"
 import { registerUpdateDashboardTool } from "./tools/update-dashboard"
+import { registerInspectChartDataTool } from "./tools/inspect-chart-data"
 import { registerGetAlertRuleTool } from "./tools/get-alert-rule"
 import { registerComparePeriodsTool } from "./tools/compare-periods"
 import { registerExploreAttributesTool } from "./tools/explore-attributes"
@@ -100,6 +101,7 @@ const collectToolDefinitions = (): ReadonlyArray<ToolDefinition> => {
   registerGetDashboardTool(registrar)
   registerCreateDashboardTool(registrar)
   registerUpdateDashboardTool(registrar)
+  registerInspectChartDataTool(registrar)
 
   // Workflow tools
   registerComparePeriodsTool(registrar)
