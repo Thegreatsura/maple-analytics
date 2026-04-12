@@ -9,6 +9,7 @@ import { SystemHealthCard } from "./components/system-health-card"
 import { MetricsList } from "./components/metrics-list"
 import { StatCards } from "./components/stat-cards"
 import { DataTable } from "./components/data-table"
+import { QueryChart } from "./components/query-chart"
 
 export const { registry } = defineRegistry(catalog, {
   components: {
@@ -26,5 +27,6 @@ export const { registry } = defineRegistry(catalog, {
     MetricsList,
     StatCards,
     DataTable,
+    QueryChart,
   },
 })

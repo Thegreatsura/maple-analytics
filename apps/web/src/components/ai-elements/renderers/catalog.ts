@@ -166,6 +166,21 @@ export const catalog = defineCatalog(schema, {
       }),
       description: "Generic data table with headers and rows",
     },
+    QueryChart: {
+      props: z.object({
+        data: z.array(
+          z.object({
+            bucket: z.string(),
+            series: z.record(z.string(), z.number()),
+          })
+        ),
+        metric: z.string(),
+        unit: z.string(),
+        source: z.string(),
+        groupBy: z.string().optional(),
+      }),
+      description: "Timeseries area chart for query_data results",
+    },
   },
   actions: {},
 })

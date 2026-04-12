@@ -187,35 +187,29 @@ export function buildSpec(output: StructuredToolOutput): Spec {
     case "query_data": {
       const d = output.data
       const result = d.result
-      const sourceLabel = d.kind
+      const unit = d.unit ?? "number"
 
       if (result.kind === "timeseries") {
-        const allKeys = new Set<string>()
-        for (const row of result.data) {
-          for (const key of Object.keys(row.series)) {
-            allKeys.add(key)
-          }
-        }
-        const headers = ["bucket", ...Array.from(allKeys)]
-        const rows = result.data.map((row: { bucket: string; series: Record<string, number> }) => [
-          row.bucket,
-          ...Array.from(allKeys).map((k) => String(row.series[k] ?? 0)),
-        ])
-        const root = addElement(elements, "DataTable", {
-          headers,
-          rows,
-          title: `${d.metric} (${sourceLabel})`,
+        const root = addElement(elements, "QueryChart", {
+          data: result.data,
+          metric: d.metric,
+          unit,
+          source: d.queryContext?.source ?? "traces",
+          groupBy: d.groupBy,
         })
         return { root, elements }
       }
 
-      // breakdown
-      const headers = ["Name", "Value"]
-      const rows = result.data.map((row: { name: string; value: number }) => [row.name, String(row.value)])
+      // breakdown — format values using unit
+      const headers = ["Name", d.metric]
+      const rows = result.data.map((row: { name: string; value: number }) => [
+        row.name,
+        String(row.value),
+      ])
       const root = addElement(elements, "DataTable", {
         headers,
         rows,
-        title: `${d.metric} (${sourceLabel})`,
+        title: `${d.metric} by ${d.groupBy ?? "group"}`,
       })
       return { root, elements }
     }
