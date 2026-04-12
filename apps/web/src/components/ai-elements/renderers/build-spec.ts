@@ -449,6 +449,58 @@ export function buildSpec(output: StructuredToolOutput): Spec {
       return { root, elements }
     }
 
+    case "add_dashboard_widget": {
+      const d = output.data
+      const db = d.dashboard
+      const root = addElement(elements, "StatCards", {
+        cards: [
+          { label: "Dashboard", value: db.name, format: "text" },
+          { label: "Added Widget", value: d.widgetId, format: "text" },
+          { label: "Widgets", value: db.widgetCount, format: "number" },
+        ],
+      })
+      return { root, elements }
+    }
+
+    case "update_dashboard_widget": {
+      const d = output.data
+      const db = d.dashboard
+      const root = addElement(elements, "StatCards", {
+        cards: [
+          { label: "Dashboard", value: db.name, format: "text" },
+          { label: "Updated Widget", value: d.widgetId, format: "text" },
+          { label: "Widgets", value: db.widgetCount, format: "number" },
+        ],
+      })
+      return { root, elements }
+    }
+
+    case "remove_dashboard_widget": {
+      const d = output.data
+      const db = d.dashboard
+      const root = addElement(elements, "StatCards", {
+        cards: [
+          { label: "Dashboard", value: db.name, format: "text" },
+          { label: "Removed Widget", value: d.removedWidgetId, format: "text" },
+          { label: "Widgets", value: db.widgetCount, format: "number" },
+        ],
+      })
+      return { root, elements }
+    }
+
+    case "reorder_dashboard_widgets": {
+      const d = output.data
+      const db = d.dashboard
+      const root = addElement(elements, "StatCards", {
+        cards: [
+          { label: "Dashboard", value: db.name, format: "text" },
+          { label: "Reordered", value: d.updatedWidgetIds.length, format: "number" },
+          { label: "Widgets", value: db.widgetCount, format: "number" },
+        ],
+      })
+      return { root, elements }
+    }
+
     case "get_incident_timeline": {
       const d = output.data
       const headers = ["Rule", "Severity", "Status", "Signal", "Value", "Triggered"]

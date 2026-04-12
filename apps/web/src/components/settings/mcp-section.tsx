@@ -29,10 +29,12 @@ function generateConfig(
   client: "claude-code" | "cursor" | "windsurf" | "other",
   apiKey: string,
 ) {
-  const urlKey = client === "windsurf" ? "serverUrl" : "url"
+  const isWindsurf = client === "windsurf"
+  const urlKey = isWindsurf ? "serverUrl" : "url"
   const config = {
     mcpServers: {
       maple: {
+        ...(isWindsurf ? {} : { type: "http" }),
         [urlKey]: mcpEndpoint,
         headers: {
           Authorization: `Bearer ${apiKey}`,

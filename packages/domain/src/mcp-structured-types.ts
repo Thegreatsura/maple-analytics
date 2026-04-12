@@ -345,6 +345,26 @@ export interface UpdateDashboardData {
   dashboard: DashboardRow
 }
 
+export interface AddDashboardWidgetData {
+  dashboard: DashboardRow
+  widgetId: string
+}
+
+export interface UpdateDashboardWidgetData {
+  dashboard: DashboardRow
+  widgetId: string
+}
+
+export interface RemoveDashboardWidgetData {
+  dashboard: DashboardRow
+  removedWidgetId: string
+}
+
+export interface ReorderDashboardWidgetsData {
+  dashboard: DashboardRow
+  updatedWidgetIds: string[]
+}
+
 // ---------------------------------------------------------------------------
 // Compare periods types
 // ---------------------------------------------------------------------------
@@ -530,6 +550,10 @@ export type StructuredToolOutput =
   | { tool: "get_dashboard"; data: GetDashboardData }
   | { tool: "create_dashboard"; data: CreateDashboardData }
   | { tool: "update_dashboard"; data: UpdateDashboardData }
+  | { tool: "add_dashboard_widget"; data: AddDashboardWidgetData }
+  | { tool: "update_dashboard_widget"; data: UpdateDashboardWidgetData }
+  | { tool: "remove_dashboard_widget"; data: RemoveDashboardWidgetData }
+  | { tool: "reorder_dashboard_widgets"; data: ReorderDashboardWidgetsData }
   | { tool: "compare_periods"; data: ComparePeriodsData }
   | { tool: "explore_attributes"; data: ExploreAttributesData }
   | { tool: "list_services"; data: ListServicesData }

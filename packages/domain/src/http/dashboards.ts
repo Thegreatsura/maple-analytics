@@ -18,7 +18,7 @@ const TimeRangeSchema = Schema.Union([
 const UnknownRecord = Schema.Record(Schema.String, Schema.Unknown)
 const StringRecord = Schema.Record(Schema.String, Schema.String)
 
-const WidgetDataSourceSchema = Schema.Struct({
+export const WidgetDataSourceSchema = Schema.Struct({
   endpoint: Schema.String,
   params: Schema.optional(UnknownRecord),
   transform: Schema.optional(
@@ -65,7 +65,7 @@ const WidgetDisplayColumnSchema = Schema.Struct({
   align: Schema.optional(Schema.String),
 })
 
-const WidgetDisplayConfigSchema = Schema.Struct({
+export const WidgetDisplayConfigSchema = Schema.Struct({
   title: Schema.optional(Schema.String),
   description: Schema.optional(Schema.String),
   chartId: Schema.optional(Schema.String),
@@ -121,7 +121,7 @@ const WidgetDisplayConfigSchema = Schema.Struct({
   listLimit: Schema.optional(Schema.Number),
 })
 
-const WidgetLayoutSchema = Schema.Struct({
+export const WidgetLayoutSchema = Schema.Struct({
   x: Schema.Number,
   y: Schema.Number,
   w: Schema.Number,
@@ -132,7 +132,7 @@ const WidgetLayoutSchema = Schema.Struct({
   maxH: Schema.optional(Schema.Number),
 })
 
-const DashboardWidgetSchema = Schema.Struct({
+export const DashboardWidgetSchema = Schema.Struct({
   id: Schema.String,
   visualization: Schema.String,
   dataSource: WidgetDataSourceSchema,
