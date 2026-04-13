@@ -26,7 +26,12 @@ export type RuleFormState = {
   severity: AlertSeverity
   serviceNames: string[]
   excludeServiceNames: string[]
-  groupBy: "service" | null
+  /**
+   * Group-by dimensions to evaluate the rule per-group. Stored as the
+   * dashboard-style tokens (e.g. `service.name`, `span.name`,
+   * `attr.http.route`). Empty array means ungrouped.
+   */
+  groupBy: string[]
   signalType: AlertSignalType
   comparator: AlertComparator
   threshold: string
@@ -143,7 +148,7 @@ export function defaultRuleForm(serviceName?: string): RuleFormState {
     severity: "warning",
     serviceNames: serviceName ? [serviceName] : [],
     excludeServiceNames: [],
-    groupBy: null,
+    groupBy: [],
     signalType: "error_rate",
     comparator: "gt",
     threshold: "5",
@@ -168,9 +173,9 @@ export function ruleToFormState(rule: AlertRuleDocument): RuleFormState {
     name: rule.name,
     enabled: rule.enabled,
     severity: rule.severity,
-    serviceNames: rule.serviceNames?.length > 0 ? [...rule.serviceNames] : (rule.serviceName ? [rule.serviceName] : []),
+    serviceNames: rule.serviceNames?.length > 0 ? [...rule.serviceNames] : [],
     excludeServiceNames: rule.excludeServiceNames?.length > 0 ? [...rule.excludeServiceNames] : [],
-    groupBy: rule.groupBy ?? null,
+    groupBy: rule.groupBy ? [...rule.groupBy] : [],
     signalType: rule.signalType,
     comparator: rule.comparator,
     threshold: String(rule.threshold),
@@ -198,8 +203,7 @@ export function buildRuleRequest(form: RuleFormState): AlertRuleUpsertRequest {
     severity: form.severity,
     serviceNames: form.serviceNames.filter((s) => s.trim().length > 0),
     excludeServiceNames: form.excludeServiceNames.filter((s) => s.trim().length > 0),
-    serviceName: form.serviceNames.length === 1 ? form.serviceNames[0] : null,
-    groupBy: form.groupBy,
+    groupBy: form.groupBy.length > 0 ? form.groupBy : null,
     signalType,
     comparator: form.comparator,
     threshold: Number(form.threshold),
@@ -394,7 +398,6 @@ export function buildRuleToggleRequest(rule: AlertRuleDocument): AlertRuleUpsert
   return new AlertRuleUpsertRequest({
     ...rule,
     enabled: !rule.enabled,
-    serviceName: rule.serviceName ?? null,
     serviceNames: rule.serviceNames?.length > 0 ? [...rule.serviceNames] : undefined,
     excludeServiceNames: rule.excludeServiceNames?.length > 0 ? [...rule.excludeServiceNames] : undefined,
     metricName: rule.metricName ?? null,
@@ -426,12 +429,12 @@ export function computeIncidentStats(incidents: AlertIncidentDocument[]) {
       : `${(avgResolutionMs / 3_600_000).toFixed(1)}h`
     : "—"
 
-  const serviceCounts: Record<string, number> = {}
+  const groupCounts: Record<string, number> = {}
   for (const i of incidents) {
-    const svc = i.serviceName ?? "unknown"
-    serviceCounts[svc] = (serviceCounts[svc] ?? 0) + 1
+    const groupKey = i.groupKey ?? "all"
+    groupCounts[groupKey] = (groupCounts[groupKey] ?? 0) + 1
   }
-  const topContributors = Object.entries(serviceCounts)
+  const topContributors = Object.entries(groupCounts)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 5)
 

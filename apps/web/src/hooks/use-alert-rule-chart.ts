@@ -19,8 +19,11 @@ export function useAlertRuleChart(form: RuleFormState) {
   const queryParams = useMemo(() => signalToQueryParams(form), [form])
 
   const chartGroupBy = useMemo(
-    () => form.serviceNames.length > 1 || (form.serviceNames.length === 0 && form.groupBy === "service")
-      ? "service" as const : "none" as const,
+    () =>
+      form.serviceNames.length > 1 ||
+      (form.serviceNames.length === 0 && form.groupBy.length > 0)
+        ? "service" as const
+        : "none" as const,
     [form.serviceNames.length, form.groupBy],
   )
 

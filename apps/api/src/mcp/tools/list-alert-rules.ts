@@ -23,14 +23,14 @@ export function registerListAlertRulesTool(server: McpToolRegistrar) {
     "list_alert_rules",
     "List configured alert rules with their severity, signal type, and condition. Use list_alert_incidents to see triggered alerts.",
     Schema.Struct({
-      service_name: optionalStringParam("Filter rules by service name"),
+      service_names: optionalStringParam("Filter rules by one or more comma-separated service names"),
       signal_type: optionalStringParam(
         "Filter by signal type: error_rate, p95_latency, p99_latency, apdex, throughput, metric, query",
       ),
       severity: optionalStringParam("Filter by severity: warning, critical"),
       enabled_only: optionalBooleanParam("Only return enabled rules (default: false)"),
     }),
-    Effect.fn("McpTool.listAlertRules")(function* ({ service_name, signal_type, severity, enabled_only }) {
+    Effect.fn("McpTool.listAlertRules")(function* ({ service_names, signal_type, severity, enabled_only }) {
         const tenant = yield* resolveTenant
         const alerts = yield* AlertsService
 
@@ -46,11 +46,10 @@ export function registerListAlertRulesTool(server: McpToolRegistrar) {
 
         let rules = result.rules
 
-        if (service_name) {
+        if (service_names) {
+          const filters = service_names.split(",").map((s) => s.trim()).filter((s) => s.length > 0)
           rules = rules.filter(
-            (r) =>
-              r.serviceName === service_name ||
-              r.serviceNames.includes(service_name),
+            (r) => filters.some((serviceName) => r.serviceNames.includes(serviceName)),
           )
         }
         if (signal_type) {
@@ -98,7 +97,7 @@ export function registerListAlertRulesTool(server: McpToolRegistrar) {
                 name: r.name,
                 enabled: r.enabled,
                 severity: r.severity,
-                serviceName: r.serviceName,
+                serviceNames: [...r.serviceNames],
                 signalType: r.signalType,
                 comparator: r.comparator,
                 threshold: r.threshold,

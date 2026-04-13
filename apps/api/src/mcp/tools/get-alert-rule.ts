@@ -66,16 +66,14 @@ export function registerGetAlertRuleTool(server: McpToolRegistrar) {
         lines.push(`### Scope`)
         if (rule.serviceNames.length > 0) {
           lines.push(`Service Names: ${rule.serviceNames.join(", ")}`)
-        } else if (rule.serviceName) {
-          lines.push(`Service: ${rule.serviceName}`)
         } else {
-          lines.push(`Service: All services`)
+          lines.push(`Service Names: All services`)
         }
         if (rule.excludeServiceNames.length > 0) {
           lines.push(`Exclude: ${rule.excludeServiceNames.join(", ")}`)
         }
-        if (rule.groupBy) {
-          lines.push(`Group By: ${rule.groupBy}`)
+        if (rule.groupBy && rule.groupBy.length > 0) {
+          lines.push(`Group By: ${rule.groupBy.join(", ")}`)
         }
         lines.push(``)
 
@@ -120,7 +118,7 @@ export function registerGetAlertRuleTool(server: McpToolRegistrar) {
 
         lines.push(formatNextSteps([
           '`list_alert_incidents` — see triggered alerts for this rule',
-          '`diagnose_service` — investigate the service this rule monitors',
+          '`get_incident_timeline rule_id="<id>"` — inspect incident history for this rule',
         ]))
 
         return {
@@ -132,10 +130,9 @@ export function registerGetAlertRuleTool(server: McpToolRegistrar) {
                 name: rule.name,
                 enabled: rule.enabled,
                 severity: rule.severity,
-                serviceName: rule.serviceName,
                 serviceNames: [...rule.serviceNames],
                 excludeServiceNames: [...rule.excludeServiceNames],
-                groupBy: rule.groupBy,
+                groupBy: rule.groupBy ? [...rule.groupBy] : null,
                 signalType: rule.signalType,
                 comparator: rule.comparator,
                 threshold: rule.threshold,

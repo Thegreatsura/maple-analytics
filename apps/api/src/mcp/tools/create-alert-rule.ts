@@ -77,7 +77,7 @@ interface CreateAlertRuleParams {
   window_minutes?: number
   destination_ids: string
   template?: string
-  service_name?: string
+  service_names?: string
   enabled?: boolean
   group_by?: string
   minimum_sample_count?: number
@@ -158,8 +158,14 @@ function buildAlertRuleRequest(
   }
 
   if (params.enabled !== undefined) request.enabled = params.enabled
-  if (params.service_name) request.serviceName = params.service_name
-  if (params.group_by) request.groupBy = params.group_by
+  if (params.service_names) request.serviceNames = splitCsv(params.service_names)
+  if (params.group_by) {
+    const dimensions = String(params.group_by)
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+    if (dimensions.length > 0) request.groupBy = dimensions
+  }
   if (params.minimum_sample_count !== undefined)
     request.minimumSampleCount = params.minimum_sample_count
   if (params.consecutive_breaches !== undefined)
@@ -215,7 +221,7 @@ export function registerCreateAlertRuleTool(server: McpToolRegistrar) {
         "Threshold value (overrides template default). E.g. 0.05 for 5% error rate, 1000 for 1s latency",
       ),
       window_minutes: optionalNumberParam("Evaluation window in minutes (default: 5)"),
-      service_name: optionalStringParam("Scope the alert to a specific service"),
+      service_names: optionalStringParam("Comma-separated service names to scope the alert to"),
       enabled: optionalBooleanParam("Whether the rule is enabled (default: true)"),
       // Custom-mode params (used when template is 'custom' or omitted)
       signal_type: optionalStringParam(
@@ -224,7 +230,9 @@ export function registerCreateAlertRuleTool(server: McpToolRegistrar) {
       comparator: optionalStringParam(
         "Comparison operator (for custom): gt (>), gte (>=), lt (<), lte (<=)",
       ),
-      group_by: optionalStringParam("Group by dimension: service"),
+      group_by: optionalStringParam(
+        "Comma-separated dimensions to evaluate the alert per-group. Built-in tokens: service.name, span.name, status.code, http.method, severity. Attribute keys (traces/metrics): attr.<key>. Examples: 'service.name', 'service.name,attr.http.route'.",
+      ),
       minimum_sample_count: optionalNumberParam(
         "Minimum sample count before evaluating (default: 0)",
       ),
@@ -303,8 +311,8 @@ export function registerCreateAlertRuleTool(server: McpToolRegistrar) {
           `Destinations: ${rule.destinationIds.length}`,
         ]
 
-        if (rule.serviceName) {
-          lines.splice(3, 0, `Service: ${rule.serviceName}`)
+        if (rule.serviceNames.length > 0) {
+          lines.splice(3, 0, `Service Names: ${rule.serviceNames.join(", ")}`)
         }
 
         return {
@@ -316,7 +324,7 @@ export function registerCreateAlertRuleTool(server: McpToolRegistrar) {
                 name: rule.name,
                 enabled: rule.enabled,
                 severity: rule.severity,
-                serviceName: rule.serviceName,
+                serviceNames: [...rule.serviceNames],
                 signalType: rule.signalType,
                 comparator: rule.comparator,
                 threshold: rule.threshold,

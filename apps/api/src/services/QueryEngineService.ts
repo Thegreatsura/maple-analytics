@@ -2,10 +2,8 @@ import {
   type QueryEngineAlertObservation,
   type QueryEngineAlertReducer,
   type QueryEngineEvaluateRequest,
-  QueryEngineEvaluateResponse,
   type QueryEngineExecuteRequest,
   QueryEngineExecuteResponse,
-  type QueryEngineSampleCountStrategy,
   type QuerySpec,
   type TimeseriesPoint,
   CH,
@@ -61,17 +59,15 @@ export interface QueryEngineServiceShape {
     QueryEngineExecuteResponse,
     QueryEngineValidationError | QueryEngineExecutionError | QueryEngineTimeoutError
   >
+  /**
+   * Evaluate an alert query and return one observation per group. When the
+   * spec has no group-by (or `groupBy = ["none"]`) the result is a length-1
+   * array with `groupKey = "all"`. The reducer collapses each group's bucket
+   * series down to a scalar value.
+   */
   readonly evaluate: (
     tenant: TenantContext,
     request: QueryEngineEvaluateRequest,
-  ) => Effect.Effect<
-    QueryEngineEvaluateResponse,
-    QueryEngineValidationError | QueryEngineExecutionError | QueryEngineTimeoutError
-  >
-  readonly evaluateGrouped: (
-    tenant: TenantContext,
-    request: QueryEngineEvaluateRequest,
-    groupBy: "service",
   ) => Effect.Effect<
     ReadonlyArray<GroupedAlertObservation>,
     QueryEngineValidationError | QueryEngineExecutionError | QueryEngineTimeoutError
@@ -115,10 +111,6 @@ function buildCacheKey(orgId: string, request: QueryEngineExecuteRequest): strin
 
 function buildEvaluateCacheKey(orgId: string, request: QueryEngineEvaluateRequest): string {
   return `eval:${orgId}:${snapSeconds(request.startTime)}:${snapSeconds(request.endTime)}:${request.reducer}:${request.sampleCountStrategy}:${JSON.stringify(request.query)}`
-}
-
-function buildEvaluateGroupedCacheKey(orgId: string, request: QueryEngineEvaluateRequest, groupBy: string): string {
-  return `evalg:${orgId}:${snapSeconds(request.startTime)}:${snapSeconds(request.endTime)}:${request.reducer}:${request.sampleCountStrategy}:${groupBy}:${JSON.stringify(request.query)}`
 }
 
 const computeBucketSeconds = (startMs: number, endMs: number): number => {
@@ -587,12 +579,6 @@ const applyAlertReducer = (
   )
 }
 
-const sampleCountForStrategy = (
-  _strategy: QueryEngineSampleCountStrategy,
-  observations: ReadonlyArray<AlertObservation>,
-): number =>
-  observations.reduce((sum, observation) => sum + Number(observation.sampleCount), 0)
-
 /** Map query engine source/scope to the MV's AttributeScope value. */
 function resolveAttributeScope(
   source: "traces" | "logs" | "metrics",
@@ -704,22 +690,6 @@ function shapeMetricsGroupRows<T extends { bucket: string | Date; serviceName: s
     rows.map((row) => ({ bucket: row.bucket, groupName: row.serviceName, value: valueExtractor(row) })),
     (r) => r.value,
     fillOptions,
-  )
-}
-
-const isScalarAlertQuery = (
-  query: QuerySpec,
-): query is Extract<QuerySpec, { kind: "timeseries"; source: "traces" | "logs" | "metrics" }> => {
-  if (query.kind !== "timeseries") {
-    return false
-  }
-
-  if (query.source !== "traces" && query.source !== "metrics" && query.source !== "logs") {
-    return false
-  }
-
-  return query.groupBy == null || query.groupBy.length === 0 || (
-    query.groupBy.length === 1 && query.groupBy[0] === "none"
   )
 }
 
@@ -1255,12 +1225,54 @@ export const makeQueryEngineExecute = (tinybird: QueryEngineTinybird) =>
     })
   })
 
+/**
+ * Reduce per-bucket observations into a single GroupedAlertObservation per
+ * group. Used by the unified alert `evaluate` path which executes the same
+ * dashboard timeseries queries that widgets use, then collapses each group's
+ * bucket series with the configured reducer.
+ */
+const reducePerGroupObservations = (
+  byGroup: Map<string, Array<{ value: number | null; sampleCount: number; hasData: boolean }>>,
+  reducer: QueryEngineAlertReducer,
+): ReadonlyArray<GroupedAlertObservation> => {
+  const result: Array<GroupedAlertObservation> = []
+  for (const [groupKey, observations] of byGroup.entries()) {
+    const reducedValue = applyAlertReducer(observations, reducer)
+    const totalSampleCount = observations.reduce((sum, o) => sum + Number(o.sampleCount), 0)
+    const hasData = observations.some((o) => o.hasData)
+    result.push({
+      groupKey,
+      value: reducedValue,
+      sampleCount: totalSampleCount,
+      hasData,
+    })
+  }
+  return result
+}
+
+/** Compose a JS-side composite group key for metrics, which doesn't emit groupName from SQL. */
+const composeMetricsGroupKey = (
+  groupBy: ReadonlyArray<string> | undefined,
+  serviceName: string,
+  attributeValue: string,
+): string => {
+  if (!groupBy || groupBy.length === 0 || groupBy.includes("none")) return "all"
+  const parts: string[] = []
+  for (const dim of groupBy) {
+    if (dim === "service") parts.push(serviceName || "")
+    else if (dim === "attribute") parts.push(attributeValue || "")
+  }
+  const filtered = parts.filter((p) => p.length > 0)
+  if (filtered.length === 0) return "all"
+  return filtered.join(" \u00b7 ")
+}
+
 export const makeQueryEngineEvaluate = (tinybird: QueryEngineTinybird) =>
   Effect.fn("QueryEngineService.evaluate")(function* (
     tenant: TenantContext,
     request: QueryEngineEvaluateRequest,
   ): Effect.fn.Return<
-    QueryEngineEvaluateResponse,
+    ReadonlyArray<GroupedAlertObservation>,
     QueryEngineValidationError | QueryEngineExecutionError
   > {
     yield* Effect.annotateCurrentSpan("orgId", tenant.orgId)
@@ -1270,121 +1282,11 @@ export const makeQueryEngineEvaluate = (tinybird: QueryEngineTinybird) =>
     if ("metric" in request.query && request.query.metric) {
       yield* Effect.annotateCurrentSpan("query.metric", request.query.metric)
     }
-
-    yield* validateEvaluate(request)
-
-    if (!isScalarAlertQuery(request.query)) {
-      return yield* new QueryEngineValidationError({
-        message: "Unsupported alert evaluation query",
-        details: [
-          "Alert evaluation currently supports collapsed traces, logs, and metrics timeseries queries only",
-        ],
-      })
-    }
-
-    let observations: ReadonlyArray<AlertObservation>
-
-    if (request.query.source === "traces") {
-      const opts = extractTracesOpts(request.query.filters as Record<string, unknown>)
-      const rows = yield* executeCHQuery(
-        tinybird,
-        tenant,
-        CH.alertTracesAggregateQuery({
-          ...opts,
-          apdexThresholdMs: request.query.metric === "apdex" ? request.query.apdexThresholdMs : undefined,
-        }),
-        { orgId: tenant.orgId, startTime: request.startTime, endTime: request.endTime },
-        "Failed to evaluate traces alert query",
+    if ("groupBy" in request.query && request.query.groupBy) {
+      yield* Effect.annotateCurrentSpan(
+        "query.groupBy",
+        (request.query.groupBy as ReadonlyArray<string>).join(","),
       )
-
-      const row = rows[0]
-      const sampleCount = Number(row?.count ?? 0)
-      observations = [{
-        value:
-          sampleCount > 0 && row
-            ? tracesAggregateValueForMetric(request.query.metric, row)
-            : null,
-        sampleCount,
-        hasData: sampleCount > 0,
-      }]
-    } else if (request.query.source === "logs") {
-      const rows = yield* executeCHQuery(
-        tinybird,
-        tenant,
-        CH.alertLogsAggregateQuery({
-          serviceName: request.query.filters?.serviceName,
-          severity: request.query.filters?.severity,
-        }),
-        { orgId: tenant.orgId, startTime: request.startTime, endTime: request.endTime },
-        "Failed to evaluate logs alert query",
-      )
-
-      const row = rows[0]
-      const sampleCount = Number(row?.count ?? 0)
-      observations = [{
-        value: sampleCount > 0 ? sampleCount : null,
-        sampleCount,
-        hasData: sampleCount > 0,
-      }]
-    } else {
-      const rows = yield* executeCHQuery(
-        tinybird,
-        tenant,
-        CH.alertMetricsAggregateQuery({
-          metricType: request.query.filters.metricType,
-          serviceName: request.query.filters.serviceName,
-        }),
-        {
-          orgId: tenant.orgId,
-          metricName: request.query.filters.metricName,
-          startTime: request.startTime,
-          endTime: request.endTime,
-        },
-        "Failed to evaluate metrics alert query",
-      )
-
-      const row = rows[0]
-      const sampleCount = Number(row?.dataPointCount ?? 0)
-      observations = [{
-        value:
-          sampleCount > 0 && row
-            ? metricsAggregateValueForMetric(request.query.metric, row)
-            : null,
-        sampleCount,
-        hasData: sampleCount > 0,
-      }]
-    }
-
-    const reducedValue = applyAlertReducer(observations, request.reducer)
-    yield* Effect.annotateCurrentSpan("result.value", String(reducedValue ?? "null"))
-    yield* Effect.annotateCurrentSpan("result.hasData", observations.some((o) => o.hasData))
-    yield* Effect.annotateCurrentSpan("result.observationCount", observations.length)
-
-    return new QueryEngineEvaluateResponse({
-      value: reducedValue,
-      sampleCount: sampleCountForStrategy(request.sampleCountStrategy, observations),
-      hasData: observations.some((observation) => observation.hasData),
-      reason: `Reduced ${observations.length} observation(s) with ${request.reducer}`,
-      reducer: request.reducer,
-      observations,
-    })
-  })
-
-export const makeQueryEngineEvaluateGrouped = (tinybird: QueryEngineTinybird) =>
-  Effect.fn("QueryEngineService.evaluateGrouped")(function* (
-    tenant: TenantContext,
-    request: QueryEngineEvaluateRequest,
-    groupBy: "service",
-  ): Effect.fn.Return<
-    ReadonlyArray<GroupedAlertObservation>,
-    QueryEngineValidationError | QueryEngineExecutionError
-  > {
-    yield* Effect.annotateCurrentSpan("orgId", tenant.orgId)
-    yield* Effect.annotateCurrentSpan("query.source", request.query.source)
-    yield* Effect.annotateCurrentSpan("query.kind", request.query.kind)
-    yield* Effect.annotateCurrentSpan("query.groupBy", groupBy)
-    if ("metric" in request.query && request.query.metric) {
-      yield* Effect.annotateCurrentSpan("query.metric", request.query.metric)
     }
 
     yield* validateEvaluate(request)
@@ -1396,85 +1298,126 @@ export const makeQueryEngineEvaluateGrouped = (tinybird: QueryEngineTinybird) =>
         request.query.source !== "logs")
     ) {
       return yield* new QueryEngineValidationError({
-        message: "Unsupported grouped alert evaluation query",
-        details: ["Grouped alert evaluation supports traces, logs, and metrics timeseries queries only"],
+        message: "Unsupported alert evaluation query",
+        details: ["Alert evaluation supports traces, logs, and metrics timeseries queries only"],
       })
     }
 
-    if (groupBy === "service") {
-      if (request.query.source === "traces") {
-        const tracesQuery = request.query as Extract<QuerySpec, { source: "traces"; metric: string }>
-        const opts = extractTracesOpts(request.query.filters as Record<string, unknown>)
-        const rows = yield* executeCHQuery(
-          tinybird,
-          tenant,
-          CH.alertTracesAggregateByServiceQuery({
-            ...opts,
-            apdexThresholdMs: tracesQuery.metric === "apdex" ? tracesQuery.apdexThresholdMs : undefined,
-          }),
-          { orgId: tenant.orgId, startTime: request.startTime, endTime: request.endTime },
-          "Failed to evaluate grouped traces alert query",
-        )
+    // Use the spec's bucketSeconds when present, otherwise auto-compute from
+    // the time range — same as the dashboard execute path.
+    const startMs = toEpochMs(request.startTime)
+    const endMs = toEpochMs(request.endTime)
+    const bucketSeconds = request.query.bucketSeconds ?? computeBucketSeconds(startMs, endMs)
 
-        return rows.map((row) => {
-          const sampleCount = Number(row.count ?? 0)
-          return {
-            groupKey: row.serviceName,
-            value: sampleCount > 0 ? tracesAggregateValueForMetric(tracesQuery.metric, row) : null,
-            sampleCount,
-            hasData: sampleCount > 0,
-          }
+    const byGroup = new Map<string, Array<{ value: number | null; sampleCount: number; hasData: boolean }>>()
+    const pushObs = (
+      groupKey: string,
+      obs: { value: number | null; sampleCount: number; hasData: boolean },
+    ) => {
+      const list = byGroup.get(groupKey)
+      if (list) list.push(obs)
+      else byGroup.set(groupKey, [obs])
+    }
+
+    if (request.query.source === "traces") {
+      const tracesQuery = request.query
+      const opts = extractTracesOpts(request.query.filters as Record<string, unknown>)
+      const rows = yield* executeCHQuery(
+        tinybird,
+        tenant,
+        CH.tracesTimeseriesQuery({
+          ...opts,
+          metric: tracesQuery.metric,
+          needsSampling: false,
+          groupBy: tracesQuery.groupBy as readonly string[] | undefined,
+          apdexThresholdMs: tracesQuery.metric === "apdex" ? tracesQuery.apdexThresholdMs : undefined,
+        }),
+        { orgId: tenant.orgId, startTime: request.startTime, endTime: request.endTime, bucketSeconds },
+        "Failed to evaluate traces alert query",
+      )
+
+      for (const row of rows) {
+        const sampleCount = Number(row.count ?? 0)
+        const value = sampleCount > 0 ? tracesAggregateValueForMetric(tracesQuery.metric, row) : null
+        pushObs(row.groupName || "all", {
+          value,
+          sampleCount,
+          hasData: sampleCount > 0,
         })
-      } else if (request.query.source === "logs") {
-        const rows = yield* executeCHQuery(
-          tinybird,
-          tenant,
-          CH.alertLogsAggregateByServiceQuery({
-            severity: request.query.filters?.severity,
-          }),
-          { orgId: tenant.orgId, startTime: request.startTime, endTime: request.endTime },
-          "Failed to evaluate grouped logs alert query",
-        )
+      }
+    } else if (request.query.source === "logs") {
+      const logsQuery = request.query
+      const rows = yield* executeCHQuery(
+        tinybird,
+        tenant,
+        CH.logsTimeseriesQuery({
+          serviceName: request.query.filters?.serviceName,
+          severity: request.query.filters?.severity,
+          groupBy: logsQuery.groupBy as readonly string[] | undefined,
+        }),
+        { orgId: tenant.orgId, startTime: request.startTime, endTime: request.endTime, bucketSeconds },
+        "Failed to evaluate logs alert query",
+      )
 
-        return rows.map((row) => {
-          const sampleCount = Number(row.count ?? 0)
-          return {
-            groupKey: row.serviceName,
-            value: sampleCount > 0 ? sampleCount : null,
-            sampleCount,
-            hasData: sampleCount > 0,
-          }
+      for (const row of rows) {
+        const sampleCount = Number(row.count ?? 0)
+        pushObs(row.groupName || "all", {
+          value: sampleCount > 0 ? sampleCount : null,
+          sampleCount,
+          hasData: sampleCount > 0,
         })
-      } else {
-        const metricsQuery = request.query as Extract<QuerySpec, { source: "metrics" }>
-        const rows = yield* executeCHQuery(
-          tinybird,
-          tenant,
-          CH.alertMetricsAggregateByServiceQuery({
-            metricType: metricsQuery.filters.metricType,
-          }),
-          {
-            orgId: tenant.orgId,
-            metricName: metricsQuery.filters.metricName,
-            startTime: request.startTime,
-            endTime: request.endTime,
-          },
-          "Failed to evaluate grouped metrics alert query",
-        )
+      }
+    } else {
+      const metricsQuery = request.query
+      const groupByAttribute = metricsQuery.groupBy?.includes("attribute")
+      const groupByAttributeKey = groupByAttribute
+        ? metricsQuery.filters.groupByAttributeKey
+        : undefined
 
-        return rows.map((row) => {
-          const sampleCount = Number(row.dataPointCount ?? 0)
-          return {
-            groupKey: row.serviceName,
-            value: sampleCount > 0 ? metricsAggregateValueForMetric(metricsQuery.metric, row) : null,
-            sampleCount,
-            hasData: sampleCount > 0,
-          }
+      const rows = yield* executeCHQuery(
+        tinybird,
+        tenant,
+        CH.metricsTimeseriesQuery({
+          metricType: metricsQuery.filters.metricType,
+          serviceName: metricsQuery.filters.serviceName,
+          groupByAttributeKey,
+        }),
+        {
+          orgId: tenant.orgId,
+          metricName: metricsQuery.filters.metricName,
+          startTime: request.startTime,
+          endTime: request.endTime,
+          bucketSeconds,
+        },
+        "Failed to evaluate metrics alert query",
+      )
+
+      for (const row of rows) {
+        const sampleCount = Number(row.dataPointCount ?? 0)
+        const value = sampleCount > 0 ? metricsAggregateValueForMetric(metricsQuery.metric, row) : null
+        const groupKey = composeMetricsGroupKey(
+          metricsQuery.groupBy as readonly string[] | undefined,
+          row.serviceName ?? "",
+          row.attributeValue ?? "",
+        )
+        pushObs(groupKey, {
+          value,
+          sampleCount,
+          hasData: sampleCount > 0,
         })
       }
     }
 
-    return []
+    // When the query is ungrouped (or returned no rows) ensure we still emit
+    // a single "all" observation with hasData=false so the alert engine can
+    // apply its no-data behavior.
+    if (byGroup.size === 0) {
+      byGroup.set("all", [{ value: null, sampleCount: 0, hasData: false }])
+    }
+
+    const result = reducePerGroupObservations(byGroup, request.reducer)
+    yield* Effect.annotateCurrentSpan("result.groupCount", result.length)
+    return result
   })
 
 export class QueryEngineService extends Context.Service<QueryEngineService, QueryEngineServiceShape>()("QueryEngineService", {
@@ -1482,7 +1425,6 @@ export class QueryEngineService extends Context.Service<QueryEngineService, Quer
     const tinybird = yield* TinybirdService
     const executeImpl = makeQueryEngineExecute(tinybird)
     const evaluate = makeQueryEngineEvaluate(tinybird)
-    const evaluateGrouped = makeQueryEngineEvaluateGrouped(tinybird)
 
     // --- Execute cache ---
     const pendingExecute = MutableHashMap.empty<string, { tenant: TenantContext; request: QueryEngineExecuteRequest }>()
@@ -1506,7 +1448,7 @@ export class QueryEngineService extends Context.Service<QueryEngineService, Quer
     const pendingEvaluate = MutableHashMap.empty<string, { tenant: TenantContext; request: QueryEngineEvaluateRequest }>()
     const evaluateCache = yield* Cache.make<
       string,
-      QueryEngineEvaluateResponse,
+      ReadonlyArray<GroupedAlertObservation>,
       QueryEngineValidationError | QueryEngineExecutionError | QueryEngineTimeoutError
     >({
       capacity: 64,
@@ -1515,22 +1457,6 @@ export class QueryEngineService extends Context.Service<QueryEngineService, Quer
         const ctx = MutableHashMap.get(pendingEvaluate, key)
         if (Option.isNone(ctx)) return Effect.die(`No pending evaluate context for cache key: ${key}`)
         return evaluate(ctx.value.tenant, ctx.value.request)
-      },
-    })
-
-    // --- EvaluateGrouped cache ---
-    const pendingEvaluateGrouped = MutableHashMap.empty<string, { tenant: TenantContext; request: QueryEngineEvaluateRequest; groupBy: "service" }>()
-    const evaluateGroupedCache = yield* Cache.make<
-      string,
-      ReadonlyArray<GroupedAlertObservation>,
-      QueryEngineValidationError | QueryEngineExecutionError | QueryEngineTimeoutError
-    >({
-      capacity: 64,
-      timeToLive: "30 seconds",
-      lookup: (key) => {
-        const ctx = MutableHashMap.get(pendingEvaluateGrouped, key)
-        if (Option.isNone(ctx)) return Effect.die(`No pending evaluateGrouped context for cache key: ${key}`)
-        return evaluateGrouped(ctx.value.tenant, ctx.value.request, ctx.value.groupBy)
       },
     })
 
@@ -1559,16 +1485,6 @@ export class QueryEngineService extends Context.Service<QueryEngineService, Quer
             MutableHashMap.set(pendingEvaluate, key, { tenant, request })
             return yield* Cache.get(evaluateCache, key)
           }).pipe(Effect.withSpan("QueryEngineService.cachedEvaluate", {
-            attributes: { orgId: tenant.orgId },
-          })),
-        ),
-      evaluateGrouped: (tenant, request, groupBy) =>
-        withTimeout(
-          Effect.gen(function* () {
-            const key = buildEvaluateGroupedCacheKey(tenant.orgId, request, groupBy)
-            MutableHashMap.set(pendingEvaluateGrouped, key, { tenant, request, groupBy })
-            return yield* Cache.get(evaluateGroupedCache, key)
-          }).pipe(Effect.withSpan("QueryEngineService.cachedEvaluateGrouped", {
             attributes: { orgId: tenant.orgId },
           })),
         ),

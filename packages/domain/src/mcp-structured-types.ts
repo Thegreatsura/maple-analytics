@@ -248,7 +248,7 @@ export interface AlertRuleRow {
   name: string
   enabled: boolean
   severity: string
-  serviceName: string | null
+  serviceNames: string[]
   signalType: string
   comparator: string
   threshold: number
@@ -270,7 +270,7 @@ export interface CreateAlertRuleData {
 export interface AlertRuleDetailRow extends AlertRuleRow {
   serviceNames: string[]
   excludeServiceNames: string[]
-  groupBy: string | null
+  groupBy: string[] | null
   minimumSampleCount: number
   consecutiveBreachesRequired: number
   consecutiveHealthyRequired: number
@@ -296,7 +296,7 @@ export interface AlertIncidentRow {
   id: string
   ruleId: string
   ruleName: string
-  serviceName: string | null
+  groupKey: string | null
   signalType: string
   severity: string
   status: string
@@ -434,7 +434,7 @@ export interface IncidentTimelineRow {
   id: string
   ruleId: string
   ruleName: string
-  serviceName: string | null
+  groupKey: string | null
   signalType: string
   severity: string
   status: string

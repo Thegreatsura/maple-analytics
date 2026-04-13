@@ -247,21 +247,7 @@ export {
   type ServiceDependenciesOutput,
 } from "./queries/service-map"
 
-// Queries — Alerts
-export {
-  alertTracesAggregateQuery,
-  alertTracesAggregateByServiceQuery,
-  alertMetricsAggregateQuery,
-  alertMetricsAggregateByServiceQuery,
-  alertLogsAggregateQuery,
-  alertLogsAggregateByServiceQuery,
-  type AlertTracesOpts,
-  type AlertTracesAggregateOutput,
-  type AlertTracesAggregateByServiceOutput,
-  type AlertMetricsOpts,
-  type AlertMetricsAggregateOutput,
-  type AlertMetricsAggregateByServiceOutput,
-  type AlertLogsOpts,
-  type AlertLogsAggregateOutput,
-  type AlertLogsAggregateByServiceOutput,
-} from "./queries/alerts"
+// Queries — Alerts: removed. Alert evaluation now reuses the dashboard
+// timeseries queries (tracesTimeseriesQuery / logsTimeseriesQuery /
+// metricsTimeseriesQuery) so dashboards and alerts share the same grouping
+// and filter semantics. See QueryEngineService.makeQueryEngineEvaluate.

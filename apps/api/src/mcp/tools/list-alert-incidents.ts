@@ -21,14 +21,14 @@ const comparatorLabel: Record<string, string> = {
 export function registerListAlertIncidentsTool(server: McpToolRegistrar) {
   server.tool(
     "list_alert_incidents",
-    "List triggered alert incidents with their status, severity, and observed values. Use diagnose_service to investigate affected services.",
+    "List triggered alert incidents with their status, severity, group identity, and observed values.",
     Schema.Struct({
       status: optionalStringParam("Filter by status: open, resolved (default: all)"),
       severity: optionalStringParam("Filter by severity: warning, critical"),
-      service_name: optionalStringParam("Filter incidents by service name"),
+      group_key: optionalStringParam("Filter incidents by exact group key"),
       limit: optionalNumberParam("Max results to return (default 50)"),
     }),
-    Effect.fn("McpTool.listAlertIncidents")(function* ({ status, severity, service_name, limit }) {
+    Effect.fn("McpTool.listAlertIncidents")(function* ({ status, severity, group_key, limit }) {
         const tenant = yield* resolveTenant
         const alerts = yield* AlertsService
 
@@ -50,8 +50,8 @@ export function registerListAlertIncidentsTool(server: McpToolRegistrar) {
         if (severity) {
           incidents = incidents.filter((i) => i.severity === severity)
         }
-        if (service_name) {
-          incidents = incidents.filter((i) => i.serviceName === service_name)
+        if (group_key) {
+          incidents = incidents.filter((i) => i.groupKey === group_key)
         }
 
         const maxResults = limit ?? 50
@@ -69,11 +69,12 @@ export function registerListAlertIncidentsTool(server: McpToolRegistrar) {
         if (incidents.length === 0) {
           lines.push("No alert incidents found.")
         } else {
-          const headers = ["Rule", "Severity", "Status", "Signal", "Condition", "Value", "Triggered"]
+          const headers = ["Rule", "Severity", "Status", "Group", "Signal", "Condition", "Value", "Triggered"]
           const rows = incidents.map((i) => [
             truncate(i.ruleName, 30),
             i.severity,
             i.status,
+            i.groupKey ?? "all",
             i.signalType,
             `${comparatorLabel[i.comparator] ?? i.comparator} ${i.threshold}`,
             i.lastObservedValue != null ? String(i.lastObservedValue) : "—",
@@ -84,9 +85,9 @@ export function registerListAlertIncidentsTool(server: McpToolRegistrar) {
 
         const openIncidents = incidents.filter((inc) => inc.status === "open")
         const nextSteps: string[] = []
-        const affectedServices = [...new Set(openIncidents.filter((inc) => inc.serviceName).map((inc) => inc.serviceName))].slice(0, 3)
-        for (const svc of affectedServices) {
-          nextSteps.push(`\`diagnose_service service_name="${svc}"\` — investigate this service`)
+        const affectedGroups = [...new Set(openIncidents.filter((inc) => inc.groupKey).map((inc) => inc.groupKey))].slice(0, 3)
+        for (const groupKey of affectedGroups) {
+          nextSteps.push(`\`get_incident_timeline group_key="${groupKey}"\` — inspect this alert group`)
         }
         if (nextSteps.length === 0) {
           nextSteps.push('`list_alert_rules` — review alert configuration')
@@ -101,7 +102,7 @@ export function registerListAlertIncidentsTool(server: McpToolRegistrar) {
                 id: i.id,
                 ruleId: i.ruleId,
                 ruleName: i.ruleName,
-                serviceName: i.serviceName,
+                groupKey: i.groupKey,
                 signalType: i.signalType,
                 severity: i.severity,
                 status: i.status,

@@ -261,11 +261,11 @@ function RuleDetailPage() {
                   <dd className="font-medium">{signalLabels[rule.signalType]}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Service</dt>
+                  <dt className="text-muted-foreground">Scope</dt>
                   <dd className="flex flex-wrap gap-1 justify-end">
                     {rule.serviceNames?.length > 0
                       ? rule.serviceNames.map((s) => <Badge key={s} variant="outline" className="text-xs">{s}</Badge>)
-                      : <span className="font-mono font-medium">{rule.groupBy === "service" ? "all (per service)" : "all"}</span>}
+                      : <span className="font-mono font-medium">{rule.groupBy && rule.groupBy.length > 0 ? `all (per ${rule.groupBy.join(" \u00b7 ")})` : "all"}</span>}
                   </dd>
                 </div>
                 {rule.excludeServiceNames?.length > 0 && (
@@ -370,9 +370,9 @@ function RuleDetailPage() {
                   {stats.topContributors.length === 0 ? (
                     <span className="text-3xl font-bold">—</span>
                   ) : (
-                    stats.topContributors.map(([service, count]) => (
-                      <div key={service} className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs shrink-0">{service}</Badge>
+                    stats.topContributors.map(([groupKey, count]) => (
+                      <div key={groupKey} className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs shrink-0">{groupKey}</Badge>
                         <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
                           <div
                             className={cn(
@@ -438,7 +438,7 @@ function RuleDetailPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[90px]">State</TableHead>
-                  <TableHead className="w-[140px]">Service</TableHead>
+                  <TableHead className="w-[180px]">Group</TableHead>
                   <TableHead>Labels</TableHead>
                   <TableHead className="w-[160px]">Triggered At</TableHead>
                   <TableHead className="w-[100px]">Duration</TableHead>
@@ -459,7 +459,7 @@ function RuleDetailPage() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <span className="font-mono text-muted-foreground">{incident.serviceName ?? "all"}</span>
+                        <span className="font-mono text-muted-foreground">{incident.groupKey ?? "all"}</span>
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
@@ -485,13 +485,6 @@ function RuleDetailPage() {
                             <DotsVerticalIcon size={14} />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            {incident.serviceName && (
-                              <DropdownMenuItem
-                                onClick={() => navigate({ to: "/services/$serviceName", params: { serviceName: incident.serviceName! } })}
-                              >
-                                View Service
-                              </DropdownMenuItem>
-                            )}
                             <DropdownMenuItem
                               onClick={() => navigate({ to: "/alerts", search: { tab: "incidents" } })}
                             >

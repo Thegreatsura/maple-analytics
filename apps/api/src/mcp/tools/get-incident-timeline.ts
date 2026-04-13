@@ -40,10 +40,10 @@ export function registerGetIncidentTimelineTool(server: McpToolRegistrar) {
       rule_id: optionalStringParam("Alert rule ID to filter incidents for (use list_alert_rules to find IDs)"),
       status: optionalStringParam("Filter by status: open, resolved"),
       severity: optionalStringParam("Filter by severity: warning, critical"),
-      service_name: optionalStringParam("Filter by service name"),
+      group_key: optionalStringParam("Filter by exact group key"),
       limit: optionalNumberParam("Max incidents to return (default 20)"),
     }),
-    Effect.fn("McpTool.getIncidentTimeline")(function* ({ rule_id, status, severity, service_name, limit }) {
+    Effect.fn("McpTool.getIncidentTimeline")(function* ({ rule_id, status, severity, group_key, limit }) {
         const tenant = yield* resolveTenant
         const alerts = yield* AlertsService
 
@@ -68,8 +68,8 @@ export function registerGetIncidentTimelineTool(server: McpToolRegistrar) {
         if (severity) {
           incidents = incidents.filter((i) => i.severity === severity)
         }
-        if (service_name) {
-          incidents = incidents.filter((i) => i.serviceName === service_name)
+        if (group_key) {
+          incidents = incidents.filter((i) => i.groupKey === group_key)
         }
 
         const maxResults = limit ?? 20
@@ -97,8 +97,8 @@ export function registerGetIncidentTimelineTool(server: McpToolRegistrar) {
             lines.push(`### ${sIcon} ${inc.ruleName}`)
             lines.push(`- **Status:** ${inc.status} | **Severity:** ${sevIcon} ${inc.severity}`)
             lines.push(`- **Signal type:** ${inc.signalType}`)
-            if (inc.serviceName) {
-              lines.push(`- **Service:** ${inc.serviceName}`)
+            if (inc.groupKey) {
+              lines.push(`- **Group:** ${inc.groupKey}`)
             }
             lines.push(`- **Condition:** value ${condition}`)
             lines.push(`- **Last observed value:** ${observedValue}`)
@@ -118,15 +118,15 @@ export function registerGetIncidentTimelineTool(server: McpToolRegistrar) {
 
         const nextSteps: string[] = []
         const openIncidents = incidents.filter((inc) => inc.status === "open")
-        const affectedServices = [
+        const affectedGroups = [
           ...new Set(
             openIncidents
-              .filter((inc) => inc.serviceName)
-              .map((inc) => inc.serviceName),
+              .filter((inc) => inc.groupKey)
+              .map((inc) => inc.groupKey),
           ),
         ].slice(0, 3)
-        for (const svc of affectedServices) {
-          nextSteps.push(`\`diagnose_service service_name="${svc}"\` — investigate this service`)
+        for (const incidentGroupKey of affectedGroups) {
+          nextSteps.push(`\`list_alert_incidents group_key="${incidentGroupKey}"\` — see related alert incidents`)
         }
         if (openIncidents.length > 0) {
           nextSteps.push('`find_errors` — search for recent errors related to open incidents')
@@ -144,7 +144,7 @@ export function registerGetIncidentTimelineTool(server: McpToolRegistrar) {
                 id: i.id,
                 ruleId: i.ruleId,
                 ruleName: i.ruleName,
-                serviceName: i.serviceName,
+                groupKey: i.groupKey,
                 signalType: i.signalType,
                 severity: i.severity,
                 status: i.status,

@@ -44,7 +44,6 @@ import {
   PaperPlaneIcon,
   PencilIcon,
   PlusIcon,
-  ServerIcon,
   TrashIcon,
 } from "@/components/icons"
 import { cn } from "@maple/ui/utils"
@@ -259,7 +258,7 @@ function OverviewTab({
               <TableRow>
                 <TableHead className="w-[90px]">Severity</TableHead>
                 <TableHead>Rule</TableHead>
-                <TableHead>Service</TableHead>
+                <TableHead>Group</TableHead>
                 <TableHead>Current Value</TableHead>
                 <TableHead className="w-[100px]">Duration</TableHead>
                 <TableHead>Last Notified</TableHead>
@@ -281,7 +280,7 @@ function OverviewTab({
                       {incident.ruleName}
                     </TableCell>
                     <TableCell>
-                      <span className="font-mono text-muted-foreground">{incident.serviceName ?? "all"}</span>
+                      <span className="font-mono text-muted-foreground">{incident.groupKey ?? "all"}</span>
                     </TableCell>
                     <TableCell>
                       <span className="font-mono text-orange-500">
@@ -526,8 +525,7 @@ function AlertsPage() {
     const q = searchQuery.toLowerCase()
     return rules.filter((r) =>
       r.name.toLowerCase().includes(q) ||
-      (r.serviceNames?.some((s) => s.toLowerCase().includes(q))) ||
-      (r.serviceName && r.serviceName.toLowerCase().includes(q))
+      (r.serviceNames?.some((s) => s.toLowerCase().includes(q)))
     )
   }, [rules, searchQuery])
 
@@ -666,7 +664,7 @@ function AlertsPage() {
                           <TableCell>
                             {rule.serviceNames?.length > 0
                               ? <div className="flex flex-wrap gap-1">{rule.serviceNames.map((s) => <Badge key={s} variant="outline" className="text-xs">{s}</Badge>)}</div>
-                              : <span className="font-mono text-muted-foreground text-sm">{rule.groupBy === "service" ? "all (per service)" : "all"}</span>}
+                              : <span className="font-mono text-muted-foreground text-sm">{rule.groupBy && rule.groupBy.length > 0 ? `all (per ${rule.groupBy.join(" \u00b7 ")})` : "all"}</span>}
                             {rule.excludeServiceNames?.length > 0 && (
                               <div className="flex flex-wrap gap-1 mt-0.5">
                                 {rule.excludeServiceNames.map((s) => <Badge key={s} variant="outline" className="text-xs text-muted-foreground line-through">{s}</Badge>)}
@@ -762,21 +760,15 @@ function AlertsPage() {
                               <span>Last notified {formatAlertDateTime(incident.lastNotifiedAt)}</span>
                             </div>
                           </div>
-                          {incident.serviceName ? (
-                            <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/services/$serviceName" params={{ serviceName: incident.serviceName }} />}>
-                              <ServerIcon size={14} />
-                              Open Service
-                            </Button>
-                          ) : (
-                            <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/alerts" search={{ tab: "rules" }} />}>
-                              <BellIcon size={14} />
-                              Open Rules
-                            </Button>
-                          )}
+                          <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/alerts/$ruleId" params={{ ruleId: incident.ruleId }} />}>
+                            <BellIcon size={14} />
+                            Open Rule
+                          </Button>
                         </div>
                         <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                           <span>First triggered {formatAlertDateTime(incident.firstTriggeredAt)}</span>
                           <span>Resolved {formatAlertDateTime(incident.resolvedAt)}</span>
+                          <span>Group {incident.groupKey ?? "all"}</span>
                           <span>Dedupe key {incident.dedupeKey}</span>
                         </div>
                       </CardContent>

@@ -163,7 +163,7 @@ const createErrorRateRule = (
       name: "Checkout error rate",
       severity: "critical",
       enabled: true,
-      serviceName: "checkout",
+      serviceNames: ["checkout"],
       signalType: "error_rate",
       comparator: "gt",
       threshold: 5,
@@ -365,7 +365,7 @@ describe("AlertsService", () => {
             name: "Zero throughput",
             severity: "warning",
             enabled: true,
-            serviceName: "checkout",
+            serviceNames: ["checkout"],
             signalType: "throughput",
             comparator: "lt",
             threshold: 1,
@@ -569,7 +569,7 @@ describe("AlertsService", () => {
           name: setup.rule.name,
           signalType: setup.rule.signalType,
           severity: setup.rule.severity,
-          serviceName: setup.rule.serviceName,
+          groupKey: null,
           comparator: setup.rule.comparator,
           threshold: setup.rule.threshold,
           windowMinutes: setup.rule.windowMinutes,
@@ -645,7 +645,7 @@ describe("AlertsService", () => {
           name: setup.rule.name,
           signalType: setup.rule.signalType,
           severity: setup.rule.severity,
-          serviceName: setup.rule.serviceName,
+          groupKey: null,
           comparator: setup.rule.comparator,
           threshold: setup.rule.threshold,
           windowMinutes: setup.rule.windowMinutes,
@@ -736,7 +736,7 @@ describe("AlertsService", () => {
             name: "Immediate trigger",
             severity: "critical",
             enabled: true,
-            serviceName: "checkout",
+            serviceNames: ["checkout"],
             signalType: "error_rate",
             comparator: "gt",
             threshold: 5,
@@ -773,7 +773,7 @@ describe("AlertsService", () => {
                 name: rule.name,
                 signalType: rule.signalType,
                 severity: rule.severity,
-                serviceName: rule.serviceName,
+                groupKey: null,
                 comparator: rule.comparator,
                 threshold: rule.threshold,
                 windowMinutes: rule.windowMinutes,
@@ -839,7 +839,7 @@ describe("AlertsService", () => {
           name: setup.rule.name,
           signalType: setup.rule.signalType,
           severity: setup.rule.severity,
-          serviceName: setup.rule.serviceName,
+          groupKey: null,
           comparator: setup.rule.comparator,
           threshold: setup.rule.threshold,
           windowMinutes: setup.rule.windowMinutes,
@@ -926,7 +926,7 @@ describe("AlertsService", () => {
           name: setup.rule.name,
           signalType: setup.rule.signalType,
           severity: setup.rule.severity,
-          serviceName: setup.rule.serviceName,
+          groupKey: null,
           comparator: setup.rule.comparator,
           threshold: setup.rule.threshold,
           windowMinutes: setup.rule.windowMinutes,
@@ -1003,6 +1003,52 @@ describe("AlertsService", () => {
     expect(result.sampleCount).toBe(42)
   })
 
+  it("rejects metrics alerts with multiple attr groupBy dimensions", async () => {
+    const { url } = createTempDbUrl()
+
+    const exit = await Effect.runPromiseExit(
+      Effect.gen(function* () {
+        const alerts = yield* AlertsService
+        const orgId = asOrgId("org_metrics_group_validation")
+        const userId = asUserId("user_metrics_group_validation")
+        const destination = yield* createWebhookDestination(alerts, orgId, userId)
+
+        return yield* alerts.createRule(
+          orgId,
+          userId,
+          adminRoles,
+          new AlertRuleUpsertRequest({
+            name: "Grouped metrics alert",
+            severity: "warning",
+            enabled: true,
+            groupBy: ["attr.http.method", "attr.http.route"],
+            signalType: "metric",
+            comparator: "gt",
+            threshold: 100,
+            windowMinutes: 5,
+            minimumSampleCount: 1,
+            consecutiveBreachesRequired: 1,
+            consecutiveHealthyRequired: 1,
+            renotifyIntervalMinutes: 30,
+            metricName: "http.server.request.duration",
+            metricType: "histogram",
+            metricAggregation: "avg",
+            destinationIds: [destination.id],
+          }),
+        )
+      }).pipe(
+        Effect.provide(makeLayer(url, makeTinybirdStub({ metricsAggregateRows: emptyTinybirdRows }))),
+      ),
+    )
+
+    const failure = getError(exit)
+
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect(failure).toMatchObject({
+      message: "Metrics alerts support at most one attr.* groupBy dimension",
+    })
+  })
+
   it("opens per-service incidents for grouped logs query alerts", async () => {
     const { url } = createTempDbUrl()
 
@@ -1025,7 +1071,7 @@ describe("AlertsService", () => {
             queryDataSource: "logs",
             queryAggregation: "count",
             queryWhereClause: 'severity = "error"',
-            groupBy: "service",
+            groupBy: ["service.name"],
             comparator: "gt",
             threshold: 10,
             windowMinutes: 5,
@@ -1046,8 +1092,8 @@ describe("AlertsService", () => {
           url,
           makeTinybirdStub({
             logsAggregateByServiceRows: [
-              { serviceName: "svc-breach", count: 14 },
-              { serviceName: "svc-healthy", count: 3 },
+              { bucket: "2026-01-01 00:00:00", groupName: "svc-breach", count: 14 },
+              { bucket: "2026-01-01 00:00:00", groupName: "svc-healthy", count: 3 },
             ],
           }),
           { ...makeAdvancingClock(), fetch: okFetch },
@@ -1056,7 +1102,7 @@ describe("AlertsService", () => {
     )
 
     expect(result.incidents).toHaveLength(1)
-    expect(result.incidents[0]?.serviceName).toBe("svc-breach")
+    expect(result.incidents[0]?.groupKey).toBe("svc-breach")
     expect(result.incidents[0]?.status).toBe("open")
   })
 
@@ -1167,8 +1213,8 @@ describe("AlertsService", () => {
     )
 
     expect(result.incidents).toHaveLength(2)
-    const serviceNames = result.incidents.map((i: { serviceName: string | null }) => i.serviceName).sort()
-    expect(serviceNames).toEqual(["svc-a", "svc-b"])
+    const groupKeys = result.incidents.map((i: { groupKey: string | null }) => i.groupKey).sort()
+    expect(groupKeys).toEqual(["svc-a", "svc-b"])
     expect(result.incidents.every((i: { status: string }) => i.status === "open")).toBe(true)
   })
 
@@ -1176,7 +1222,8 @@ describe("AlertsService", () => {
     const { url } = createTempDbUrl()
 
     const breachingRow = {
-      serviceName: "svc-breach",
+      bucket: "2026-01-01 00:00:00",
+      groupName: "svc-breach",
       count: 200,
       avgDuration: 40,
       p50Duration: 20,
@@ -1186,9 +1233,13 @@ describe("AlertsService", () => {
       satisfiedCount: 180,
       toleratingCount: 10,
       apdexScore: 0.925,
+      sampledSpanCount: 200,
+      unsampledSpanCount: 0,
+      dominantThreshold: "0",
     }
     const healthyRow = {
-      serviceName: "svc-healthy",
+      bucket: "2026-01-01 00:00:00",
+      groupName: "svc-healthy",
       count: 200,
       avgDuration: 20,
       p50Duration: 10,
@@ -1198,6 +1249,9 @@ describe("AlertsService", () => {
       satisfiedCount: 195,
       toleratingCount: 3,
       apdexScore: 0.9825,
+      sampledSpanCount: 200,
+      unsampledSpanCount: 0,
+      dominantThreshold: "0",
     }
 
     const stub: TinybirdServiceShape = {
@@ -1221,7 +1275,7 @@ describe("AlertsService", () => {
             name: "All services error rate",
             severity: "critical",
             enabled: true,
-            groupBy: "service",
+            groupBy: ["service.name"],
             signalType: "error_rate",
             comparator: "gt",
             threshold: 5,
@@ -1242,7 +1296,7 @@ describe("AlertsService", () => {
     )
 
     expect(result.incidents).toHaveLength(1)
-    expect(result.incidents[0]?.serviceName).toBe("svc-breach")
+    expect(result.incidents[0]?.groupKey).toBe("svc-breach")
     expect(result.incidents[0]?.status).toBe("open")
   })
 })

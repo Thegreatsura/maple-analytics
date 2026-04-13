@@ -35,7 +35,7 @@ export interface DispatchContext {
   readonly secretConfig: DestinationSecretConfig
   readonly ruleId: string
   readonly ruleName: string
-  readonly serviceName: string | null
+  readonly groupKey: string | null
   readonly signalType: AlertSignalType
   readonly severity: AlertSeverity
   readonly comparator: AlertComparator
@@ -185,7 +185,7 @@ const buildSlackBlocks = (context: DispatchContext, linkUrl: string) => [
     fields: [
       { type: "mrkdwn", text: `*Severity*\n${context.severity}` },
       { type: "mrkdwn", text: `*Signal*\n${formatSignalLabel(context.signalType)}` },
-      { type: "mrkdwn", text: `*Service*\n${context.serviceName ?? "All services"}` },
+      { type: "mrkdwn", text: `*Group*\n${context.groupKey ?? "all"}` },
       {
         type: "mrkdwn",
         text: `*Observed*\n${formatSignalMetric(context.value, context.signalType)} ${formatComparator(context.comparator)} ${formatSignalMetric(context.threshold, context.signalType)}`,
@@ -253,7 +253,7 @@ export const dispatchDelivery = (
               dedup_key: context.dedupeKey,
               payload: {
                 summary: `${context.ruleName} ${context.eventType}`,
-                source: context.serviceName ?? "maple",
+                source: context.groupKey ?? "maple-alerts",
                 severity: context.severity === "critical" ? "critical" : "warning",
                 custom_details: {
                   ruleName: context.ruleName,
@@ -261,7 +261,7 @@ export const dispatchDelivery = (
                   value: context.value,
                   threshold: context.threshold,
                   comparator: context.comparator,
-                  serviceName: context.serviceName,
+                  groupKey: context.groupKey,
                   linkUrl,
                 },
               },

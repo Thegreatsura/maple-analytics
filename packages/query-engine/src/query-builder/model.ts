@@ -492,6 +492,119 @@ function resolveMetricsGroupByToken(
 }
 
 // ---------------------------------------------------------------------------
+// Shared resolveGroupBy — used by both the dashboard query builder and the
+// alerting compiler so they interpret raw user tokens (`service.name`,
+// `attr.<key>`, …) identically.
+// ---------------------------------------------------------------------------
+
+export interface ResolvedGroupBy {
+  /** Internal QuerySpec groupBy tokens (e.g. "service", "span_name", "attribute"). */
+  readonly tokens: ReadonlyArray<string>
+  /** Span/metric attribute keys referenced via `attr.<key>` group-by tokens. */
+  readonly attributeKeys: ReadonlyArray<string>
+  /** Warnings emitted while resolving (unsupported tokens, malformed input). */
+  readonly warnings: ReadonlyArray<string>
+}
+
+export function resolveGroupBy(
+  source: QueryBuilderDataSource,
+  rawTokens: ReadonlyArray<string>,
+): ResolvedGroupBy {
+  const tokens: string[] = []
+  const attributeKeys: string[] = []
+  const warnings: string[] = []
+  const seenTokens = new Set<string>()
+  const seenAttrKeys = new Set<string>()
+
+  for (const raw of rawTokens) {
+    const token = raw.trim().toLowerCase()
+    if (!token) continue
+
+    if (token.startsWith("attr.")) {
+      const attributeKey = token.slice(5)
+      if (!attributeKey) {
+        warnings.push("Invalid attr.* group by ignored")
+        continue
+      }
+      if (source === "logs") {
+        warnings.push(`Logs source does not support attr.* group by: ${raw}`)
+        continue
+      }
+      if (!seenAttrKeys.has(attributeKey)) {
+        seenAttrKeys.add(attributeKey)
+        attributeKeys.push(attributeKey)
+      }
+      if (!seenTokens.has("attribute")) {
+        seenTokens.add("attribute")
+        tokens.push("attribute")
+      }
+      continue
+    }
+
+    let resolved: string | null = null
+    if (source === "traces") {
+      switch (token) {
+        case "service":
+        case "service.name":
+          resolved = "service"
+          break
+        case "span":
+        case "span.name":
+          resolved = "span_name"
+          break
+        case "status":
+        case "status.code":
+          resolved = "status_code"
+          break
+        case "http.method":
+          resolved = "http_method"
+          break
+        case "none":
+        case "all":
+          resolved = "none"
+          break
+      }
+    } else if (source === "logs") {
+      switch (token) {
+        case "service":
+        case "service.name":
+          resolved = "service"
+          break
+        case "severity":
+          resolved = "severity"
+          break
+        case "none":
+        case "all":
+          resolved = "none"
+          break
+      }
+    } else {
+      switch (token) {
+        case "service":
+        case "service.name":
+          resolved = "service"
+          break
+        case "none":
+        case "all":
+          resolved = "none"
+          break
+      }
+    }
+
+    if (resolved == null) {
+      warnings.push(`Unsupported ${source} group by ignored: ${raw}`)
+      continue
+    }
+    if (!seenTokens.has(resolved)) {
+      seenTokens.add(resolved)
+      tokens.push(resolved)
+    }
+  }
+
+  return { tokens, attributeKeys, warnings }
+}
+
+// ---------------------------------------------------------------------------
 // Accumulator → QuerySpec filters
 // ---------------------------------------------------------------------------
 

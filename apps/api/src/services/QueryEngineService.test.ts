@@ -7,7 +7,6 @@ import type {
 } from "@maple/query-engine"
 import {
   makeQueryEngineEvaluate,
-  makeQueryEngineEvaluateGrouped,
   makeQueryEngineExecute,
 } from "./QueryEngineService"
 import type { TenantContext } from "./AuthService"
@@ -446,12 +445,18 @@ describe("makeQueryEngineExecute", () => {
 })
 
 describe("makeQueryEngineEvaluate", () => {
+  // The evaluate path now drives the same dashboard timeseries queries the
+  // widget renderer uses, so stub rows always carry `bucket` + `groupName`.
+  // Ungrouped alerts collapse to a single-element array with groupKey "all".
+
   it("evaluates traces error rate alerts from the aggregate path", async () => {
     const evaluate = makeQueryEngineEvaluate(
       makeTinybirdStub({
         sqlQuery: () =>
           Effect.succeed([
             {
+              bucket: "2026-01-01 00:00:00",
+              groupName: "all",
               count: 200,
               avgDuration: 12,
               p50Duration: 10,
@@ -461,6 +466,9 @@ describe("makeQueryEngineEvaluate", () => {
               satisfiedCount: 180,
               toleratingCount: 10,
               apdexScore: 0.925,
+              sampledSpanCount: 200,
+              unsampledSpanCount: 0,
+              dominantThreshold: "0",
             },
           ]),
       }),
@@ -481,11 +489,12 @@ describe("makeQueryEngineEvaluate", () => {
 
     const response = await Effect.runPromise(evaluate(tenant, request))
 
-    expect(response).toMatchObject({
+    expect(response).toHaveLength(1)
+    expect(response[0]).toMatchObject({
+      groupKey: "all",
       value: 7.5,
       sampleCount: 200,
       hasData: true,
-      reducer: "identity",
     })
   })
 
@@ -495,6 +504,8 @@ describe("makeQueryEngineEvaluate", () => {
         sqlQuery: () =>
           Effect.succeed([
             {
+              bucket: "2026-01-01 00:00:00",
+              groupName: "all",
               count: 40,
               avgDuration: 0,
               p50Duration: 0,
@@ -504,6 +515,9 @@ describe("makeQueryEngineEvaluate", () => {
               satisfiedCount: 30,
               toleratingCount: 6,
               apdexScore: 0.825,
+              sampledSpanCount: 40,
+              unsampledSpanCount: 0,
+              dominantThreshold: "0",
             },
           ]),
       }),
@@ -523,8 +537,9 @@ describe("makeQueryEngineEvaluate", () => {
       },
     }))
 
-    expect(response.value).toBe(0.825)
-    expect(response.sampleCount).toBe(40)
+    expect(response).toHaveLength(1)
+    expect(response[0]?.value).toBe(0.825)
+    expect(response[0]?.sampleCount).toBe(40)
   })
 
   it("evaluates metrics alerts with metric data point sample counts", async () => {
@@ -533,6 +548,9 @@ describe("makeQueryEngineEvaluate", () => {
         sqlQuery: () =>
           Effect.succeed([
             {
+              bucket: "2026-01-01 00:00:00",
+              serviceName: "api",
+              attributeValue: "",
               avgValue: 18,
               minValue: 5,
               maxValue: 40,
@@ -560,7 +578,9 @@ describe("makeQueryEngineEvaluate", () => {
       },
     }))
 
-    expect(response).toMatchObject({
+    expect(response).toHaveLength(1)
+    expect(response[0]).toMatchObject({
+      groupKey: "all",
       value: 18,
       sampleCount: 5,
       hasData: true,
@@ -570,16 +590,7 @@ describe("makeQueryEngineEvaluate", () => {
   it("returns hasData=false when the aggregate response has zero samples", async () => {
     const evaluate = makeQueryEngineEvaluate(
       makeTinybirdStub({
-        sqlQuery: () =>
-          Effect.succeed([
-            {
-              avgValue: 0,
-              minValue: 0,
-              maxValue: 0,
-              sumValue: 0,
-              dataPointCount: 0,
-            },
-          ]),
+        sqlQuery: () => Effect.succeed([]),
       }),
     )
 
@@ -600,7 +611,9 @@ describe("makeQueryEngineEvaluate", () => {
       },
     }))
 
-    expect(response).toMatchObject({
+    expect(response).toHaveLength(1)
+    expect(response[0]).toMatchObject({
+      groupKey: "all",
       value: null,
       sampleCount: 0,
       hasData: false,
@@ -613,6 +626,8 @@ describe("makeQueryEngineEvaluate", () => {
         sqlQuery: () =>
           Effect.succeed([
             {
+              bucket: "2026-01-01 00:00:00",
+              groupName: "all",
               count: 42,
             },
           ]),
@@ -636,58 +651,35 @@ describe("makeQueryEngineEvaluate", () => {
       },
     }))
 
-    expect(response).toMatchObject({
+    expect(response).toHaveLength(1)
+    expect(response[0]).toMatchObject({
+      groupKey: "all",
       value: 42,
       sampleCount: 42,
       hasData: true,
-      reducer: "identity",
     })
   })
 
-  it("rejects grouped queries for alert evaluation", async () => {
-    const evaluate = makeQueryEngineEvaluate(makeTinybirdStub())
-
-    const exit = await Effect.runPromiseExit(evaluate(tenant, {
-      startTime: "2026-01-01 00:00:00",
-      endTime: "2026-01-01 00:05:00",
-      reducer: "identity",
-      sampleCountStrategy: "trace_count",
-      query: {
-        kind: "timeseries",
-        source: "traces",
-        metric: "count",
-        groupBy: ["service"],
-      },
-    }))
-
-    const failure = Option.getOrUndefined(Exit.findErrorOption(exit))
-    expect(Exit.isFailure(exit)).toBe(true)
-    expect(failure).toMatchObject({
-      _tag: "@maple/http/errors/QueryEngineValidationError",
-      message: "Unsupported alert evaluation query",
-    })
-  })
-})
-
-describe("makeQueryEngineEvaluateGrouped", () => {
-  it("evaluates grouped logs alerts by service", async () => {
-    const evaluateGrouped = makeQueryEngineEvaluateGrouped(
+  it("evaluates grouped logs alerts per service", async () => {
+    const evaluate = makeQueryEngineEvaluate(
       makeTinybirdStub({
         sqlQuery: () =>
           Effect.succeed([
             {
-              serviceName: "checkout",
+              bucket: "2026-01-01 00:00:00",
+              groupName: "checkout",
               count: 11,
             },
             {
-              serviceName: "billing",
+              bucket: "2026-01-01 00:00:00",
+              groupName: "billing",
               count: 3,
             },
           ]),
       }),
     )
 
-    const response = await Effect.runPromise(evaluateGrouped(tenant, {
+    const response = await Effect.runPromise(evaluate(tenant, {
       startTime: "2026-01-01 00:00:00",
       endTime: "2026-01-01 00:05:00",
       reducer: "identity",
@@ -696,12 +688,12 @@ describe("makeQueryEngineEvaluateGrouped", () => {
         kind: "timeseries",
         source: "logs",
         metric: "count",
-        groupBy: ["none"],
+        groupBy: ["service"],
         filters: {
           severity: "error",
         },
       },
-    }, "service"))
+    }))
 
     expect(response).toEqual([
       {

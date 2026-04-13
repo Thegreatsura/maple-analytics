@@ -49,7 +49,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@maple/ui/components/ui/select"
-import { Switch } from "@maple/ui/components/ui/switch"
 import {
   Combobox,
   ComboboxChips,
@@ -63,6 +62,7 @@ import {
 import { useEffectiveTimeRange } from "@/hooks/use-effective-time-range"
 import { useAlertRuleChart } from "@/hooks/use-alert-rule-chart"
 import { AGGREGATIONS_BY_SOURCE } from "@/lib/query-builder/model"
+import { GroupByMultiSelect } from "@/components/query-builder/group-by-multi-select"
 import { WhereClauseEditor } from "@/components/query-builder/where-clause-editor"
 import { AutocompleteValuesProvider, useAutocompleteValuesContext } from "@/hooks/use-autocomplete-values"
 
@@ -444,20 +444,31 @@ function AlertCreatePage() {
                 onChange={(values) => setRuleForm((c) => ({
                   ...c,
                   serviceNames: values,
-                  groupBy: values.length > 0 ? null : c.groupBy,
+                  groupBy: values.length > 0 ? [] : c.groupBy,
                   excludeServiceNames: values.length > 0 ? [] : c.excludeServiceNames,
                 }))}
               />
               {ruleForm.serviceNames.length === 0 && (
                 <>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Switch
-                      checked={ruleForm.groupBy === "service"}
-                      onCheckedChange={(checked) =>
-                        setRuleForm((c) => ({ ...c, groupBy: checked ? "service" : null }))
+                  <div className="mt-2 space-y-1">
+                    <Label className="text-sm text-muted-foreground">Group by</Label>
+                    <GroupByMultiSelect
+                      dataSource={
+                        ruleForm.signalType === "query"
+                          ? ruleForm.queryDataSource
+                          : ruleForm.signalType === "metric"
+                            ? "metrics"
+                            : "traces"
                       }
+                      value={ruleForm.groupBy}
+                      onChange={(values) => setRuleForm((c) => ({ ...c, groupBy: values }))}
+                      attributeKeys={autocompleteValues.attributeKeys}
+                      placeholder="service.name"
+                      className="w-full"
                     />
-                    <span className="text-sm">Evaluate each service independently</span>
+                    <p className="text-xs text-muted-foreground">
+                      Evaluate the rule per group. Each value (or composite of values) becomes its own incident.
+                    </p>
                   </div>
                   <div className="mt-2 space-y-1">
                     <Label className="text-sm text-muted-foreground">Exclude services</Label>
@@ -649,7 +660,7 @@ function AlertCreatePage() {
                     <dd className="flex flex-wrap gap-1 justify-end">
                       {ruleForm.serviceNames.length > 0
                         ? ruleForm.serviceNames.map((s) => <Badge key={s} variant="outline" className="text-xs">{s}</Badge>)
-                        : <span className="font-mono font-medium">{ruleForm.groupBy === "service" ? "all (per service)" : "all"}</span>}
+                        : <span className="font-mono font-medium">{ruleForm.groupBy.length > 0 ? `all (per ${ruleForm.groupBy.join(" \u00b7 ")})` : "all"}</span>}
                     </dd>
                   </div>
                   {ruleForm.excludeServiceNames.length > 0 && (

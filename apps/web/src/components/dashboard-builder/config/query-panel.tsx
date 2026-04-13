@@ -13,22 +13,17 @@ import {
 } from "@maple/ui/components/ui/select";
 import {
   Combobox,
-  ComboboxChip,
-  ComboboxChips,
-  ComboboxChipsInput,
   ComboboxContent,
-  ComboboxEmpty,
   ComboboxInput,
   ComboboxItem,
   ComboboxList,
-  useComboboxAnchor,
 } from "@maple/ui/components/ui/combobox";
 import { cn } from "@maple/ui/utils";
+import { GroupByMultiSelect } from "@/components/query-builder/group-by-multi-select";
 import { WhereClauseEditor } from "@/components/query-builder/where-clause-editor";
 import type { WhereClauseAutocompleteValues } from "@/lib/query-builder/where-clause-autocomplete";
 import {
   AGGREGATIONS_BY_SOURCE,
-  GROUP_BY_OPTIONS,
   QUERY_BUILDER_METRIC_TYPES,
   getMetricsAggregations,
   queryBadgeColor,
@@ -94,58 +89,6 @@ const ADD_ON_KEYS: { key: QueryBuilderAddOnKey; label: string }[] = [
   { key: "limit", label: "Limit" },
   { key: "legend", label: "Legend" },
 ];
-
-// ---------------------------------------------------------------------------
-// GroupByMultiSelect
-// ---------------------------------------------------------------------------
-
-function GroupByMultiSelect({
-  value,
-  onChange,
-  dataSource,
-  attributeKeys,
-}: {
-  value: string[];
-  onChange: (value: string[]) => void;
-  dataSource: QueryBuilderDataSource;
-  attributeKeys?: string[];
-}) {
-  const anchor = useComboboxAnchor();
-
-  const options = React.useMemo(() => {
-    const staticOptions = GROUP_BY_OPTIONS[dataSource]
-      .filter((opt) => opt.value !== "none")
-      .map((opt) => ({ label: opt.label, value: opt.value }));
-    const attrOptions = (attributeKeys ?? []).map((key) => ({
-      label: `attr.${key}`,
-      value: `attr.${key}`,
-    }));
-    return [...staticOptions, ...attrOptions];
-  }, [dataSource, attributeKeys]);
-
-  return (
-    <div className="flex-1 min-w-[140px]">
-      <Combobox multiple value={value} onValueChange={onChange}>
-        <ComboboxChips ref={anchor} className="text-xs font-mono">
-          {value.map((key) => (
-            <ComboboxChip key={key}>{key}</ComboboxChip>
-          ))}
-          <ComboboxChipsInput placeholder={value.length === 0 ? "service.name" : ""} />
-        </ComboboxChips>
-        <ComboboxContent anchor={anchor}>
-          <ComboboxEmpty>No fields found.</ComboboxEmpty>
-          <ComboboxList>
-            {options.map((opt) => (
-              <ComboboxItem key={opt.value} value={opt.value} className="font-mono">
-                {opt.label}
-              </ComboboxItem>
-            ))}
-          </ComboboxList>
-        </ComboboxContent>
-      </Combobox>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // QueryPanel

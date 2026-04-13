@@ -5,6 +5,7 @@ import {
   type QueryEngineSampleCountStrategy,
   QuerySpec,
 } from "@maple/query-engine"
+import { resolveGroupBy } from "@maple/query-engine/query-builder"
 import {
   buildAlertQueryFilterSet,
   AlertComparator as AlertComparatorSchema,
@@ -165,7 +166,7 @@ interface DispatchContext {
   readonly secretConfig: DestinationSecretConfig
   readonly ruleId: AlertRuleId
   readonly ruleName: string
-  readonly serviceName: string | null
+  readonly groupKey: string | null
   readonly signalType: AlertSignalType
   readonly severity: AlertSeverity
   readonly comparator: AlertComparator
@@ -177,6 +178,7 @@ interface DispatchContext {
   readonly windowMinutes: number
   readonly value: number | null
   readonly sampleCount: number | null
+  readonly linkUrl: string
 }
 
 interface DispatchResult {
@@ -192,7 +194,7 @@ interface DeliveryPayloadContext {
   readonly dedupeKey: string
   readonly ruleId: AlertRuleId
   readonly ruleName: string
-  readonly serviceName: string | null
+  readonly groupKey: string | null
   readonly signalType: AlertSignalType
   readonly severity: AlertSeverity
   readonly comparator: AlertComparator
@@ -200,6 +202,7 @@ interface DeliveryPayloadContext {
   readonly windowMinutes: number
   readonly value: number | null
   readonly sampleCount: number | null
+  readonly linkUrl: string
 }
 
 
@@ -251,7 +254,7 @@ const StoredDeliveryPayloadSchema = Schema.Struct({
     name: Schema.optional(Schema.String),
     signalType: Schema.optional(Schema.String),
     severity: Schema.optional(Schema.String),
-    serviceName: Schema.optional(Schema.NullOr(Schema.String)),
+    groupKey: Schema.optional(Schema.NullOr(Schema.String)),
     comparator: Schema.optional(Schema.String),
     threshold: Schema.optional(Schema.Number),
     windowMinutes: Schema.optional(Schema.Number),
@@ -270,6 +273,7 @@ const SecretConfigFromJson = Schema.fromJsonString(DestinationSecretConfigSchema
 const DeliveryPayloadFromJson = Schema.fromJsonString(StoredDeliveryPayloadSchema)
 const StringArrayFromJson = Schema.fromJsonString(StringArraySchema)
 const DestinationIdArrayFromJson = Schema.fromJsonString(DestinationIdArraySchema)
+const AlertGroupByFromJson = Schema.fromJsonString(AlertGroupBySchema)
 
 const decodeAlertDestinationIdSync = Schema.decodeUnknownSync(AlertDestinationDocument.fields.id)
 const decodeAlertRuleIdSync = Schema.decodeUnknownSync(AlertRuleDocument.fields.id)
@@ -289,6 +293,24 @@ const decodeAlertIncidentStatusSync = Schema.decodeUnknownSync(AlertIncidentStat
 const decodeAlertEventTypeSync = Schema.decodeUnknownSync(AlertEventTypeSchema)
 const decodeAlertDeliveryStatusSync = Schema.decodeUnknownSync(AlertDeliveryStatus)
 const decodeAlertGroupBySync = Schema.decodeUnknownSync(AlertGroupBySchema)
+const decodeAlertGroupByFromJsonSync = Schema.decodeUnknownSync(AlertGroupByFromJson)
+
+const parseStoredGroupBy = (raw: string | null): AlertGroupBy | null =>
+  raw == null ? null : decodeAlertGroupByFromJsonSync(raw)
+
+const isServiceGroupBy = (groupBy: AlertGroupBy | null): boolean =>
+  groupBy != null && groupBy.length === 1 && groupBy[0] === "service.name"
+
+const resolveServiceLinkName = (
+  rule: Pick<NormalizedRule, "serviceNames" | "groupBy">,
+  groupKey: string | null,
+): string | null => {
+  if (rule.serviceNames.length === 1) return rule.serviceNames[0] ?? null
+  if (groupKey != null && groupKey !== "all" && isServiceGroupBy(rule.groupBy)) {
+    return groupKey
+  }
+  return null
+}
 const decodeAlertQueryDataSourceSync = Schema.decodeUnknownSync(AlertQueryDataSourceSchema)
 const decodeAlertQueryAggregationSync = Schema.decodeUnknownSync(AlertQueryAggregationSchema)
 type IsoDateTimeValue = Schema.Schema.Type<
@@ -491,10 +513,12 @@ const compileRulePlan = (rule: {
   readonly queryWhereClause: string | null
   readonly comparator: AlertComparator
   readonly windowMinutes: number
+  readonly groupBy: AlertGroupBy | null
 }): Effect.Effect<
   Schema.Schema.Type<typeof CompiledAlertQueryPlan>,
   AlertValidationError
-> => {
+> =>
+  Effect.gen(function* () {
   const bucketSeconds = Math.max(rule.windowMinutes * 60, 60)
   const baseTraceFilters = rule.serviceName == null
     ? undefined
@@ -513,43 +537,91 @@ const compileRulePlan = (rule: {
     apdex: "apdex",
   }
 
+  /**
+   * Resolve the rule's user-facing group_by tokens (e.g. ["service.name",
+   * "attr.http.route"]) into the internal QuerySpec representation. Returns
+   * null when there is no grouping (the spec then uses ["none"]).
+   */
+  const resolveRuleGroupBy = (
+    source: "traces" | "logs" | "metrics",
+  ): Effect.Effect<
+    { tokens: ReadonlyArray<string>; attributeKeys: ReadonlyArray<string> } | null,
+    AlertValidationError
+  > => {
+    if (rule.groupBy == null || rule.groupBy.length === 0) return Effect.succeed(null)
+    const resolved = resolveGroupBy(source, rule.groupBy)
+    if (resolved.warnings.length > 0) {
+      return Effect.fail(
+        makeValidationError(
+          `Invalid groupBy for ${source} alert`,
+          [...resolved.warnings],
+        ),
+      )
+    }
+    if (resolved.tokens.length === 0) {
+      return Effect.fail(
+        makeValidationError(`groupBy did not resolve to any usable dimension for ${source}`),
+      )
+    }
+    if (source === "metrics" && resolved.attributeKeys.length > 1) {
+      return Effect.fail(
+        makeValidationError(
+          "Metrics alerts support at most one attr.* groupBy dimension",
+          [...resolved.attributeKeys.map((key) => `Unsupported additional metrics groupBy attribute: ${key}`)],
+        ),
+      )
+    }
+    return Effect.succeed({ tokens: resolved.tokens, attributeKeys: resolved.attributeKeys })
+  }
+
   let query: QuerySpec
   let sampleCountStrategy: QueryEngineSampleCountStrategy
 
   const traceMetric = traceSignalMetrics[rule.signalType]
   if (traceMetric) {
+    const groupResolved = yield* resolveRuleGroupBy("traces")
+    const filters: Record<string, unknown> = { ...(baseTraceFilters ?? {}), rootSpansOnly: true }
+    if (groupResolved && groupResolved.attributeKeys.length > 0) {
+      filters.groupByAttributeKeys = [...groupResolved.attributeKeys]
+    }
     query = decodeQuerySpecSync({
       kind: "timeseries",
       source: "traces",
       metric: traceMetric,
-      groupBy: ["none"],
+      groupBy: groupResolved ? [...groupResolved.tokens] : ["none"],
       bucketSeconds,
       ...(rule.signalType === "apdex" ? { apdexThresholdMs: rule.apdexThresholdMs ?? 500 } : {}),
-      filters: { ...(baseTraceFilters ?? {}), rootSpansOnly: true },
+      filters,
     })
     sampleCountStrategy = "trace_count"
   } else if (rule.signalType === "metric") {
     if (rule.metricName == null || rule.metricType == null || rule.metricAggregation == null) {
-      return Effect.fail(
+      return yield* Effect.fail(
         makeValidationError("metric alerts require metricName, metricType, and metricAggregation"),
       )
+    }
+    const groupResolved = yield* resolveRuleGroupBy("metrics")
+    const filters: Record<string, unknown> = {
+      metricName: rule.metricName,
+      metricType: rule.metricType,
+      ...(rule.serviceName == null ? {} : { serviceName: rule.serviceName }),
+    }
+    if (groupResolved && groupResolved.attributeKeys.length > 0) {
+      // Metrics group-by-attribute is single-key today; pick the first.
+      filters.groupByAttributeKey = groupResolved.attributeKeys[0]
     }
     query = decodeQuerySpecSync({
       kind: "timeseries",
       source: "metrics",
       metric: rule.metricAggregation,
-      groupBy: ["none"],
+      groupBy: groupResolved ? [...groupResolved.tokens] : ["none"],
       bucketSeconds,
-      filters: {
-        metricName: rule.metricName,
-        metricType: rule.metricType,
-        ...(rule.serviceName == null ? {} : { serviceName: rule.serviceName }),
-      },
+      filters,
     })
     sampleCountStrategy = "metric_data_points"
   } else if (rule.signalType === "query") {
     if (rule.queryDataSource == null || rule.queryAggregation == null) {
-      return Effect.fail(
+      return yield* Effect.fail(
         makeValidationError("query alerts require queryDataSource and queryAggregation"),
       )
     }
@@ -562,47 +634,58 @@ const compileRulePlan = (rule: {
     })
 
     if (filterSet == null) {
-      return Effect.fail(
+      return yield* Effect.fail(
         makeValidationError("metrics query alerts require metricName and metricType"),
       )
     }
 
     if (filterSet.source === "traces") {
+      const groupResolved = yield* resolveRuleGroupBy("traces")
+      const filters: Record<string, unknown> = { ...(filterSet.filters ?? {}) }
+      if (groupResolved && groupResolved.attributeKeys.length > 0) {
+        filters.groupByAttributeKeys = [...groupResolved.attributeKeys]
+      }
       query = decodeQuerySpecSync({
         kind: "timeseries",
         source: "traces",
         metric: rule.queryAggregation,
-        groupBy: ["none"],
+        groupBy: groupResolved ? [...groupResolved.tokens] : ["none"],
         bucketSeconds,
-        filters: filterSet.filters,
+        filters: Object.keys(filters).length > 0 ? filters : undefined,
       })
       sampleCountStrategy = "trace_count"
     } else if (filterSet.source === "logs") {
+      const groupResolved = yield* resolveRuleGroupBy("logs")
       query = decodeQuerySpecSync({
         kind: "timeseries",
         source: "logs",
         metric: "count",
-        groupBy: ["none"],
+        groupBy: groupResolved ? [...groupResolved.tokens] : ["none"],
         bucketSeconds,
         filters: filterSet.filters,
       })
       sampleCountStrategy = "log_count"
     } else {
+      const groupResolved = yield* resolveRuleGroupBy("metrics")
+      const filters: Record<string, unknown> = { ...(filterSet.filters ?? {}) }
+      if (groupResolved && groupResolved.attributeKeys.length > 0) {
+        filters.groupByAttributeKey = groupResolved.attributeKeys[0]
+      }
       query = decodeQuerySpecSync({
         kind: "timeseries",
         source: "metrics",
         metric: rule.queryAggregation,
-        groupBy: ["none"],
+        groupBy: groupResolved ? [...groupResolved.tokens] : ["none"],
         bucketSeconds,
-        filters: filterSet.filters,
+        filters,
       })
       sampleCountStrategy = "metric_data_points"
     }
   } else {
-    return Effect.fail(makeValidationError(`Unsupported signal type: ${rule.signalType}`))
+    return yield* Effect.fail(makeValidationError(`Unsupported signal type: ${rule.signalType}`))
   }
 
-  return Schema.decodeUnknownEffect(CompiledAlertQueryPlan)({
+  return yield* Schema.decodeUnknownEffect(CompiledAlertQueryPlan)({
     query,
     reducer: "identity",
     sampleCountStrategy,
@@ -610,7 +693,7 @@ const compileRulePlan = (rule: {
   }).pipe(
     Effect.mapError(() => makeValidationError("Failed to compile alert rule plan")),
   )
-}
+})
 
 const QuerySpecFromJson = Schema.fromJsonString(QuerySpec)
 
@@ -652,9 +735,7 @@ const rowToDestinationDocument = (
 const serviceNamesFromRow = (row: AlertRuleRow): ReadonlyArray<string> =>
   row.serviceNamesJson
     ? safeParseStringArray(row.serviceNamesJson)
-    : row.serviceName
-      ? [row.serviceName]
-      : []
+    : []
 
 const excludeServiceNamesFromRow = (row: AlertRuleRow): ReadonlyArray<string> =>
   row.excludeServiceNamesJson
@@ -668,10 +749,9 @@ const rowToRuleDocument = (row: AlertRuleRow, destinationIds: ReadonlyArray<stri
     name: row.name,
     enabled: row.enabled === 1,
     severity: decodeAlertSeveritySync(row.severity),
-    serviceName: serviceNames.length === 1 ? serviceNames[0] : row.serviceName,
     serviceNames: [...serviceNames],
     excludeServiceNames: [...excludeServiceNamesFromRow(row)],
-    groupBy: row.groupBy != null ? decodeAlertGroupBySync(row.groupBy) : null,
+    groupBy: parseStoredGroupBy(row.groupBy),
     signalType: decodeAlertSignalTypeSync(row.signalType),
     comparator: decodeAlertComparatorSync(row.comparator),
     threshold: row.threshold,
@@ -701,7 +781,7 @@ const rowToIncidentDocument = (row: AlertIncidentRow) =>
     id: decodeAlertIncidentIdSync(row.id),
     ruleId: decodeAlertRuleIdSync(row.ruleId),
     ruleName: row.ruleName,
-    serviceName: row.serviceName,
+    groupKey: row.groupKey,
     signalType: decodeAlertSignalTypeSync(row.signalType),
     severity: decodeAlertSeveritySync(row.severity),
     status: decodeAlertIncidentStatusSync(row.status),
@@ -946,10 +1026,10 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
           name: row.name,
           enabled: row.enabled === 1,
           severity: decodeAlertSeveritySync(row.severity),
-          serviceName: serviceNames.length === 1 ? serviceNames[0] : row.serviceName,
+          serviceName: serviceNames.length === 1 ? serviceNames[0] : null,
           serviceNames,
           excludeServiceNames: excludeServiceNamesFromRow(row),
-          groupBy: row.groupBy != null ? decodeAlertGroupBySync(row.groupBy) : null,
+          groupBy: parseStoredGroupBy(row.groupBy),
           signalType: decodeAlertSignalTypeSync(row.signalType),
           comparator: decodeAlertComparatorSync(row.comparator),
           threshold: row.threshold,
@@ -979,8 +1059,8 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
         const name = request.name.trim()
         const serviceNames = request.serviceNames && request.serviceNames.length > 0
           ? request.serviceNames.map((s) => s.trim()).filter((s) => s.length > 0)
-          : request.serviceName?.trim() ? [request.serviceName.trim()] : []
-        const serviceName = serviceNames.length === 1 ? serviceNames[0] : (serviceNames.length === 0 ? null : null)
+          : []
+        const serviceName = serviceNames.length === 1 ? serviceNames[0] : null
         const excludeServiceNames = request.excludeServiceNames
           ? request.excludeServiceNames.map((s) => s.trim()).filter((s) => s.length > 0)
           : []
@@ -1027,6 +1107,9 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
         }
         if (excludeServiceNames.length > 0 && serviceNames.length > 0) {
           details.push("excludeServiceNames is only supported when no specific services are selected")
+        }
+        if (excludeServiceNames.length > 0 && !isServiceGroupBy(groupBy)) {
+          details.push("excludeServiceNames requires groupBy=[\"service.name\"]")
         }
 
         if (details.length > 0) {
@@ -1114,13 +1197,23 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
           }),
         )
 
+      /**
+       * Evaluate the alert rule and return one outcome per group. For
+       * ungrouped rules the array always has length 1 with `groupKey = "all"`.
+       * For grouped rules every distinct value (or composite value, when
+       * multiple dimensions are picked) becomes its own entry that is
+       * processed and dedup'd independently downstream.
+       */
       const evaluateRule = Effect.fn("AlertsService.evaluateRule")(function* (
         orgId: OrgId,
         rule: NormalizedRule,
-      ): Effect.fn.Return<EvaluatedRule, AlertValidationError | AlertDeliveryError> {
+      ): Effect.fn.Return<
+        ReadonlyArray<{ evaluation: EvaluatedRule; groupKey: string }>,
+        AlertValidationError | AlertDeliveryError
+      > {
         const endMs = now()
         const startMs = endMs - rule.windowMinutes * 60_000
-        const evaluated = yield* queryEngine.evaluate(systemTenant(orgId), {
+        const observations = yield* queryEngine.evaluate(systemTenant(orgId), {
           startTime: toTinybirdDateTime(startMs),
           endTime: toTinybirdDateTime(endMs),
           query: rule.compiledPlan.query,
@@ -1128,7 +1221,10 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
           sampleCountStrategy: rule.compiledPlan.sampleCountStrategy,
         }).pipe(catchQueryEngineErrors)
 
-        return applyEvaluationLogic(rule, evaluated, evaluated.reason ?? undefined)
+        return observations.map((obs) => ({
+          evaluation: applyEvaluationLogic(rule, obs),
+          groupKey: obs.groupKey,
+        }))
       })
 
       const applyEvaluationLogic = (
@@ -1193,32 +1289,6 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
             `${rule.signalType} ${formatComparator(rule.comparator)} ${rule.threshold}`,
         }
       }
-
-      const evaluateGroupedRule = Effect.fn("AlertsService.evaluateGroupedRule")(function* (
-        orgId: OrgId,
-        rule: NormalizedRule,
-      ): Effect.fn.Return<
-        Array<{ evaluation: EvaluatedRule; groupKey: string }>,
-        AlertValidationError | AlertDeliveryError
-      > {
-        if (rule.groupBy !== "service") {
-          return yield* Effect.fail(makeValidationError(`Unsupported groupBy dimension: ${rule.groupBy}`))
-        }
-        const endMs = now()
-        const startMs = endMs - rule.windowMinutes * 60_000
-        const groupedResults = yield* queryEngine.evaluateGrouped(systemTenant(orgId), {
-          startTime: toTinybirdDateTime(startMs),
-          endTime: toTinybirdDateTime(endMs),
-          query: rule.compiledPlan.query,
-          reducer: rule.compiledPlan.reducer,
-          sampleCountStrategy: rule.compiledPlan.sampleCountStrategy,
-        }, rule.groupBy).pipe(catchQueryEngineErrors)
-
-        return groupedResults.map((obs) => ({
-          evaluation: applyEvaluationLogic(rule, obs),
-          groupKey: obs.groupKey,
-        }))
-      })
 
       const buildDeliveryKey = (
         incidentId: string,
@@ -1313,10 +1383,16 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
         )
       })
 
-      const composeLinkUrl = (serviceName: string | null) =>
-        serviceName
-          ? `${env.MAPLE_APP_BASE_URL}/services/${encodeURIComponent(serviceName)}`
+      const composeLinkUrl = (serviceLinkName: string | null) =>
+        serviceLinkName
+          ? `${env.MAPLE_APP_BASE_URL}/services/${encodeURIComponent(serviceLinkName)}`
           : `${env.MAPLE_APP_BASE_URL}/alerts`
+
+      const resolveNotificationLinkUrl = (
+        rule: Pick<NormalizedRule, "serviceNames" | "groupBy">,
+        groupKey: string | null,
+      ) =>
+        composeLinkUrl(resolveServiceLinkName(rule, groupKey))
 
       const dispatchDelivery = (
         context: DispatchContext,
@@ -1327,7 +1403,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
           payloadJson,
           runtime.fetch,
           deliveryTimeoutMs(),
-          composeLinkUrl(context.serviceName),
+          context.linkUrl,
         )
 
       const buildPayload = (context: DeliveryPayloadContext) => ({
@@ -1340,7 +1416,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
           name: context.ruleName,
           signalType: context.signalType,
           severity: context.severity,
-          serviceName: context.serviceName,
+          groupKey: context.groupKey,
           comparator: context.comparator,
           threshold: context.threshold,
           windowMinutes: context.windowMinutes,
@@ -1349,7 +1425,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
           value: context.value,
           sampleCount: context.sampleCount,
         },
-        linkUrl: composeLinkUrl(context.serviceName),
+        linkUrl: context.linkUrl,
         sentAt: new Date(now()).toISOString(),
       })
 
@@ -1436,7 +1512,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
               dedupeKey: incident.dedupeKey,
               ruleId: rule.id,
               ruleName: rule.name,
-              serviceName: incident.serviceName ?? rule.serviceName,
+              groupKey: incident.groupKey,
               signalType: rule.signalType,
               severity: rule.severity,
               comparator: rule.comparator,
@@ -1444,6 +1520,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
               windowMinutes: rule.windowMinutes,
               value: evaluation.value,
               sampleCount: evaluation.sampleCount,
+              linkUrl: resolveNotificationLinkUrl(rule, incident.groupKey),
             })
 
             for (const destinationId of rule.destinationIds) {
@@ -1713,7 +1790,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
           deliveryKey: `${orgId}:${destinationId}:test`,
           ruleId: decodeAlertRuleIdSync(makeUuid()),
           ruleName: "Test alert",
-          serviceName: null,
+          groupKey: null,
           signalType: "throughput",
           severity: "warning",
           comparator: "lt",
@@ -1725,6 +1802,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
           dedupeKey: `${orgId}:${destinationId}:test`,
           value: 0,
           sampleCount: 0,
+          linkUrl: composeLinkUrl(null),
         }).pipe(
           Effect.tapError((error) => {
             const message =
@@ -1767,10 +1845,9 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
           name: normalized.name,
           enabled: normalized.enabled ? 1 : 0,
           severity: normalized.severity,
-          serviceName: normalized.serviceName,
           serviceNamesJson: normalized.serviceNames.length > 0 ? JSON.stringify(normalized.serviceNames) : null,
           excludeServiceNamesJson: normalized.excludeServiceNames.length > 0 ? JSON.stringify(normalized.excludeServiceNames) : null,
-          groupBy: normalized.groupBy,
+          groupBy: normalized.groupBy != null ? JSON.stringify(normalized.groupBy) : null,
           signalType: normalized.signalType,
           comparator: normalized.comparator,
           threshold: normalized.threshold,
@@ -1870,9 +1947,9 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
           yield* resolveStaleIncidents(orgId, ruleId, newNormalized, { resolveAll: true })
         } else {
           // Check for services that fell out of scope
-          const staleServiceNames = computeStaleServices(oldNormalized, newNormalized)
-          if (HashSet.size(staleServiceNames) > 0) {
-            yield* resolveStaleIncidents(orgId, ruleId, newNormalized, { staleServiceNames })
+          const staleGroupKeys = computeStaleGroupKeys(oldNormalized, newNormalized)
+          if (HashSet.size(staleGroupKeys) > 0) {
+            yield* resolveStaleIncidents(orgId, ruleId, newNormalized, { staleGroupKeys })
           }
         }
 
@@ -1910,7 +1987,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
 
         let evaluation: EvaluatedRule
         if (normalized.groupBy != null && normalized.serviceNames.length === 0) {
-          const allResults = yield* evaluateGroupedRule(orgId, normalized)
+          const allResults = yield* evaluateRule(orgId, normalized)
           const excludeSet = new Set(normalized.excludeServiceNames)
           const results = allResults.filter((r) => !excludeSet.has(r.groupKey))
           const breached = results.find((r) => r.evaluation.status === "breached")
@@ -1920,7 +1997,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
             sampleCount: 0,
             threshold: normalized.threshold,
             comparator: normalized.comparator,
-            reason: "No services found",
+            reason: "No groups found",
           }
         } else if (normalized.serviceNames.length > 1) {
           const results = yield* Effect.forEach(
@@ -1928,7 +2005,15 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
             (svcName) =>
               Effect.gen(function* () {
                 const perServicePlan = yield* compileRulePlan({ ...normalized, serviceName: svcName })
-                return yield* evaluateRule(orgId, { ...normalized, serviceName: svcName, compiledPlan: perServicePlan })
+                const observations = yield* evaluateRule(orgId, { ...normalized, serviceName: svcName, compiledPlan: perServicePlan })
+                return observations[0]?.evaluation ?? {
+                  status: "skipped" as const,
+                  value: null,
+                  sampleCount: 0,
+                  threshold: normalized.threshold,
+                  comparator: normalized.comparator,
+                  reason: "No data",
+                }
               }),
             { concurrency: 5 },
           )
@@ -1941,7 +2026,15 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
             reason: "No data",
           }
         } else {
-          evaluation = yield* evaluateRule(orgId, normalized)
+          const observations = yield* evaluateRule(orgId, normalized)
+          evaluation = observations[0]?.evaluation ?? {
+            status: "skipped" as const,
+            value: null,
+            sampleCount: 0,
+            threshold: normalized.threshold,
+            comparator: normalized.comparator,
+            reason: "No data",
+          }
         }
 
         if (sendNotification) {
@@ -1968,7 +2061,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
                 deliveryKey: `${orgId}:${destinationId}:rule-test`,
                 ruleId: decodeAlertRuleIdSync(makeUuid()),
                 ruleName: normalized.name,
-                serviceName: normalized.serviceName,
+                groupKey: null,
                 signalType: normalized.signalType,
                 severity: normalized.severity,
                 comparator: normalized.comparator,
@@ -1980,6 +2073,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
                 dedupeKey: `${orgId}:${destinationId}:rule-test`,
                 value: evaluation.value,
                 sampleCount: evaluation.sampleCount,
+                linkUrl: resolveNotificationLinkUrl(normalized, null),
               }),
             { concurrency: "unbounded" },
           )
@@ -2214,6 +2308,9 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
             : null
           const ruleRow = ruleMap.get(row.ruleId) ?? null
           const payloadRule = payload.rule
+          const ruleServiceNames = ruleRow ? serviceNamesFromRow(ruleRow) : []
+          const ruleGroupBy = ruleRow ? parseStoredGroupBy(ruleRow.groupBy) : null
+          const groupKey = incidentRow?.groupKey ?? payloadRule?.groupKey ?? null
 
           const deliveryStart = now()
           const result = yield* dispatchDelivery(
@@ -2224,7 +2321,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
               secretConfig: hydrated.secretConfig,
               ruleId: decodeAlertRuleIdSync(row.ruleId),
               ruleName: ruleRow?.name ?? String(payloadRule?.name ?? "Alert"),
-              serviceName: incidentRow?.serviceName ?? payloadRule?.serviceName ?? null,
+              groupKey,
               signalType: decodeAlertSignalTypeSync(incidentRow?.signalType ?? payloadRule?.signalType ?? "throughput"),
               severity: decodeAlertSeveritySync(incidentRow?.severity ?? payloadRule?.severity ?? "warning"),
               comparator: decodeAlertComparatorSync(incidentRow?.comparator ?? payloadRule?.comparator ?? "gt"),
@@ -2236,6 +2333,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
               dedupeKey: incidentRow?.dedupeKey ?? String(payload.dedupeKey ?? row.deliveryKey),
               value: payload.observed?.value ?? null,
               sampleCount: payload.observed?.sampleCount ?? null,
+              linkUrl: resolveNotificationLinkUrl({ serviceNames: ruleServiceNames, groupBy: ruleGroupBy }, groupKey),
             },
             row.payloadJson,
           )
@@ -2330,7 +2428,6 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
         normalized: NormalizedRule,
         evaluation: EvaluatedRule,
         groupKey: string,
-        serviceName: string | null,
         timestamp: number,
       ) {
         const stateConflictTarget: [typeof alertRuleStates.orgId, typeof alertRuleStates.ruleId, typeof alertRuleStates.groupKey] = [alertRuleStates.orgId, alertRuleStates.ruleId, alertRuleStates.groupKey]
@@ -2353,10 +2450,10 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
                   .limit(1)
               )[0] ?? null
 
-            const incidentServiceFilter = serviceName != null
-              ? eq(alertIncidents.serviceName, serviceName)
-              : sql`${alertIncidents.serviceName} IS NULL`
-
+            // Look up the open incident for this group via the unique
+            // (orgId, ruleId, status, groupKey) combination. The legacy
+            // serviceName-based filter is gone — composite group keys make
+            // serviceName ambiguous, and we now persist groupKey directly.
             const openIncident =
               (
                 await tx
@@ -2367,7 +2464,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
                       eq(alertIncidents.orgId, row.orgId),
                       eq(alertIncidents.ruleId, row.id),
                       eq(alertIncidents.status, "open"),
-                      incidentServiceFilter,
+                      eq(alertIncidents.groupKey, groupKey),
                     ),
                   )
                   .limit(1)
@@ -2442,7 +2539,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
                 ruleId: row.id,
                 incidentKey,
                 ruleName: row.name,
-                serviceName,
+                groupKey,
                 signalType: normalized.signalType,
                 severity: normalized.severity,
                 status: "open",
@@ -2561,16 +2658,14 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
       /*  Stale incident resolution                                               */
       /* -------------------------------------------------------------------------- */
 
-      const computeStaleServices = (
+      const computeStaleGroupKeys = (
         oldRule: NormalizedRule,
         newRule: NormalizedRule,
       ): HashSet.HashSet<string> => {
-        // Services removed from the explicit list
         const removedServices = HashSet.difference(
           HashSet.fromIterable(oldRule.serviceNames),
           HashSet.fromIterable(newRule.serviceNames),
         )
-        // Services newly added to the exclude list
         const newlyExcluded = HashSet.difference(
           HashSet.fromIterable(newRule.excludeServiceNames),
           HashSet.fromIterable(oldRule.excludeServiceNames),
@@ -2578,11 +2673,23 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
         return HashSet.union(removedServices, newlyExcluded)
       }
 
+      const groupByEqual = (
+        a: AlertGroupBy | null,
+        b: AlertGroupBy | null,
+      ): boolean => {
+        if (a == null || b == null) return a == null && b == null
+        if (a.length !== b.length) return false
+        for (let i = 0; i < a.length; i++) {
+          if (a[i] !== b[i]) return false
+        }
+        return true
+      }
+
       const ruleStructureChanged = (
         oldRule: NormalizedRule,
         newRule: NormalizedRule,
       ): boolean => {
-        if (oldRule.groupBy !== newRule.groupBy) return true
+        if (!groupByEqual(oldRule.groupBy, newRule.groupBy)) return true
         if (oldRule.signalType !== newRule.signalType) return true
         const mode = (r: NormalizedRule) =>
           r.groupBy != null ? "grouped"
@@ -2605,7 +2712,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
         ruleId: AlertRuleId,
         normalized: NormalizedRule,
         opts: {
-          readonly staleServiceNames?: HashSet.HashSet<string>
+          readonly staleGroupKeys?: HashSet.HashSet<string>
           readonly resolveAll?: boolean
         },
       ) {
@@ -2625,8 +2732,8 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
         const toResolve = opts.resolveAll
           ? openIncidents
           : Arr.filter(openIncidents, (i) =>
-            i.serviceName != null && (opts.staleServiceNames
-              ? HashSet.has(opts.staleServiceNames, i.serviceName)
+            i.groupKey != null && (opts.staleGroupKeys
+              ? HashSet.has(opts.staleGroupKeys, i.groupKey)
               : false),
           )
 
@@ -2637,7 +2744,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
           normalized,
           "Auto-resolved: rule configuration changed",
         )
-        const staleGroupKeys = Arr.map(toResolve, (i) => i.serviceName ?? "__total__")
+        const staleGroupKeys = Arr.map(toResolve, (i) => i.groupKey ?? "__total__")
 
         yield* dbExecute((db) =>
           db.transaction(async (tx) => {
@@ -2719,18 +2826,18 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
         )
 
         const orphaned = Arr.filter(openIncidents, (i) =>
-          !HashSet.has(evaluatedGroups, i.serviceName ?? "__total__"),
+          !HashSet.has(evaluatedGroups, i.groupKey ?? "__total__"),
         )
 
         if (orphaned.length === 0) return
 
         const syntheticEvaluation = makeSyntheticResolveEvaluation(
           normalized,
-          "Auto-resolved: service no longer appears in evaluation results",
+          "Auto-resolved: group no longer appears in evaluation results",
         )
 
         yield* Effect.forEach(orphaned, (incident) => {
-          const groupKey = incident.serviceName ?? "__total__"
+          const groupKey = incident.groupKey ?? "__total__"
           return dbExecute((db) =>
             db.transaction(async (tx) => {
               await tx
@@ -2819,14 +2926,14 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
                 const normalized = yield* normalizeRuleRow(row)
 
                 if (normalized.groupBy != null && normalized.serviceNames.length === 0) {
-                  const results = yield* evaluateGroupedRule(row.orgId as OrgId, normalized)
+                  const results = yield* evaluateRule(row.orgId as OrgId, normalized)
                   const excludeSet = HashSet.fromIterable(normalized.excludeServiceNames)
                   const eligible = Arr.filter(results, (r) => !HashSet.has(excludeSet, r.groupKey))
 
                   yield* Effect.forEach(eligible, ({ evaluation, groupKey }) =>
                     Effect.gen(function* () {
                       yield* recordEvaluationStatus(evaluation)
-                      yield* processEvaluation(row, normalized, evaluation, groupKey, groupKey, timestamp)
+                      yield* processEvaluation(row, normalized, evaluation, groupKey, timestamp)
                     }))
 
                   const evaluatedGroups = HashSet.fromIterable(Arr.map(eligible, (r) => r.groupKey))
@@ -2853,9 +2960,11 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
                         serviceName: svcName,
                         compiledPlan: perServicePlan,
                       }
-                      const evaluation = yield* evaluateRule(row.orgId as OrgId, perService)
+                      const observations = yield* evaluateRule(row.orgId as OrgId, perService)
+                      const evaluation = observations[0]?.evaluation
+                      if (evaluation == null) return
                       yield* recordEvaluationStatus(evaluation)
-                      yield* processEvaluation(row, normalized, evaluation, svcName, svcName, timestamp)
+                      yield* processEvaluation(row, normalized, evaluation, svcName, timestamp)
                     }))
 
                   yield* resolveOrphanedGroupIncidents(
@@ -2869,16 +2978,18 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
                   return
                 }
 
-                const evaluation = yield* evaluateRule(row.orgId as OrgId, normalized)
-                yield* recordEvaluationStatus(evaluation)
-                yield* processEvaluation(
-                  row,
-                  normalized,
-                  evaluation,
-                  "__total__",
-                  normalized.serviceName,
-                  timestamp,
-                )
+                const observations = yield* evaluateRule(row.orgId as OrgId, normalized)
+                const evaluation = observations[0]?.evaluation
+                if (evaluation != null) {
+                  yield* recordEvaluationStatus(evaluation)
+                  yield* processEvaluation(
+                    row,
+                    normalized,
+                    evaluation,
+                    "__total__",
+                    timestamp,
+                  )
+                }
                 yield* Metric.update(AlertingMetrics.ruleEvaluationDurationMs, now() - ruleStart)
               }).pipe(
                 Effect.catch((error) => {

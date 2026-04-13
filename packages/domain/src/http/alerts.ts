@@ -65,7 +65,17 @@ export const AlertQueryAggregation = Schema.Literals([
 })
 export type AlertQueryAggregation = Schema.Schema.Type<typeof AlertQueryAggregation>
 
-export const AlertGroupBy = Schema.Literal("service").annotate({
+export const AlertGroupByDimension = Schema.String.pipe(
+  Schema.check(Schema.isMinLength(1), Schema.isTrimmed()),
+).annotate({
+  identifier: "@maple/AlertGroupByDimension",
+  title: "Alert Group By Dimension",
+})
+export type AlertGroupByDimension = Schema.Schema.Type<typeof AlertGroupByDimension>
+
+export const AlertGroupBy = Schema.Array(AlertGroupByDimension).pipe(
+  Schema.check(Schema.isMinLength(1)),
+).annotate({
   identifier: "@maple/AlertGroupBy",
   title: "Alert Group By",
 })
@@ -302,7 +312,6 @@ export class AlertRuleDocument extends Schema.Class<AlertRuleDocument>("AlertRul
   name: Schema.String,
   enabled: Schema.Boolean,
   severity: AlertSeverity,
-  serviceName: Schema.NullOr(Schema.String),
   serviceNames: Schema.Array(Schema.String),
   excludeServiceNames: Schema.Array(Schema.String),
   groupBy: Schema.NullOr(AlertGroupBy),
@@ -334,7 +343,6 @@ export class AlertRuleUpsertRequest extends Schema.Class<AlertRuleUpsertRequest>
   name: ChannelLabel,
   enabled: Schema.optionalKey(Schema.Boolean),
   severity: AlertSeverity,
-  serviceName: Schema.optionalKey(Schema.NullOr(Schema.String)),
   serviceNames: Schema.optionalKey(Schema.Array(Schema.String)),
   excludeServiceNames: Schema.optionalKey(Schema.Array(Schema.String)),
   groupBy: Schema.optionalKey(Schema.NullOr(AlertGroupBy)),
@@ -392,7 +400,7 @@ export class AlertIncidentDocument extends Schema.Class<AlertIncidentDocument>(
   id: AlertIncidentId,
   ruleId: AlertRuleId,
   ruleName: Schema.String,
-  serviceName: Schema.NullOr(Schema.String),
+  groupKey: Schema.NullOr(Schema.String),
   signalType: AlertSignalType,
   severity: AlertSeverity,
   status: AlertIncidentStatus,

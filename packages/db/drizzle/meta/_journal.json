@@ -92,6 +92,20 @@
       "when": 1775400000000,
       "tag": "0012_org_tinybird_sync_runs",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1776000000000,
+      "tag": "0013_alert_group_by_multi",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1776100000000,
+      "tag": "0014_alert_grouping_clean_cut",
+      "breakpoints": true
     }
   ]
 }

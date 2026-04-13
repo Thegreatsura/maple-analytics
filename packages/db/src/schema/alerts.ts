@@ -42,7 +42,6 @@ export const alertRules = sqliteTable(
     name: text("name").notNull(),
     enabled: integer("enabled", { mode: "number" }).notNull().default(1),
     severity: text("severity").notNull(),
-    serviceName: text("service_name"),
     serviceNamesJson: text("service_names_json"),
     excludeServiceNamesJson: text("exclude_service_names_json"),
     signalType: text("signal_type").notNull(),
@@ -91,7 +90,6 @@ export const alertRules = sqliteTable(
   (table) => [
     index("alert_rules_org_idx").on(table.orgId),
     index("alert_rules_org_enabled_idx").on(table.orgId, table.enabled),
-    index("alert_rules_org_service_idx").on(table.orgId, table.serviceName),
     uniqueIndex("alert_rules_org_name_idx").on(table.orgId, table.name),
   ],
 )
@@ -129,7 +127,7 @@ export const alertIncidents = sqliteTable(
     ruleId: text("rule_id").notNull(),
     incidentKey: text("incident_key").notNull(),
     ruleName: text("rule_name").notNull(),
-    serviceName: text("service_name"),
+    groupKey: text("group_key"),
     signalType: text("signal_type").notNull(),
     severity: text("severity").notNull(),
     status: text("status").notNull(),
