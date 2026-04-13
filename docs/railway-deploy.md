@@ -64,9 +64,8 @@ Set in each Doppler config (`prd`, `stg`, `pr`):
 - `CLERK_PUBLISHABLE_KEY`
 - `CLERK_JWT_KEY`
 
-Do not keep these legacy vars in Doppler:
+Do not keep these app-prefixed frontend vars in Doppler:
 
-- `MAPLE_DEPLOY_WEB_ONLY`
 - `VITE_CLERK_PUBLISHABLE_KEY`
 - `VITE_MAPLE_AUTH_MODE`
 

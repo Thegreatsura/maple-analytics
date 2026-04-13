@@ -8,8 +8,13 @@ Maple is now organized as a monorepo with a SPA frontend and an Effect-based bac
 - `apps/api`: Effect HTTP API (Tinybird proxy + MCP server code)
 - `apps/ingest`: OTLP ingest gateway (key auth + org enrichment + collector forwarding)
 - `apps/landing`: Astro landing site
+- `apps/alerting`: Alert evaluation worker
+- `apps/chat-agent`: Cloudflare Worker chat surface
+- `apps/cli`: CLI utilities
+- `apps/mobile`: Expo mobile app
 - `packages/domain`: Shared Effect HTTP contracts and domain types
-- `packages/api-client`: Typed client used by the web app
+- `packages/query-engine`: Shared query and observability logic
+- `packages/ui`: Shared UI primitives and components
 
 ## Prerequisites
 
@@ -23,43 +28,28 @@ bun install
 
 ## Develop
 
-Run all app services (API + web + ingest + landing):
-
-```bash
-bun run dev:all
-```
-
-`dev:all` uses Turbo `--continue=always`, so if one service fails to bind (for example, a port already in use), other services keep running.
-Dev scripts run Turbo in TUI mode so interactive dev servers (like Vite) stay attached.
-Use strict fail-fast mode when needed:
-
-```bash
-bun run dev:all:strict
-```
-
 Run every available `dev` task in the monorepo:
 
 ```bash
 bun run dev
 ```
 
-Run only web:
+Run individual apps from the repo root with workspace filters:
 
 ```bash
-bun run dev:web
+bun --filter=@maple/web dev
+bun --filter=@maple/api dev
+bun --filter=@maple/ingest dev
+bun --filter=@maple/landing dev
 ```
 
-Run only API:
+There is also a dedicated root helper for alerting:
 
 ```bash
-bun run dev:api
+bun run dev:alerting
 ```
 
-Run only ingest gateway:
-
-```bash
-bun run dev:ingest
-```
+Turbo dev runs in TUI mode so interactive servers stay attached.
 
 ## Validate
 
@@ -152,21 +142,17 @@ Free/Starter note: when using a personal Doppler token, the workflow must also s
 Runtime API URL behavior:
 
 - Deploy-time web builds always use the Railway API domain from the same Alchemy run (`api.maple.dev` in `prd`, Railway-generated in `stg` / `pr-*`).
-- Local `bun run dev:web` can still use root `.env` `VITE_API_BASE_URL` for local API routing.
-
-Legacy env cleanup (delete these from Doppler):
-
-- `MAPLE_DEPLOY_WEB_ONLY`
+- Local `bun --filter=@maple/web dev` can still use root `.env` `VITE_API_BASE_URL` for local API routing.
 
 ## Environment
 
-- Canonical env example (used by `bun run dev:all`): `.env.example`
+- Canonical env example: `.env.example`
 - API-only env example: `apps/api/.env.example`
 - Real `.env` values are local-only and should stay untracked.
 
 The web app expects `VITE_API_BASE_URL` to point to the API (defaults to `http://localhost:3472`).
 
-For ingest + key auth, set these at minimum in your root `.env` when using `bun run dev:all`:
+For ingest + key auth, set these at minimum in your root `.env` when running the ingest gateway:
 
 - `MAPLE_INGEST_KEY_LOOKUP_HMAC_KEY`
 - `INGEST_PORT`
@@ -186,13 +172,13 @@ Maple now persists dashboards in SQLite via libSQL:
 Migration commands:
 
 ```bash
-bun run db:migrate
-bun run db:generate
-bun run db:push
-bun run db:studio
+bun --filter=@maple/api db:migrate
+bun --filter=@maple/db db:generate
+bun --filter=@maple/db db:push
+bun --filter=@maple/db db:studio
 ```
 
-When running the API (`bun run dev:api` or `bun run --filter=@maple/api start`), migrations are applied automatically before boot.
+When running the API (`bun --filter=@maple/api dev` or `bun --filter=@maple/api start`), migrations are applied automatically before boot.
 
 ## Ingest Keys
 
@@ -222,8 +208,8 @@ Maple supports exactly two auth modes via `MAPLE_AUTH_MODE`:
 Start apps:
 
 ```bash
-bun run dev:api
-bun run dev:web
+bun --filter=@maple/api dev
+bun --filter=@maple/web dev
 ```
 
 Validate behavior:

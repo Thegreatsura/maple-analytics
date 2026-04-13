@@ -3,7 +3,6 @@ import { defineConfig, loadEnv } from "vite";
 import { devtools } from "@tanstack/devtools-vite";
 import tanstackRouter from "@tanstack/router-plugin/vite";
 import viteReact from "@vitejs/plugin-react";
-import viteTsConfigPaths from "vite-tsconfig-paths";
 import tailwindcss from "@tailwindcss/vite";
 import alchemy from "alchemy/cloudflare/vite";
 
@@ -22,12 +21,12 @@ export default defineConfig(({ mode }) => {
 
   return {
     envDir,
+    resolve: {
+      tsconfigPaths: true,
+    },
     plugins: [
       devtools(),
       tanstackRouter({ target: "react", autoCodeSplitting: false }),
-      viteTsConfigPaths({
-        projects: ["./tsconfig.json"],
-      }),
       tailwindcss(),
       viteReact(),
       ...(process.env.ALCHEMY_ROOT ? [alchemy({ configPath: "./wrangler.jsonc" })] : []),

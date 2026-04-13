@@ -9,8 +9,7 @@
     "destroy:stack": "alchemy destroy",
     "preview": "vite preview",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc --noEmit",
-    "smoke:query-builder-live": "bun run ./scripts/query-builder-live-smoke.ts"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@base-ui/react": "catalog:ui",
@@ -90,7 +89,6 @@
     "react-scan": "^0.5.3",
     "typescript": "catalog:tooling",
     "vite": "catalog:",
-    "vite-tsconfig-paths": "^6.1.1",
     "vitest": "catalog:"
   }
 }
