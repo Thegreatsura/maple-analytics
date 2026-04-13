@@ -82,6 +82,65 @@ describe("compilePipeQuery", () => {
     const rows = [{ traceId: "abc" }]
     expect(result!.castRows(rows)).toEqual(rows)
   })
+
+  describe("compare pipes (UNION ALL with period discriminator)", () => {
+    const compareParams = () => ({
+      org_id: asOrgId("test-org"),
+      current_start_time: "2024-01-08 00:00:00",
+      current_end_time: "2024-01-15 00:00:00",
+      previous_start_time: "2024-01-01 00:00:00",
+      previous_end_time: "2024-01-08 00:00:00",
+    })
+
+    it("service_overview_compare wraps both windows into one SQL", () => {
+      const result = compilePipeQuery("service_overview_compare", compareParams())
+      expect(result).toBeDefined()
+      const sql = result!.sql
+      expect(sql).toContain("'current' AS period")
+      expect(sql).toContain("'previous' AS period")
+      expect(sql).toContain("UNION ALL")
+      expect(sql).toContain("2024-01-08 00:00:00")
+      expect(sql).toContain("2024-01-15 00:00:00")
+      expect(sql).toContain("2024-01-01 00:00:00")
+      expect(sql).toContain("test-org")
+      expect(sql).toMatch(/FORMAT JSON\s*$/)
+    })
+
+    it("get_service_usage_compare wraps both windows into one SQL", () => {
+      const result = compilePipeQuery("get_service_usage_compare", compareParams())
+      expect(result).toBeDefined()
+      const sql = result!.sql
+      expect(sql).toContain("'current' AS period")
+      expect(sql).toContain("'previous' AS period")
+      expect(sql).toContain("UNION ALL")
+      expect(sql).toContain("2024-01-08 00:00:00")
+      expect(sql).toContain("2024-01-01 00:00:00")
+      expect(sql).toContain("test-org")
+      expect(sql).toMatch(/FORMAT JSON\s*$/)
+    })
+
+    it("service_overview_compare honors environments and commit_shas filters", () => {
+      const result = compilePipeQuery("service_overview_compare", {
+        ...compareParams(),
+        environments: "prod,staging",
+        commit_shas: "abc123,def456",
+      })
+      expect(result).toBeDefined()
+      expect(result!.sql).toContain("prod")
+      expect(result!.sql).toContain("staging")
+      expect(result!.sql).toContain("abc123")
+      expect(result!.sql).toContain("def456")
+    })
+
+    it("get_service_usage_compare honors service filter", () => {
+      const result = compilePipeQuery("get_service_usage_compare", {
+        ...compareParams(),
+        service: "api-gateway",
+      })
+      expect(result).toBeDefined()
+      expect(result!.sql).toContain("api-gateway")
+    })
+  })
 })
 
 describe("buildAttributeFiltersFromParams", () => {

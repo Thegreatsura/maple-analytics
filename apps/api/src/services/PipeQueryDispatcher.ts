@@ -37,6 +37,33 @@ export function compilePipeQuery(
   const int = (key: string, def?: number) => params[key] != null ? Number(params[key]) : def
   const bool = (key: string) => params[key] === true || params[key] === "1" || params[key] === "true"
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const compileCompare = (query: any, ranges: {
+    currentStart: string
+    currentEnd: string
+    previousStart: string
+    previousEnd: string
+  }): PipeCompiledQuery => {
+    const currentSql = CH.compile(
+      query,
+      { orgId, startTime: ranges.currentStart, endTime: ranges.currentEnd },
+      { skipFormat: true },
+    ).sql
+    const previousSql = CH.compile(
+      query,
+      { orgId, startTime: ranges.previousStart, endTime: ranges.previousEnd },
+      { skipFormat: true },
+    ).sql
+    return {
+      sql:
+        `SELECT 'current' AS period, * FROM (\n${currentSql}\n)\n` +
+        `UNION ALL\n` +
+        `SELECT 'previous' AS period, * FROM (\n${previousSql}\n)\n` +
+        `FORMAT JSON`,
+      castRows: (rows) => rows as ReadonlyArray<unknown>,
+    }
+  }
+
   return Match.value(pipe).pipe(
     // ----- Traces -----
     Match.when("list_traces", () =>
@@ -128,6 +155,20 @@ export function compilePipeQuery(
         commitShas: str("commit_shas")?.split(",").filter(Boolean),
       }), { orgId, startTime, endTime })),
     ),
+    Match.when("service_overview_compare", () =>
+      compileCompare(
+        CH.serviceOverviewQuery({
+          environments: str("environments")?.split(",").filter(Boolean),
+          commitShas: str("commit_shas")?.split(",").filter(Boolean),
+        }),
+        {
+          currentStart: str("current_start_time") ?? startTime,
+          currentEnd: str("current_end_time") ?? endTime,
+          previousStart: str("previous_start_time") ?? startTime,
+          previousEnd: str("previous_end_time") ?? endTime,
+        },
+      ),
+    ),
     Match.when("services_facets", () =>
       eraseType(CH.compileUnion(CH.servicesFacetsQuery(), { orgId, startTime, endTime })),
     ),
@@ -142,6 +183,17 @@ export function compilePipeQuery(
     ),
     Match.when("get_service_usage", () =>
       eraseType(CH.compile(CH.serviceUsageQuery({ serviceName: str("service") }), { orgId, startTime, endTime })),
+    ),
+    Match.when("get_service_usage_compare", () =>
+      compileCompare(
+        CH.serviceUsageQuery({ serviceName: str("service") }),
+        {
+          currentStart: str("current_start_time") ?? startTime,
+          currentEnd: str("current_end_time") ?? endTime,
+          previousStart: str("previous_start_time") ?? startTime,
+          previousEnd: str("previous_end_time") ?? endTime,
+        },
+      ),
     ),
     Match.when("service_dependencies", () =>
       eraseType(CH.serviceDependenciesSQL({ deploymentEnv: str("deployment_env") }, { orgId, startTime, endTime })),

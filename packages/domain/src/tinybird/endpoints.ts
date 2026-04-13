@@ -193,6 +193,23 @@ export interface GetServiceUsageParams {
 }
 
 // ---------------------------------------------------------------------------
+// get_service_usage_compare
+// ---------------------------------------------------------------------------
+
+export type GetServiceUsageComparedOutput = GetServiceUsageOutput & {
+  readonly period: "current" | "previous"
+}
+
+export interface GetServiceUsageCompareParams {
+  org_id: string
+  service?: string
+  current_start_time: string
+  current_end_time: string
+  previous_start_time: string
+  previous_end_time: string
+}
+
+// ---------------------------------------------------------------------------
 // list_metrics
 // ---------------------------------------------------------------------------
 
@@ -324,6 +341,24 @@ export interface ServiceOverviewParams {
   org_id: string
   start_time?: string
   end_time?: string
+  environments?: string
+  commit_shas?: string
+}
+
+// ---------------------------------------------------------------------------
+// service_overview_compare
+// ---------------------------------------------------------------------------
+
+export type ServiceOverviewComparedOutput = ServiceOverviewOutput & {
+  readonly period: "current" | "previous"
+}
+
+export interface ServiceOverviewCompareParams {
+  org_id: string
+  current_start_time: string
+  current_end_time: string
+  previous_start_time: string
+  previous_end_time: string
   environments?: string
   commit_shas?: string
 }

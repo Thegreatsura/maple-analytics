@@ -38,6 +38,10 @@ interface ServiceOverviewRow {
   p95LatencyMs: number
 }
 
+interface ServiceOverviewCompareRow extends ServiceOverviewRow {
+  period: "current" | "previous"
+}
+
 interface ServiceUsageRow {
   serviceName: string
   totalLogCount: number
@@ -53,6 +57,10 @@ interface ServiceUsageRow {
   totalExpHistogramMetricCount: number
   totalExpHistogramMetricSizeBytes: number
   totalSizeBytes: number
+}
+
+interface ServiceUsageCompareRow extends ServiceUsageRow {
+  period: "current" | "previous"
 }
 
 interface ErrorsByTypeRow {
@@ -197,35 +205,37 @@ export class DigestService extends Context.Service<DigestService>()(
           authMode: "self_hosted" as const,
         }
 
-        // Query all data in parallel
+        // Query all data in parallel. service_overview and get_service_usage
+        // use the *_compare pipes which UNION ALL current + previous windows
+        // into a single Tinybird query, tagging rows with a `period` column.
         const [
-          currentOverview,
-          previousOverview,
+          overviewResponse,
           currentErrors,
-          currentUsage,
-          previousUsage,
+          usageResponse,
           topErrors,
         ] = yield* Effect.all(
           [
             tinybird.query(systemTenant, {
-              pipe: "service_overview",
-              params: { start_time: currentStart, end_time: currentEnd },
-            }),
-            tinybird.query(systemTenant, {
-              pipe: "service_overview",
-              params: { start_time: previousStart, end_time: currentStart },
+              pipe: "service_overview_compare",
+              params: {
+                current_start_time: currentStart,
+                current_end_time: currentEnd,
+                previous_start_time: previousStart,
+                previous_end_time: currentStart,
+              },
             }),
             tinybird.query(systemTenant, {
               pipe: "errors_summary",
               params: { start_time: currentStart, end_time: currentEnd },
             }),
             tinybird.query(systemTenant, {
-              pipe: "get_service_usage",
-              params: { start_time: currentStart, end_time: currentEnd },
-            }),
-            tinybird.query(systemTenant, {
-              pipe: "get_service_usage",
-              params: { start_time: previousStart, end_time: currentStart },
+              pipe: "get_service_usage_compare",
+              params: {
+                current_start_time: currentStart,
+                current_end_time: currentEnd,
+                previous_start_time: previousStart,
+                previous_end_time: currentStart,
+              },
             }),
             tinybird.query(systemTenant, {
               pipe: "errors_by_type",
@@ -236,7 +246,7 @@ export class DigestService extends Context.Service<DigestService>()(
               },
             }),
           ],
-          { concurrency: 6 },
+          { concurrency: 4 },
         ).pipe(
           Effect.mapError(
             (error) =>
@@ -248,9 +258,10 @@ export class DigestService extends Context.Service<DigestService>()(
 
         void currentErrors
 
-        // Aggregate service health
-        const curOverviewData = currentOverview.data as Array<ServiceOverviewRow>
-        const prevOverviewData = previousOverview.data as Array<ServiceOverviewRow>
+        // Split UNION ALL'd rows by period discriminator
+        const overviewRows = overviewResponse.data as Array<ServiceOverviewCompareRow>
+        const curOverviewData: Array<ServiceOverviewRow> = overviewRows.filter((r) => r.period === "current")
+        const prevOverviewData: Array<ServiceOverviewRow> = overviewRows.filter((r) => r.period === "previous")
 
         const totalRequests = curOverviewData.reduce(
           (sum, s) => sum + (Number(s.throughput) || 0),
@@ -292,9 +303,10 @@ export class DigestService extends Context.Service<DigestService>()(
               ) / prevTotalRequests
             : 0
 
-        // Data volume
-        const curUsageData = currentUsage.data as Array<ServiceUsageRow>
-        const prevUsageData = previousUsage.data as Array<ServiceUsageRow>
+        // Data volume — split UNION ALL'd rows by period discriminator
+        const usageRows = usageResponse.data as Array<ServiceUsageCompareRow>
+        const curUsageData: Array<ServiceUsageRow> = usageRows.filter((r) => r.period === "current")
+        const prevUsageData: Array<ServiceUsageRow> = usageRows.filter((r) => r.period === "previous")
         const sumUsage = (data: Array<ServiceUsageRow>) => ({
           logs: data.reduce((s, r) => s + (Number(r.totalLogCount) || 0), 0),
           traces: data.reduce((s, r) => s + (Number(r.totalTraceCount) || 0), 0),
