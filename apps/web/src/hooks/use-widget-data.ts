@@ -272,6 +272,12 @@ export function useWidgetData(widget: DashboardWidget) {
 
   const hasServerFn = !!serverFunctionMap[widget.dataSource.endpoint]
 
+  const disableReason = !resolvedTimeRange
+    ? "Unable to resolve dashboard time range"
+    : !hasServerFn
+      ? `Unknown data source endpoint: ${widget.dataSource.endpoint}`
+      : null
+
   const resolvedParams = resolvedTimeRange
     ? interpolateParams(
         {
@@ -285,7 +291,7 @@ export function useWidgetData(widget: DashboardWidget) {
     : {}
 
   const result = useRefreshableAtomValue(
-    resolvedTimeRange && hasServerFn
+    disableReason === null
       ? widgetFetchAtom({
           endpoint: widget.dataSource.endpoint,
           params: resolvedParams,
@@ -296,16 +302,20 @@ export function useWidgetData(widget: DashboardWidget) {
   const transform = widget.dataSource.transform
 
   const dataState: WidgetDataState = useMemo(
-    () =>
-      Result.builder(result)
+    () => {
+      if (disableReason) {
+        return { status: "error", message: disableReason } as const
+      }
+      return Result.builder(result)
         .onInitial(() => ({ status: "loading" } as const))
         .onError((error) => {
           const msg = error instanceof Error ? error.message : error && typeof error === "object" && "message" in error ? String((error as { message: unknown }).message) : String(error)
           return { status: "error", message: msg } as const
         })
         .onSuccess((rawData) => ({ status: "ready", data: applyTransform(rawData, transform) } as const))
-        .orElse(() => ({ status: "error", message: "Unknown error" } as const)),
-    [result, transform]
+        .orElse(() => ({ status: "error", message: "Unknown error" } as const))
+    },
+    [result, transform, disableReason]
   )
 
   return {

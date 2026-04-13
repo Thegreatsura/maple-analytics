@@ -5,11 +5,21 @@ import { relativeToAbsolute } from "@/lib/time-utils"
 
 export type ResolvedTimeRange = { startTime: string; endTime: string }
 
+const DEFAULT_RELATIVE_FALLBACK = "1h"
+
 export function resolveTimeRange(timeRange: TimeRange): ResolvedTimeRange | null {
   if (timeRange.type === "absolute") {
     return { startTime: timeRange.startTime, endTime: timeRange.endTime }
   }
-  return relativeToAbsolute(timeRange.value)
+  const resolved = relativeToAbsolute(timeRange.value)
+  if (resolved) return resolved
+
+  if (import.meta.env.DEV) {
+    console.warn(
+      `[resolveTimeRange] Invalid relative time range value "${timeRange.value}", falling back to "${DEFAULT_RELATIVE_FALLBACK}"`,
+    )
+  }
+  return relativeToAbsolute(DEFAULT_RELATIVE_FALLBACK)
 }
 
 // Use `unknown` as the ScopedAtom input to avoid TS union → never intersection

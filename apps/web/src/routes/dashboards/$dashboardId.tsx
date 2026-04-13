@@ -87,6 +87,7 @@ function DashboardViewPage() {
 
   return (
     <DashboardTimeRangeWrapper
+      key={dashboardId}
       initialTimeRange={activeDashboard.timeRange}
       onTimeRangeChange={(timeRange) => updateDashboardTimeRange(activeDashboard.id, timeRange)}
     >
