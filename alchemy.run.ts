@@ -38,6 +38,7 @@ const chatAgent = await createChatAgentWorker({
   stage,
   domains,
   mapleApiUrl: resolvedApiUrl,
+  mapleDb,
 })
 
 const resolvedChatAgentUrl = domains.chat
