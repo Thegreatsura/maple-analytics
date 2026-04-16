@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test"
+import { describe, expect, it } from "vitest"
 import { raw, str, int, ident, as_, when } from "./sql-fragment"
 import { compileQuery } from "./sql-query"
 

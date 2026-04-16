@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, mock } from "bun:test"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { datasources, pipes, projectRevision } from "../generated/tinybird-project-manifest"
 import {
   cleanupOwnedTinybirdDeployment,
@@ -26,7 +26,7 @@ describe("Tinybird project sync", () => {
     let requestBody: FormData | null = null
     let authorizationHeader = ""
 
-    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const isRequest = input instanceof Request
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
       const method = init?.method ?? (isRequest ? input.method : "GET")
@@ -85,7 +85,7 @@ describe("Tinybird project sync", () => {
   })
 
   it("classifies Tinybird deploy rejections as user-fixable upstream errors", async () => {
-    globalThis.fetch = mock(async () =>
+    globalThis.fetch = vi.fn(async () =>
       new Response("bad credentials", {
         status: 401,
         headers: { "content-type": "text/plain" },
@@ -105,7 +105,7 @@ describe("Tinybird project sync", () => {
   })
 
   it("extracts structured Tinybird feedback instead of showing the raw deploy response body", async () => {
-    globalThis.fetch = mock(async () =>
+    globalThis.fetch = vi.fn(async () =>
       new Response(
         JSON.stringify({
           result: "failed",
@@ -141,7 +141,7 @@ describe("Tinybird project sync", () => {
   })
 
   it("treats invalid Tinybird JSON as an upstream availability problem", async () => {
-    globalThis.fetch = mock(async () =>
+    globalThis.fetch = vi.fn(async () =>
       new Response("not-json", {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -163,7 +163,7 @@ describe("Tinybird project sync", () => {
   it("does not delete active or in-progress deployments during owned cleanup", async () => {
     const requests: string[] = []
 
-    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const isRequest = input instanceof Request
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
       const method = init?.method ?? (isRequest ? input.method : "GET")
@@ -196,7 +196,7 @@ describe("Tinybird project sync", () => {
   })
 
   it("treats data_ready as ready to promote, not as live", async () => {
-    globalThis.fetch = mock(async () =>
+    globalThis.fetch = vi.fn(async () =>
       new Response(
         JSON.stringify({
           deployment: { status: "data_ready" },
@@ -222,7 +222,7 @@ describe("Tinybird project sync", () => {
   })
 
   it("treats live as the successful terminal deployment state", async () => {
-    globalThis.fetch = mock(async () =>
+    globalThis.fetch = vi.fn(async () =>
       new Response(
         JSON.stringify({
           deployment: { status: "live" },
@@ -250,7 +250,7 @@ describe("Tinybird project sync", () => {
   it("fails resumeDeployment when Tinybird reaches a terminal error state", async () => {
     let pollCount = 0
 
-    globalThis.fetch = mock(async () => {
+    globalThis.fetch = vi.fn(async () => {
       pollCount += 1
       return new Response(
         JSON.stringify({
@@ -278,7 +278,7 @@ describe("Tinybird project sync", () => {
   })
 
   it("treats non-JSON health probe responses as missing metrics instead of failing", async () => {
-    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const isRequest = input instanceof Request
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
       const method = init?.method ?? (isRequest ? input.method : "GET")

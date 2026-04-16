@@ -1,8 +1,4 @@
-import { Database } from "bun:sqlite"
-import { afterEach, describe, expect, it } from "bun:test"
-import { mkdtempSync, rmSync } from "node:fs"
-import { join } from "node:path"
-import { tmpdir } from "node:os"
+import { afterEach, describe, expect, it } from "vitest"
 import { Cause, ConfigProvider, Effect, Exit, Layer, Option, Schema } from "effect"
 import {
   OrgId,
@@ -16,15 +12,14 @@ import { encryptAes256Gcm } from "./Crypto"
 import { DatabaseLibsqlLive } from "./DatabaseLibsqlLive"
 import { Env } from "./Env"
 import { OrgTinybirdSettingsService, __testables } from "./OrgTinybirdSettingsService"
+import { cleanupTempDirs, createTempDbUrl as makeTempDb, executeSql, queryFirstRow } from "./test-sqlite"
 
 const createdTempDirs: string[] = []
 const encryptionKey = Buffer.alloc(32, 7)
 
 afterEach(() => {
   __testables.reset()
-  for (const dir of createdTempDirs.splice(0, createdTempDirs.length)) {
-    rmSync(dir, { recursive: true, force: true })
-  }
+  cleanupTempDirs(createdTempDirs)
 })
 
 const getError = <A, E>(exit: Exit.Exit<A, E>): unknown => {
@@ -51,14 +46,7 @@ const waitFor = async <T>(fn: () => T | Promise<T>, predicate: (value: T) => boo
 }
 
 const createTempDbUrl = () => {
-  const dir = mkdtempSync(join(tmpdir(), "maple-org-tinybird-"))
-  createdTempDirs.push(dir)
-
-  const dbPath = join(dir, "maple.db")
-  const db = new Database(dbPath)
-  db.close()
-
-  return { url: `file:${dbPath}`, dbPath }
+  return makeTempDb("maple-org-tinybird-", createdTempDirs)
 }
 
 const makeConfig = (url: string) =>
@@ -92,11 +80,54 @@ const orgAdminRoles = [asRoleName("org:admin")]
 const memberRoles = [asRoleName("org:member")]
 
 const getTableRow = <T>(dbPath: string, sql: string, ...params: Array<string | number>) => {
-  const db = new Database(dbPath, { readonly: true })
-  const result = db.query(sql).get(...params) as T | undefined
-  db.close()
-  return result
+  return queryFirstRow<T>(dbPath, sql, params)
 }
+
+const insertSyncRun = async (
+  dbPath: string,
+  row: {
+    orgId: string
+    requestedBy: string
+    targetHost: string
+    targetTokenCiphertext: string
+    targetTokenIv: string
+    targetTokenTag: string
+    targetProjectRevision: string
+    runStatus: string
+    phase: string
+    deploymentId: string | null
+    deploymentStatus: string | null
+    errorMessage: string | null
+    startedAt: number
+    updatedAt: number
+    finishedAt: number | null
+  },
+) =>
+  executeSql(
+    dbPath,
+    `INSERT INTO org_tinybird_sync_runs (
+      org_id, requested_by, target_host, target_token_ciphertext, target_token_iv, target_token_tag,
+      target_project_revision, run_status, phase, deployment_id, deployment_status, error_message,
+      started_at, updated_at, finished_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      row.orgId,
+      row.requestedBy,
+      row.targetHost,
+      row.targetTokenCiphertext,
+      row.targetTokenIv,
+      row.targetTokenTag,
+      row.targetProjectRevision,
+      row.runStatus,
+      row.phase,
+      row.deploymentId,
+      row.deploymentStatus,
+      row.errorMessage,
+      row.startedAt,
+      row.updatedAt,
+      row.finishedAt,
+    ],
+  )
 
 describe("OrgTinybirdSettingsService", () => {
   it("encrypts the token at rest and never returns it from get", async () => {
@@ -159,7 +190,7 @@ describe("OrgTinybirdSettingsService", () => {
     })
     expect(JSON.stringify(result)).not.toContain("secret-token")
 
-    const row = getTableRow<{
+    const row = await getTableRow<{
       token_ciphertext: string
       token_iv: string
       token_tag: string
@@ -217,7 +248,7 @@ describe("OrgTinybirdSettingsService", () => {
     expect(immediate.draftHost).toBe("https://customer.tinybird.co")
     expect(immediate.syncStatus).toBe("syncing")
 
-    const activeCount = getTableRow<{ count: number }>(
+    const activeCount = await getTableRow<{ count: number }>(
       dbPath,
       "SELECT COUNT(*) as count FROM org_tinybird_settings WHERE org_id = ?",
       "org_a",
@@ -254,33 +285,23 @@ describe("OrgTinybirdSettingsService", () => {
       ),
     )
 
-    const db = new Database(dbPath)
-    db
-      .query(
-        `INSERT INTO org_tinybird_sync_runs (
-          org_id, requested_by, target_host, target_token_ciphertext, target_token_iv, target_token_tag,
-          target_project_revision, run_status, phase, deployment_id, deployment_status, error_message,
-          started_at, updated_at, finished_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        "org_a",
-        "user_a",
-        "https://customer.tinybird.co",
-        encrypted.ciphertext,
-        encrypted.iv,
-        encrypted.tag,
-        "rev-1",
-        "running",
-        "starting",
-        "dep-1",
-        "deploying",
-        null,
-        Date.now(),
-        Date.now(),
-        null,
-      )
-    db.close()
+    await insertSyncRun(dbPath, {
+      orgId: "org_a",
+      requestedBy: "user_a",
+      targetHost: "https://customer.tinybird.co",
+      targetTokenCiphertext: encrypted.ciphertext,
+      targetTokenIv: encrypted.iv,
+      targetTokenTag: encrypted.tag,
+      targetProjectRevision: "rev-1",
+      runStatus: "running",
+      phase: "starting",
+      deploymentId: "dep-1",
+      deploymentStatus: "deploying",
+      errorMessage: null,
+      startedAt: Date.now(),
+      updatedAt: Date.now(),
+      finishedAt: null,
+    })
 
     const result = await Effect.runPromise(
       OrgTinybirdSettingsService.get(asOrgId("org_a"), adminRoles).pipe(
@@ -317,33 +338,23 @@ describe("OrgTinybirdSettingsService", () => {
       ),
     )
 
-    const db = new Database(dbPath)
-    db
-      .query(
-        `INSERT INTO org_tinybird_sync_runs (
-          org_id, requested_by, target_host, target_token_ciphertext, target_token_iv, target_token_tag,
-          target_project_revision, run_status, phase, deployment_id, deployment_status, error_message,
-          started_at, updated_at, finished_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        "org_a",
-        "user_a",
-        "https://customer.tinybird.co",
-        encrypted.ciphertext,
-        encrypted.iv,
-        encrypted.tag,
-        "rev-1",
-        "running",
-        "starting",
-        "dep-1",
-        "starting",
-        null,
-        Date.now(),
-        Date.now(),
-        null,
-      )
-    db.close()
+    await insertSyncRun(dbPath, {
+      orgId: "org_a",
+      requestedBy: "user_a",
+      targetHost: "https://customer.tinybird.co",
+      targetTokenCiphertext: encrypted.ciphertext,
+      targetTokenIv: encrypted.iv,
+      targetTokenTag: encrypted.tag,
+      targetProjectRevision: "rev-1",
+      runStatus: "running",
+      phase: "starting",
+      deploymentId: "dep-1",
+      deploymentStatus: "starting",
+      errorMessage: null,
+      startedAt: Date.now(),
+      updatedAt: Date.now(),
+      finishedAt: null,
+    })
 
     const result = await Effect.runPromise(
       OrgTinybirdSettingsService.use((service) =>
@@ -395,9 +406,11 @@ describe("OrgTinybirdSettingsService", () => {
       ).pipe(Effect.provide(layer)),
     )
 
-    const db = new Database(dbPath)
-    db.query("DELETE FROM org_tinybird_sync_runs WHERE org_id = ?").run("org_a")
-    db.close()
+    await executeSql(
+      dbPath,
+      "DELETE FROM org_tinybird_sync_runs WHERE org_id = ?",
+      ["org_a"],
+    )
 
     const result = await Effect.runPromise(
       OrgTinybirdSettingsService.use((service) =>
@@ -426,33 +439,23 @@ describe("OrgTinybirdSettingsService", () => {
       ),
     )
 
-    const db = new Database(dbPath)
-    db
-      .query(
-        `INSERT INTO org_tinybird_sync_runs (
-          org_id, requested_by, target_host, target_token_ciphertext, target_token_iv, target_token_tag,
-          target_project_revision, run_status, phase, deployment_id, deployment_status, error_message,
-          started_at, updated_at, finished_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        "org_a",
-        "user_a",
-        "https://customer.tinybird.co",
-        encrypted.ciphertext,
-        encrypted.iv,
-        encrypted.tag,
-        "rev-1",
-        "failed",
-        "failed",
-        "dep-9",
-        "failed",
-        "broken pipe",
-        Date.now(),
-        Date.now(),
-        Date.now(),
-      )
-    db.close()
+    await insertSyncRun(dbPath, {
+      orgId: "org_a",
+      requestedBy: "user_a",
+      targetHost: "https://customer.tinybird.co",
+      targetTokenCiphertext: encrypted.ciphertext,
+      targetTokenIv: encrypted.iv,
+      targetTokenTag: encrypted.tag,
+      targetProjectRevision: "rev-1",
+      runStatus: "failed",
+      phase: "failed",
+      deploymentId: "dep-9",
+      deploymentStatus: "failed",
+      errorMessage: "broken pipe",
+      startedAt: Date.now(),
+      updatedAt: Date.now(),
+      finishedAt: Date.now(),
+    })
 
     const result = await Effect.runPromise(
       OrgTinybirdSettingsService.use((service) =>
@@ -506,33 +509,23 @@ describe("OrgTinybirdSettingsService", () => {
 
     const staleStartedAt = Date.now() - (2_000 * 300) - 1_000
 
-    const db = new Database(dbPath)
-    db
-      .query(
-        `INSERT INTO org_tinybird_sync_runs (
-          org_id, requested_by, target_host, target_token_ciphertext, target_token_iv, target_token_tag,
-          target_project_revision, run_status, phase, deployment_id, deployment_status, error_message,
-          started_at, updated_at, finished_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        "org_a",
-        "user_a",
-        "https://customer.tinybird.co",
-        encrypted.ciphertext,
-        encrypted.iv,
-        encrypted.tag,
-        "rev-1",
-        "running",
-        "starting",
-        null,
-        null,
-        null,
-        staleStartedAt,
-        staleStartedAt,
-        null,
-      )
-    db.close()
+    await insertSyncRun(dbPath, {
+      orgId: "org_a",
+      requestedBy: "user_a",
+      targetHost: "https://customer.tinybird.co",
+      targetTokenCiphertext: encrypted.ciphertext,
+      targetTokenIv: encrypted.iv,
+      targetTokenTag: encrypted.tag,
+      targetProjectRevision: "rev-1",
+      runStatus: "running",
+      phase: "starting",
+      deploymentId: null,
+      deploymentStatus: null,
+      errorMessage: null,
+      startedAt: staleStartedAt,
+      updatedAt: staleStartedAt,
+      finishedAt: null,
+    })
 
     const result = await Effect.runPromise(
       OrgTinybirdSettingsService.use((service) =>
@@ -709,33 +702,23 @@ describe("OrgTinybirdSettingsService", () => {
       ),
     )
 
-    const db = new Database(dbPath)
-    db
-      .query(
-        `INSERT INTO org_tinybird_sync_runs (
-          org_id, requested_by, target_host, target_token_ciphertext, target_token_iv, target_token_tag,
-          target_project_revision, run_status, phase, deployment_id, deployment_status, error_message,
-          started_at, updated_at, finished_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        "org_a",
-        "user_a",
-        "https://customer.tinybird.co",
-        encrypted.ciphertext,
-        encrypted.iv,
-        encrypted.tag,
-        "rev-1",
-        "running",
-        "waiting_for_data",
-        "dep-1",
-        "deploying",
-        null,
-        Date.now(),
-        Date.now(),
-        null,
-      )
-    db.close()
+    await insertSyncRun(dbPath, {
+      orgId: "org_a",
+      requestedBy: "user_a",
+      targetHost: "https://customer.tinybird.co",
+      targetTokenCiphertext: encrypted.ciphertext,
+      targetTokenIv: encrypted.iv,
+      targetTokenTag: encrypted.tag,
+      targetProjectRevision: "rev-1",
+      runStatus: "running",
+      phase: "waiting_for_data",
+      deploymentId: "dep-1",
+      deploymentStatus: "deploying",
+      errorMessage: null,
+      startedAt: Date.now(),
+      updatedAt: Date.now(),
+      finishedAt: null,
+    })
 
     __testables.setGetDeploymentTransportStatusImpl(async () => ({
       deploymentId: "dep-1",

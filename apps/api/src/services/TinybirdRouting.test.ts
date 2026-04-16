@@ -1,8 +1,4 @@
-import { afterEach, describe, expect, it } from "bun:test"
-import { mkdtempSync, rmSync } from "node:fs"
-import { join } from "node:path"
-import { tmpdir } from "node:os"
-import { Database } from "bun:sqlite"
+import { afterEach, describe, expect, it } from "vitest"
 import { ConfigProvider, Effect, Layer, Schema } from "effect"
 import {
   OrgId,
@@ -14,26 +10,19 @@ import { DatabaseLibsqlLive } from "./DatabaseLibsqlLive"
 import { Env } from "./Env"
 import { OrgTinybirdSettingsService, __testables as orgTinybirdTestables } from "./OrgTinybirdSettingsService"
 import { TinybirdService, __testables as tinybirdTestables } from "./TinybirdService"
+import { cleanupTempDirs, createTempDbUrl as makeTempDb } from "./test-sqlite"
 
 const createdTempDirs: string[] = []
 
 afterEach(() => {
   orgTinybirdTestables.reset()
   tinybirdTestables.reset()
-  for (const dir of createdTempDirs.splice(0, createdTempDirs.length)) {
-    rmSync(dir, { recursive: true, force: true })
-  }
+  cleanupTempDirs(createdTempDirs)
 })
 
 const createTempDbUrl = () => {
-  const dir = mkdtempSync(join(tmpdir(), "maple-tinybird-routing-"))
-  createdTempDirs.push(dir)
-
-  const dbPath = join(dir, "maple.db")
-  const db = new Database(dbPath)
-  db.close()
-
-  return { url: `file:${dbPath}` }
+  const { url } = makeTempDb("maple-tinybird-routing-", createdTempDirs)
+  return { url }
 }
 
 const makeConfig = (url: string) =>

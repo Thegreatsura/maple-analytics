@@ -1,8 +1,4 @@
-import { Database } from "bun:sqlite";
-import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { afterEach, describe, expect, it } from "vitest";
 import { ConfigProvider, Effect, Layer, Schema } from "effect";
 import { hashCloudflareLogpushSecret } from "@maple/db";
 import {
@@ -15,24 +11,16 @@ import {
 import { DatabaseLibsqlLive } from "./DatabaseLibsqlLive";
 import { Env } from "./Env";
 import { CloudflareLogpushService } from "./CloudflareLogpushService";
+import { cleanupTempDirs, createTempDbUrl as makeTempDb, queryFirstRow } from "./test-sqlite";
 
 const createdTempDirs: string[] = [];
 
 afterEach(() => {
-  for (const dir of createdTempDirs.splice(0, createdTempDirs.length)) {
-    rmSync(dir, { recursive: true, force: true });
-  }
+  cleanupTempDirs(createdTempDirs);
 });
 
 const createTempDbUrl = () => {
-  const dir = mkdtempSync(join(tmpdir(), "maple-cloudflare-logpush-"));
-  createdTempDirs.push(dir);
-
-  const dbPath = join(dir, "maple.db");
-  const db = new Database(dbPath);
-  db.close();
-
-  return { url: `file:${dbPath}`, dbPath };
+  return makeTempDb("maple-cloudflare-logpush-", createdTempDirs);
 };
 
 const makeConfig = (
@@ -77,22 +65,20 @@ describe("CloudflareLogpushService", () => {
 
     expect(result.connector.serviceName).toBe("cloudflare/example.com");
     expect(result.connector.dataset).toBe("http_requests");
-    expect(result.setup.destinationConf).toStartWith(
+    expect(result.setup.destinationConf.startsWith(
       `https://ingest.example.com/v1/logpush/cloudflare/http_requests/${result.connector.id}?secret=maple_cf_`,
-    );
+    )).toBe(true);
 
-    const db = new Database(dbPath, { readonly: true });
-    const row = db
-      .query(
-        "SELECT secret_ciphertext, secret_hash FROM cloudflare_logpush_connectors WHERE id = ?",
-      )
-      .get(result.connector.id) as
-      | {
-          secret_ciphertext: string;
-          secret_hash: string;
-        }
-      | undefined;
-    db.close();
+    const row = await queryFirstRow<
+      {
+        secret_ciphertext: string;
+        secret_hash: string;
+      }
+    >(
+      dbPath,
+      "SELECT secret_ciphertext, secret_hash FROM cloudflare_logpush_connectors WHERE id = ?",
+      [result.connector.id],
+    );
 
     const secret = new URL(result.setup.destinationConf).searchParams.get("secret")!;
     expect(row).toBeDefined();

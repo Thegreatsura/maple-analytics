@@ -1,8 +1,4 @@
-import { Database } from "bun:sqlite"
-import { afterEach, describe, expect, it } from "bun:test"
-import { mkdtempSync, rmSync } from "node:fs"
-import { join } from "node:path"
-import { tmpdir } from "node:os"
+import { afterEach, describe, expect, it } from "vitest"
 import { Cause, ConfigProvider, Effect, Exit, Layer, Option, Schema } from "effect"
 import {
   IngestKeyEncryptionError,
@@ -14,13 +10,12 @@ import { hashIngestKey } from "@maple/db"
 import { DatabaseLibsqlLive } from "./DatabaseLibsqlLive"
 import { Env } from "./Env"
 import { OrgIngestKeysService } from "./OrgIngestKeysService"
+import { cleanupTempDirs, createTempDbUrl as makeTempDb, queryFirstRow } from "./test-sqlite"
 
 const createdTempDirs: string[] = []
 
 afterEach(() => {
-  for (const dir of createdTempDirs.splice(0, createdTempDirs.length)) {
-    rmSync(dir, { recursive: true, force: true })
-  }
+  cleanupTempDirs(createdTempDirs)
 })
 
 const getError = <A, E>(exit: Exit.Exit<A, E>): unknown => {
@@ -33,14 +28,7 @@ const getError = <A, E>(exit: Exit.Exit<A, E>): unknown => {
 }
 
 const createTempDbUrl = () => {
-  const dir = mkdtempSync(join(tmpdir(), "maple-ingest-keys-"))
-  createdTempDirs.push(dir)
-
-  const dbPath = join(dir, "maple.db")
-  const db = new Database(dbPath)
-  db.close()
-
-  return { url: `file:${dbPath}`, dbPath }
+  return makeTempDb("maple-ingest-keys-", createdTempDirs)
 }
 
 const makeConfig = (
@@ -168,19 +156,15 @@ describe("OrgIngestKeysService", () => {
       ),
     )
 
-    const db = new Database(dbPath, { readonly: true })
-    const row = db
-      .query(
-        "SELECT private_key_ciphertext, private_key_iv, private_key_tag FROM org_ingest_keys WHERE org_id = ?",
-      )
-      .get("org_a") as
-      | {
-          private_key_ciphertext: string
-          private_key_iv: string
-          private_key_tag: string
-        }
-      | undefined
-    db.close()
+    const row = await queryFirstRow<{
+      private_key_ciphertext: string
+      private_key_iv: string
+      private_key_tag: string
+    }>(
+      dbPath,
+      "SELECT private_key_ciphertext, private_key_iv, private_key_tag FROM org_ingest_keys WHERE org_id = ?",
+      ["org_a"],
+    )
 
     expect(row).toBeDefined()
     expect(row?.private_key_ciphertext).toBeTruthy()
@@ -199,18 +183,14 @@ describe("OrgIngestKeysService", () => {
       ),
     )
 
-    const db = new Database(dbPath, { readonly: true })
-    const row = db
-      .query(
-        "SELECT public_key_hash, private_key_hash FROM org_ingest_keys WHERE org_id = ?",
-      )
-      .get("org_a") as
-      | {
-          public_key_hash: string
-          private_key_hash: string
-        }
-      | undefined
-    db.close()
+    const row = await queryFirstRow<{
+      public_key_hash: string
+      private_key_hash: string
+    }>(
+      dbPath,
+      "SELECT public_key_hash, private_key_hash FROM org_ingest_keys WHERE org_id = ?",
+      ["org_a"],
+    )
 
     expect(row).toBeDefined()
     expect(row?.public_key_hash).toBe(hashIngestKey(created.publicKey, lookupHmacKey))

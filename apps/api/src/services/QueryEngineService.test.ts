@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test"
+import { describe, expect, it } from "vitest"
 import { Effect, Exit, Option, Schema } from "effect"
 import { OrgId, UserId } from "@maple/domain"
 import type {

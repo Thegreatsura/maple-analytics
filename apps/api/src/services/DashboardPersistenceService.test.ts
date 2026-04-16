@@ -1,8 +1,4 @@
-import { Database } from "bun:sqlite"
-import { afterEach, describe, expect, it } from "bun:test"
-import { mkdtempSync, rmSync } from "node:fs"
-import { join } from "node:path"
-import { tmpdir } from "node:os"
+import { afterEach, describe, expect, it } from "vitest"
 import {
   Cause,
   ConfigProvider,
@@ -25,13 +21,12 @@ import {
 import { DatabaseLibsqlLive } from "./DatabaseLibsqlLive"
 import { DashboardPersistenceService } from "./DashboardPersistenceService"
 import { Env } from "./Env"
+import { cleanupTempDirs, createTempDbUrl as makeTempDb } from "./test-sqlite"
 
 const createdTempDirs: string[] = []
 
 afterEach(() => {
-  for (const dir of createdTempDirs.splice(0, createdTempDirs.length)) {
-    rmSync(dir, { recursive: true, force: true })
-  }
+  cleanupTempDirs(createdTempDirs)
 })
 
 const getError = <A, E>(exit: Exit.Exit<A, E>): unknown => {
@@ -44,14 +39,7 @@ const getError = <A, E>(exit: Exit.Exit<A, E>): unknown => {
 }
 
 const createTempDbUrl = () => {
-  const dir = mkdtempSync(join(tmpdir(), "maple-dashboards-"))
-  createdTempDirs.push(dir)
-
-  const dbPath = join(dir, "maple.db")
-  const db = new Database(dbPath)
-  db.close()
-
-  return `file:${dbPath}`
+  return makeTempDb("maple-dashboards-", createdTempDirs).url
 }
 
 const testConfig = (url: string) =>

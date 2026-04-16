@@ -1,8 +1,4 @@
-import { Database } from "bun:sqlite"
-import { afterEach, describe, expect, it } from "bun:test"
-import { mkdtempSync, rmSync } from "node:fs"
-import { join } from "node:path"
-import { tmpdir } from "node:os"
+import { afterEach, describe, expect, it } from "vitest"
 import { Cause, ConfigProvider, Effect, Exit, Layer, Option, Schema } from "effect"
 import {
   AlertDestinationInUseError,
@@ -20,13 +16,12 @@ import { DatabaseLibsqlLive } from "./DatabaseLibsqlLive"
 import { EdgeCacheService } from "./EdgeCacheService"
 import { Env } from "./Env"
 import { QueryEngineService } from "./QueryEngineService"
+import { cleanupTempDirs, createTempDbUrl as makeTempDb, executeSql, queryFirstRow } from "./test-sqlite"
 
 const createdTempDirs: string[] = []
 
 afterEach(() => {
-  for (const dir of createdTempDirs.splice(0, createdTempDirs.length)) {
-    rmSync(dir, { recursive: true, force: true })
-  }
+  cleanupTempDirs(createdTempDirs)
 })
 
 const getError = <A, E>(exit: Exit.Exit<A, E>): unknown => {
@@ -39,14 +34,7 @@ const getError = <A, E>(exit: Exit.Exit<A, E>): unknown => {
 }
 
 const createTempDbUrl = () => {
-  const dir = mkdtempSync(join(tmpdir(), "maple-alerts-"))
-  createdTempDirs.push(dir)
-
-  const dbPath = join(dir, "maple.db")
-  const db = new Database(dbPath)
-  db.close()
-
-  return { url: `file:${dbPath}`, dbPath }
+  return makeTempDb("maple-alerts-", createdTempDirs)
 }
 
 const makeConfig = (url: string) =>
@@ -190,7 +178,7 @@ const makeUuidSequence = (...values: string[]): Pick<AlertRuntimeShape, "makeUui
 
 const okFetch: typeof fetch = (async () => new Response("ok", { status: 200 })) as unknown as typeof fetch
 
-const insertDeliveryEventRow = (
+const insertDeliveryEventRow = async (
   dbPath: string,
   row: {
     id: string
@@ -208,9 +196,9 @@ const insertDeliveryEventRow = (
     updatedAt?: number
   },
 ) => {
-  const db = new Database(dbPath)
-  db
-    .query(`
+  await executeSql(
+    dbPath,
+    `
       insert into alert_delivery_events (
         id,
         org_id,
@@ -234,8 +222,8 @@ const insertDeliveryEventRow = (
         created_at,
         updated_at
       ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null, null, null, null, null, null, null, null, ?, ?, ?)
-    `)
-    .run(
+    `,
+    [
       row.id,
       row.orgId,
       row.incidentId,
@@ -249,8 +237,8 @@ const insertDeliveryEventRow = (
       row.payloadJson,
       row.createdAt ?? row.scheduledAt,
       row.updatedAt ?? row.scheduledAt,
-    )
-  db.close()
+    ],
+  )
 }
 
 describe("AlertsService", () => {
@@ -403,22 +391,19 @@ describe("AlertsService", () => {
       }).pipe(Effect.provide(makeLayer(url, makeTinybirdStub({ tracesAggregateRows: emptyTinybirdRows })))),
     )
 
-    const db = new Database(dbPath, { readonly: true })
-    const row = db
-      .query(`
+    const row = await queryFirstRow<{
+      querySpecJson: string
+      reducer: string
+      sampleCountStrategy: string
+      noDataBehavior: string
+    }>(
+      dbPath,
+      `
         select query_spec_json as querySpecJson, reducer, sample_count_strategy as sampleCountStrategy, no_data_behavior as noDataBehavior
         from alert_rules
         limit 1
-      `)
-      .get() as
-      | {
-          querySpecJson: string
-          reducer: string
-          sampleCountStrategy: string
-          noDataBehavior: string
-        }
-      | undefined
-    db.close()
+      `,
+    )
 
     expect(row).toBeTruthy()
     expect(row?.reducer).toBe("identity")
@@ -544,11 +529,13 @@ describe("AlertsService", () => {
       }).pipe(Effect.provide(makeLayer(url, makeTinybirdStub({ tracesAggregateRows: emptyTinybirdRows }), overrides))),
     )
 
-    const db = new Database(dbPath)
-    db.query("update alert_rules set query_spec_json = ? where id = ?").run("{", setup.rule.id)
-    db.close()
+    await executeSql(
+      dbPath,
+      "update alert_rules set query_spec_json = ? where id = ?",
+      ["{", setup.rule.id],
+    )
 
-    insertDeliveryEventRow(dbPath, {
+    await insertDeliveryEventRow(dbPath, {
       id: "00000000-0000-4000-8000-000000000101",
       orgId: setup.orgId,
       incidentId: null,
@@ -620,11 +607,13 @@ describe("AlertsService", () => {
       }).pipe(Effect.provide(makeLayer(url, makeTinybirdStub({ tracesAggregateRows: emptyTinybirdRows }), overrides))),
     )
 
-    const db = new Database(dbPath)
-    db.query("update alert_rules set query_spec_json = ? where id = ?").run("{", setup.rule.id)
-    db.close()
+    await executeSql(
+      dbPath,
+      "update alert_rules set query_spec_json = ? where id = ?",
+      ["{", setup.rule.id],
+    )
 
-    insertDeliveryEventRow(dbPath, {
+    await insertDeliveryEventRow(dbPath, {
       id: "00000000-0000-4000-8000-000000000102",
       orgId: setup.orgId,
       incidentId: null,
@@ -751,7 +740,7 @@ describe("AlertsService", () => {
         // Pre-insert a conflicting delivery event with the same delivery key
         // that processEvaluation will generate. With onConflictDoNothing(),
         // the duplicate insert is silently skipped and the incident is still created.
-        yield* Effect.sync(() =>
+        yield* Effect.promise(() =>
           insertDeliveryEventRow(dbPath, {
             id: "00000000-0000-4000-8000-000000000099",
             orgId,
@@ -818,7 +807,7 @@ describe("AlertsService", () => {
       }).pipe(Effect.provide(makeLayer(url, makeTinybirdStub({ tracesAggregateRows: emptyTinybirdRows }), { ...makeFixedClock(fixedTime) }))),
     )
 
-    insertDeliveryEventRow(dbPath, {
+    await insertDeliveryEventRow(dbPath, {
       id: "00000000-0000-4000-8000-000000000103",
       orgId: setup.orgId,
       incidentId: null,
@@ -892,7 +881,7 @@ describe("AlertsService", () => {
       }).pipe(Effect.provide(makeLayer(url, makeTinybirdStub({ tracesAggregateRows: emptyTinybirdRows }), overrides))),
     )
 
-    insertDeliveryEventRow(dbPath, {
+    await insertDeliveryEventRow(dbPath, {
       id: "00000000-0000-4000-8000-000000000104",
       orgId: setup.orgId,
       incidentId: null,
@@ -905,7 +894,7 @@ describe("AlertsService", () => {
       scheduledAt: fixedTime - 2,
       payloadJson: "{",
     })
-    insertDeliveryEventRow(dbPath, {
+    await insertDeliveryEventRow(dbPath, {
       id: "00000000-0000-4000-8000-000000000105",
       orgId: setup.orgId,
       incidentId: null,

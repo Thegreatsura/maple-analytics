@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test"
+import { describe, expect, it } from "vitest"
 import { Effect, Exit, Option, Redacted, Schema } from "effect"
 import { OrgId, RoleName, UserId } from "@maple/domain/http"
 import { makeLoginSelfHosted, makeResolveMcpTenant, makeResolveTenant } from "./AuthService"

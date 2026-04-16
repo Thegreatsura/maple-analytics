@@ -9,6 +9,7 @@
         "@maple/db": "workspace:*",
         "@maple/infra": "workspace:*",
         "@tinybirdco/sdk": "catalog:tinybird",
+        "@types/node": "catalog:tooling",
         "alchemy": "^0.91.2",
         "turbo": "^2.9.3",
         "typescript": "catalog:tooling",
@@ -52,21 +53,23 @@
       "devDependencies": {
         "@cloudflare/workers-types": "^4.20260405.0",
         "@effect/language-service": "catalog:effect",
-        "@types/bun": "^1.3.11",
         "@types/node": "catalog:tooling",
         "atmn": "^1.0.1",
         "typescript": "catalog:tooling",
+        "vitest": "catalog:",
         "wrangler": "^4.41.0",
       },
     },
     "apps/chat-agent": {
       "name": "@maple/chat-agent",
       "dependencies": {
-        "@ai-sdk/mcp": "^1.0.21",
         "@ai-sdk/openai-compatible": "^2.0.30",
         "@cloudflare/ai-chat": "^0.3.2",
+        "@maple/agent-harness": "workspace:*",
+        "@maple/api": "workspace:*",
         "agents": "^0.9.0",
         "ai": "^6.0.146",
+        "effect": "catalog:effect",
         "zod": "^4.3.6",
       },
       "devDependencies": {
@@ -268,6 +271,19 @@
         "effect": ">=4.0.0-beta.33",
       },
     },
+    "packages/agent-harness": {
+      "name": "@maple/agent-harness",
+      "dependencies": {
+        "ai": "^6.0.146",
+        "effect": "catalog:effect",
+      },
+      "devDependencies": {
+        "@effect/language-service": "catalog:effect",
+        "@types/node": "catalog:tooling",
+        "typescript": "catalog:tooling",
+        "vitest": "catalog:",
+      },
+    },
     "packages/db": {
       "name": "@maple/db",
       "dependencies": {
@@ -290,9 +306,9 @@
       },
       "devDependencies": {
         "@effect/language-service": "catalog:effect",
-        "@types/bun": "^1.3.11",
         "@types/node": "catalog:tooling",
         "typescript": "catalog:tooling",
+        "vitest": "catalog:",
       },
     },
     "packages/effect-router": {
@@ -349,10 +365,10 @@
       },
       "devDependencies": {
         "@effect/language-service": "catalog:effect",
-        "@types/bun": "^1.3.11",
         "@types/node": "catalog:tooling",
         "expect-type": "^1.3.0",
         "typescript": "catalog:tooling",
+        "vitest": "catalog:",
       },
     },
     "packages/ui": {
@@ -431,8 +447,6 @@
     "@adraffy/ens-normalize": ["@adraffy/ens-normalize@1.11.1", "", {}, "sha512-nhCBV3quEgesuf7c7KYfperqSS14T8bYuvJ8PcLJp6znkZpFc0AuW4qBtr8eKVyPPe/8RSr7sglCWPU5eaxwKQ=="],
 
     "@ai-sdk/gateway": ["@ai-sdk/gateway@3.0.97", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.23", "@vercel/oidc": "3.1.0" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-ERHmVGX30YKTwxObuHQzNqoOf8Nb5WwYMDBn34e3TGGVn0vLEXwMimo7uRVTbhhi4gfu9WtwYTE4x1+csZok1w=="],
-
-    "@ai-sdk/mcp": ["@ai-sdk/mcp@1.0.36", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.23", "pkce-challenge": "^5.0.0" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-THQKwlknp7OU2ViLPfIU7W01XvDRM2eqH+4UULQgP64AopnwI9mGqqJeGIx2l/pxUu9yIDQtW9YtYM8kHm2CQg=="],
 
     "@ai-sdk/openai-compatible": ["@ai-sdk/openai-compatible@2.0.41", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.23" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-kNAGINk71AlOXx10Dq/PXw4t/9XjdK8uxfpVElRwtSFMdeSiLVt58p9TPx4/FJD+hxZuVhvxYj9r42osxWq79g=="],
 
@@ -1155,6 +1169,8 @@
     "@lix-js/server-protocol-schema": ["@lix-js/server-protocol-schema@0.1.1", "", {}, "sha512-jBeALB6prAbtr5q4vTuxnRZZv1M2rKe8iNqRQhFJ4Tv7150unEa0vKyz0hs8Gl3fUGsWaNJBh3J8++fpbrpRBQ=="],
 
     "@maple-dev/effect-sdk": ["@maple-dev/effect-sdk@workspace:lib/effect-sdk"],
+
+    "@maple/agent-harness": ["@maple/agent-harness@workspace:packages/agent-harness"],
 
     "@maple/alerting": ["@maple/alerting@workspace:apps/alerting"],
 

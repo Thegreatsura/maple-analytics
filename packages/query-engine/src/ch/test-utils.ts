@@ -5,7 +5,7 @@
 // provide both fragment-based and exact-match assertion helpers.
 // ---------------------------------------------------------------------------
 
-import { expect } from "bun:test"
+import { expect } from "vitest"
 import { compileCH, compileUnion, type CompiledQuery } from "./compile"
 import type { CHQuery } from "./query"
 import type { CHUnionQuery } from "./union"
