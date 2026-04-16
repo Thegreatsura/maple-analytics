@@ -54,7 +54,9 @@ export const createMapleApi = async ({ stage, domains }: CreateMapleApiOptions) 
     compatibilityDate: "2026-04-08",
     url: true,
     adopt: true,
-    domains: domains.api ? [{ domainName: domains.api, adopt: true }] : undefined,
+    routes: domains.api
+      ? [{ pattern: `${domains.api}/*`, adopt: true }]
+      : undefined,
     bindings: {
       MAPLE_DB: mapleDb,
       TINYBIRD_HOST: requireEnv("TINYBIRD_HOST"),

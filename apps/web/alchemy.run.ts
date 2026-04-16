@@ -37,6 +37,7 @@ export const createMapleWeb = async ({
 
   const website = await Vite("app", {
     name: resolveWorkerName("web", stage),
+    adopt: true,
     cwd: import.meta.dirname,
     entrypoint: path.join(import.meta.dirname, "src", "worker.ts"),
     domains: domains.web
