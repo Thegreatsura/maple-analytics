@@ -50,11 +50,6 @@ export type RuleFormState = {
   destinationIds: AlertDestinationId[]
 }
 
-export const severityTone: Record<AlertSeverity, string> = {
-  warning: "bg-severity-warn/10 text-severity-warn border-severity-warn/20",
-  critical: "bg-destructive/10 text-destructive border-destructive/20",
-}
-
 export const signalLabels: Record<AlertSignalType, string> = {
   error_rate: "Error rate",
   p95_latency: "P95 latency",

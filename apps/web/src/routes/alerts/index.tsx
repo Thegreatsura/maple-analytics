@@ -6,6 +6,9 @@ import { useState, useMemo } from "react"
 import { toast } from "sonner"
 
 import { DestinationDialog } from "@/components/alerts/destination-dialog"
+import { AlertStatusBadge } from "@/components/alerts/alert-status-badge"
+import { AlertSeverityBadge } from "@/components/alerts/alert-severity-badge"
+import { AlertStatCard } from "@/components/alerts/alert-stat-card"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import { formatRelativeTime } from "@/lib/format"
@@ -14,11 +17,9 @@ import {
   AlertDestinationDocument,
   AlertIncidentDocument,
   AlertRuleDocument,
-  type AlertDestinationType,
 } from "@maple/domain/http"
 import {
   type DestinationFormState,
-  severityTone,
   signalLabels,
   comparatorLabels,
   destinationTypeLabels,
@@ -36,7 +37,6 @@ import {
   BellIcon,
   CheckIcon,
   CircleWarningIcon,
-  ClockIcon,
   DotsVerticalIcon,
   FireIcon,
   LoaderIcon,
@@ -49,13 +49,7 @@ import {
 import { cn } from "@maple/ui/utils"
 import { Badge } from "@maple/ui/components/ui/badge"
 import { Button } from "@maple/ui/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@maple/ui/components/ui/card"
+import { Card, CardContent } from "@maple/ui/components/ui/card"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -71,6 +65,7 @@ import {
   EmptyTitle,
 } from "@maple/ui/components/ui/empty"
 import { Input } from "@maple/ui/components/ui/input"
+import { Separator } from "@maple/ui/components/ui/separator"
 import { Skeleton } from "@maple/ui/components/ui/skeleton"
 import { Switch } from "@maple/ui/components/ui/switch"
 import {
@@ -87,11 +82,20 @@ import {
   TabsTrigger,
 } from "@maple/ui/components/ui/tabs"
 
-const tabValues = ["overview", "rules", "incidents", "destinations"] as const
+const tabValues = ["monitor", "rules", "settings"] as const
 type AlertsTab = (typeof tabValues)[number]
 
+const legacyTabMap: Record<string, AlertsTab> = {
+  overview: "monitor",
+  monitor: "monitor",
+  incidents: "monitor",
+  rules: "rules",
+  destinations: "settings",
+  settings: "settings",
+}
+
 const AlertsSearch = Schema.Struct({
-  tab: Schema.optional(Schema.Literals(tabValues)),
+  tab: Schema.optional(Schema.String),
   serviceName: Schema.optional(Schema.String),
 })
 
@@ -105,123 +109,119 @@ type AlertRule = AlertRuleDocument
 type AlertDeliveryEvent = AlertDeliveryEventDocument
 
 /* -------------------------------------------------------------------------- */
-/*  Signal badge colors                                                       */
+/*  Signal badge tone                                                         */
 /* -------------------------------------------------------------------------- */
 
 const signalBadgeClass: Record<string, string> = {
-  error_rate: "border-red-500/30 text-red-500",
-  p95_latency: "border-blue-500/30 text-blue-500",
-  p99_latency: "border-blue-500/30 text-blue-500",
-  apdex: "border-yellow-500/30 text-yellow-500",
+  error_rate: "border-destructive/30 text-destructive",
+  p95_latency: "border-primary/30 text-primary",
+  p99_latency: "border-primary/30 text-primary",
+  apdex: "border-severity-warn/30 text-severity-warn",
   throughput: "border-emerald-500/30 text-emerald-500",
-  metric: "border-zinc-400/30 text-zinc-400",
+  metric: "border-muted-foreground/30 text-muted-foreground",
+  query: "border-muted-foreground/30 text-muted-foreground",
+}
+
+function SignalBadge({ signalType }: { signalType: string }) {
+  return (
+    <Badge variant="outline" className={cn("text-xs", signalBadgeClass[signalType])}>
+      {signalLabels[signalType as keyof typeof signalLabels] ?? signalType}
+    </Badge>
+  )
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Overview Tab                                                              */
+/*  Monitor Tab                                                               */
 /* -------------------------------------------------------------------------- */
 
-function OverviewTab({
+function MonitorTab({
   rules,
   incidents,
-  destinations,
   deliveryEvents,
   loading,
-  onTabSelect,
 }: {
   rules: AlertRule[]
   incidents: AlertIncidentDocument[]
-  destinations: AlertDestination[]
   deliveryEvents: AlertDeliveryEvent[]
   loading: boolean
-  onTabSelect: (tab: AlertsTab) => void
 }) {
   const openIncidents = useMemo(() => incidents.filter((i) => i.status === "open"), [incidents])
   const criticalCount = openIncidents.filter((i) => i.severity === "critical").length
   const warningCount = openIncidents.filter((i) => i.severity === "warning").length
   const enabledRules = rules.filter((r) => r.enabled).length
 
-  const destinationSummary = useMemo(() => {
-    const byType: Record<string, number> = {}
-    for (const d of destinations) {
-      byType[d.type] = (byType[d.type] ?? 0) + 1
-    }
-    return Object.entries(byType)
-      .map(([type, count]) => `${count} ${destinationTypeLabels[type as AlertDestinationType]}`)
-      .join(", ")
-  }, [destinations])
+  // Triggered in the last 24h = incidents whose firstTriggeredAt is within 24h
+  const triggered24h = useMemo(() => {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000
+    return incidents.filter((i) => {
+      if (!i.firstTriggeredAt) return false
+      return new Date(i.firstTriggeredAt).getTime() >= cutoff
+    }).length
+  }, [incidents])
 
-  const rulesById = useMemo(
-    () => new Map(rules.map((r) => [r.id, r])),
-    [rules],
-  )
+  const mttr = useMemo(() => {
+    const resolved = incidents.filter((i) => i.resolvedAt && i.firstTriggeredAt)
+    if (resolved.length === 0) return "—"
+    const avg = resolved.reduce((sum, i) => {
+      return sum + (new Date(i.resolvedAt!).getTime() - new Date(i.firstTriggeredAt).getTime())
+    }, 0) / resolved.length
+    if (avg < 60_000) return `${Math.round(avg / 1000)}s`
+    if (avg < 3_600_000) return `${(avg / 60_000).toFixed(1)}m`
+    return `${(avg / 3_600_000).toFixed(1)}h`
+  }, [incidents])
 
+  const rulesById = useMemo(() => new Map(rules.map((r) => [r.id, r])), [rules])
 
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Skeleton className="h-[98px]" />
-          <Skeleton className="h-[98px]" />
-          <Skeleton className="h-[98px]" />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Skeleton className="h-[110px]" />
+          <Skeleton className="h-[110px]" />
+          <Skeleton className="h-[110px]" />
+          <Skeleton className="h-[110px]" />
         </div>
         <Skeleton className="h-48" />
       </div>
     )
   }
 
+  const firingHint =
+    openIncidents.length === 0
+      ? "all clear"
+      : [criticalCount && `${criticalCount} critical`, warningCount && `${warningCount} warning`]
+          .filter(Boolean)
+          .join(", ")
+
   return (
     <div className="space-y-8">
       {/* Stats strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground text-xs font-medium tracking-wider uppercase">Active Incidents</span>
-              {openIncidents.length > 0 && (
-                <span className="size-2 rounded-full bg-red-500" />
-              )}
-            </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-bold tabular-nums">{openIncidents.length}</span>
-              <span className="text-muted-foreground text-sm">
-                {criticalCount > 0 && `${criticalCount} critical`}
-                {criticalCount > 0 && warningCount > 0 && ", "}
-                {warningCount > 0 && `${warningCount} warning`}
-                {openIncidents.length === 0 && "all clear"}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground text-xs font-medium tracking-wider uppercase">Rules Enabled</span>
-              <ClockIcon size={16} className="text-muted-foreground" />
-            </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-bold tabular-nums">{enabledRules}</span>
-              <span className="text-muted-foreground text-sm">of {rules.length} rules</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground text-xs font-medium tracking-wider uppercase">Destinations</span>
-              <PaperPlaneIcon size={16} className="text-muted-foreground" />
-            </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-bold tabular-nums">{destinations.length}</span>
-              <span className="text-muted-foreground text-sm">{destinationSummary || "none configured"}</span>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <AlertStatCard
+          label="Firing now"
+          value={openIncidents.length}
+          tone={openIncidents.length > 0 ? "critical" : "default"}
+          hint={firingHint}
+          indicator={openIncidents.length > 0 ? <span className="size-2 rounded-full bg-destructive" /> : null}
+        />
+        <AlertStatCard
+          label="Triggered (24h)"
+          value={triggered24h}
+          hint={triggered24h === 1 ? "incident" : "incidents"}
+        />
+        <AlertStatCard
+          label="Avg MTTR"
+          value={mttr}
+          hint="across resolved"
+        />
+        <AlertStatCard
+          label="Rules enabled"
+          value={enabledRules}
+          hint={`of ${rules.length} total`}
+        />
       </div>
 
-      {/* Combined empty state when nothing to show */}
+      {/* All clear empty state */}
       {openIncidents.length === 0 && deliveryEvents.length === 0 && (
         <Empty className="py-12">
           <EmptyHeader>
@@ -236,21 +236,14 @@ function OverviewTab({
         </Empty>
       )}
 
-      {/* Active Incidents — only shown when there are incidents */}
+      {/* Active Incidents */}
       {openIncidents.length > 0 && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold">Active Incidents</h2>
-              <Badge variant="secondary" className="rounded-full tabular-nums">{openIncidents.length}</Badge>
-            </div>
-            <button
-              type="button"
-              className="text-sm text-primary hover:underline"
-              onClick={() => onTabSelect("incidents")}
-            >
-              View all incidents
-            </button>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold">Active incidents</h2>
+            <Badge variant="secondary" className="rounded-full tabular-nums">
+              {openIncidents.length}
+            </Badge>
           </div>
 
           <Table>
@@ -259,31 +252,38 @@ function OverviewTab({
                 <TableHead className="w-[90px]">Severity</TableHead>
                 <TableHead>Rule</TableHead>
                 <TableHead>Group</TableHead>
-                <TableHead>Current Value</TableHead>
-                <TableHead className="w-[100px]">Duration</TableHead>
-                <TableHead>Last Notified</TableHead>
+                <TableHead>Current value</TableHead>
+                <TableHead className="w-[110px]">Duration</TableHead>
+                <TableHead>Last notified</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {openIncidents.map((incident, idx) => {
+              {openIncidents.map((incident) => {
                 const duration = incident.lastTriggeredAt
                   ? formatRelativeTime(incident.lastTriggeredAt)
                   : "—"
                 return (
-                  <TableRow key={idx}>
+                  <TableRow
+                    key={incident.id}
+                    className="cursor-pointer"
+                  >
                     <TableCell>
-                      <Badge variant="outline" className={severityTone[incident.severity]}>
-                        {incident.severity === "critical" ? "Critical" : "Warning"}
-                      </Badge>
+                      <AlertSeverityBadge severity={incident.severity} />
                     </TableCell>
-                    <TableCell className="font-medium">
-                      {incident.ruleName}
+                    <TableCell>
+                      <Link
+                        to="/alerts/$ruleId"
+                        params={{ ruleId: incident.ruleId }}
+                        className="font-medium hover:underline"
+                      >
+                        {incident.ruleName}
+                      </Link>
                     </TableCell>
                     <TableCell>
                       <span className="font-mono text-muted-foreground">{incident.groupKey ?? "all"}</span>
                     </TableCell>
                     <TableCell>
-                      <span className="font-mono text-orange-500">
+                      <span className="font-mono text-destructive">
                         {formatSignalValue(incident.signalType, incident.lastObservedValue)}
                       </span>
                       <span className="text-muted-foreground text-xs ml-1">
@@ -302,55 +302,67 @@ function OverviewTab({
         </div>
       )}
 
-      {/* Recent Activity — only shown when there are events */}
+      {/* Recent Activity — compact Table */}
       {deliveryEvents.length > 0 && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Recent Activity</h2>
-            <button
-              type="button"
-              className="text-sm text-primary hover:underline"
-              onClick={() => onTabSelect("incidents")}
-            >
-              View delivery log
-            </button>
-          </div>
+          <h2 className="text-lg font-semibold">Recent activity</h2>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[110px]">Event</TableHead>
+                <TableHead>Rule</TableHead>
+                <TableHead>Destination</TableHead>
+                <TableHead className="w-[140px]">When</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {deliveryEvents.slice(0, 10).map((event) => {
+                const rule = rulesById.get(event.ruleId)
+                const toneClass =
+                  event.eventType === "trigger" ? "text-destructive"
+                  : event.eventType === "resolve" ? "text-emerald-500"
+                  : event.eventType === "renotify" ? "text-amber-500"
+                  : "text-muted-foreground"
+                const dotClass =
+                  event.eventType === "trigger" ? "bg-destructive"
+                  : event.eventType === "resolve" ? "bg-emerald-500"
+                  : event.eventType === "renotify" ? "bg-amber-500"
+                  : "bg-muted-foreground"
+                const label =
+                  event.eventType === "trigger" ? "Triggered"
+                  : event.eventType === "resolve" ? "Resolved"
+                  : event.eventType === "renotify" ? "Renotify"
+                  : "Test"
 
-          <div className="space-y-1">
-            {deliveryEvents.slice(0, 5).map((event, idx) => {
-              const rule = rulesById.get(event.ruleId)
-              const typeLabel =
-                event.eventType === "trigger" ? "Triggered"
-                : event.eventType === "resolve" ? "Resolved"
-                : event.eventType === "renotify" ? "Renotify"
-                : "Test"
-              const dotColor =
-                event.eventType === "trigger" ? "bg-red-500"
-                : event.eventType === "resolve" ? "bg-green-500"
-                : event.eventType === "renotify" ? "bg-orange-500"
-                : "bg-zinc-400"
-              const textColor =
-                event.eventType === "trigger" ? "text-red-500"
-                : event.eventType === "resolve" ? "text-green-500"
-                : event.eventType === "renotify" ? "text-orange-500"
-                : "text-muted-foreground"
-
-              const description = rule
-                ? `${rule.name} on ${rule.serviceNames?.length > 0 ? rule.serviceNames.join(", ") : "all services"}${event.eventType === "renotify" ? ` via ${event.destinationName}` : ""}`
-                : event.destinationName
-
-              return (
-                <div key={idx} className="flex items-center gap-3 py-2">
-                  <span className={cn("size-1.5 shrink-0 rounded-full", dotColor)} />
-                  <span className={cn("text-sm font-medium w-[80px] shrink-0", textColor)}>{typeLabel}</span>
-                  <span className="text-sm text-muted-foreground truncate flex-1">{description}</span>
-                  <span className="text-sm text-muted-foreground shrink-0 tabular-nums">
-                    {event.scheduledAt ? formatRelativeTime(event.scheduledAt) : "—"}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
+                return (
+                  <TableRow key={event.id}>
+                    <TableCell>
+                      <span className={cn("flex items-center gap-1.5 text-xs font-medium", toneClass)}>
+                        <span className={cn("size-1.5 rounded-full", dotClass)} />
+                        {label}
+                      </span>
+                    </TableCell>
+                    <TableCell className="truncate">
+                      {rule ? (
+                        <Link to="/alerts/$ruleId" params={{ ruleId: rule.id }} className="hover:underline">
+                          {rule.name}
+                        </Link>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {event.destinationName}
+                      <span className="ml-1 text-xs">· {destinationTypeLabels[event.destinationType]}</span>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground tabular-nums">
+                      {event.scheduledAt ? formatRelativeTime(event.scheduledAt) : "—"}
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
         </div>
       )}
     </div>
@@ -383,9 +395,7 @@ function AlertsPage() {
 
   const updateRule = useAtomSet(MapleApiAtomClient.mutation("alerts", "updateRule"), { mode: "promiseExit" })
 
-  const activeTab: AlertsTab = tabValues.includes(search.tab as AlertsTab)
-    ? (search.tab as AlertsTab)
-    : "overview"
+  const activeTab: AlertsTab = legacyTabMap[search.tab ?? ""] ?? "monitor"
 
   const destinations = Result.builder(destinationsResult)
     .onSuccess((response) => [...response.destinations] as AlertDestination[])
@@ -420,8 +430,6 @@ function AlertsPage() {
   const [savingDestination, setSavingDestination] = useState(false)
   const [testingDestinationId, setTestingDestinationId] = useState<AlertDestination["id"] | null>(null)
   const [deletingDestinationId, setDeletingDestinationId] = useState<AlertDestination["id"] | null>(null)
-
-
 
   function handleTabSelect(tab: AlertsTab) {
     navigate({ search: (prev) => ({ ...prev, tab }) })
@@ -474,8 +482,7 @@ function AlertsPage() {
       payload: buildDestinationUpdatePayload(form) as never,
       reactivityKeys: ["alertDestinations"],
     })
-    if (Exit.isSuccess(result)) {
-    } else {
+    if (!Exit.isSuccess(result)) {
       toast.error(getExitErrorMessage(result, "Failed to update destination"))
     }
   }
@@ -514,8 +521,7 @@ function AlertsPage() {
       payload: buildRuleToggleRequest(rule),
       reactivityKeys: ["alertRules"],
     })
-    if (Exit.isSuccess(result)) {
-    } else {
+    if (!Exit.isSuccess(result)) {
       toast.error(getExitErrorMessage(result, "Failed to update rule"))
     }
   }
@@ -532,10 +538,9 @@ function AlertsPage() {
   const tabBar = (
     <Tabs value={activeTab} onValueChange={(v) => handleTabSelect(v as AlertsTab)}>
       <TabsList variant="line">
-        <TabsTrigger value="overview">Overview</TabsTrigger>
+        <TabsTrigger value="monitor">Monitor</TabsTrigger>
         <TabsTrigger value="rules">Rules</TabsTrigger>
-        <TabsTrigger value="incidents">Incidents</TabsTrigger>
-        <TabsTrigger value="destinations">Destinations</TabsTrigger>
+        <TabsTrigger value="settings">Settings</TabsTrigger>
       </TabsList>
     </Tabs>
   )
@@ -556,21 +561,19 @@ function AlertsPage() {
         headerActions={
           <Button size="sm" nativeButton={false} render={<Link to="/alerts/create" search={{ serviceName: search.serviceName }} />}>
             <PlusIcon size={14} />
-            New Rule
+            New rule
           </Button>
         }
         stickyContent={tabBar}
       >
         <div className="space-y-6">
-          {/* ─── Overview Tab ─── */}
-          {activeTab === "overview" && (
-            <OverviewTab
+          {/* ─── Monitor Tab ─── */}
+          {activeTab === "monitor" && (
+            <MonitorTab
               rules={rules}
               incidents={incidents}
-              destinations={destinations}
               deliveryEvents={deliveryEvents}
               loading={Result.isInitial(rulesResult) || Result.isInitial(incidentsResult)}
-              onTabSelect={handleTabSelect}
             />
           )}
 
@@ -596,9 +599,17 @@ function AlertsPage() {
                   <Skeleton className="h-12 w-full" />
                 </div>
               ) : !Result.isSuccess(rulesResult) ? (
-                <div className="text-muted-foreground py-8 text-center text-sm">
-                  Failed to load alert rules.
-                </div>
+                <Empty className="py-12">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <CircleWarningIcon size={18} />
+                    </EmptyMedia>
+                    <EmptyTitle>Failed to load alert rules</EmptyTitle>
+                    <EmptyDescription>
+                      Refresh the page or check your connection.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               ) : filteredRules.length === 0 && rules.length === 0 ? (
                 <Empty className="py-12">
                   <EmptyHeader>
@@ -613,7 +624,7 @@ function AlertsPage() {
                   {isAdmin && (
                     <Button size="sm" nativeButton={false} render={<Link to="/alerts/create" search={{ serviceName: search.serviceName }} />}>
                       <PlusIcon size={14} />
-                      Add Rule
+                      Add rule
                     </Button>
                   )}
                 </Empty>
@@ -623,22 +634,21 @@ function AlertsPage() {
                     <TableRow>
                       <TableHead className="w-[40px]" />
                       <TableHead className="min-w-[200px]">Name</TableHead>
-                      <TableHead className="w-[100px]">Signal</TableHead>
-                      <TableHead className="w-[130px]">Service</TableHead>
-                      <TableHead className="w-[160px]">Condition</TableHead>
-                      <TableHead className="w-[80px]">Severity</TableHead>
+                      <TableHead className="w-[110px]">Signal</TableHead>
+                      <TableHead className="w-[160px]">Scope</TableHead>
+                      <TableHead className="w-[180px]">Condition</TableHead>
+                      <TableHead className="w-[100px]">Severity</TableHead>
                       <TableHead className="w-[70px]">Notify</TableHead>
-                      <TableHead className="w-[90px]">Status</TableHead>
+                      <TableHead className="w-[100px]">Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredRules.map((rule) => {
-                      const isFiring = firingRuleIds.has(rule.id)
-                      const status = !rule.enabled
-                        ? { label: "Disabled", dot: "bg-zinc-400" }
-                        : isFiring
-                          ? { label: "Firing", dot: "bg-red-500" }
-                          : { label: "OK", dot: "bg-green-500" }
+                      const status: "firing" | "ok" | "disabled" = !rule.enabled
+                        ? "disabled"
+                        : firingRuleIds.has(rule.id)
+                          ? "firing"
+                          : "ok"
 
                       return (
                         <TableRow
@@ -657,47 +667,48 @@ function AlertsPage() {
                             {rule.name}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className={cn("text-xs", signalBadgeClass[rule.signalType])}>
-                              {signalLabels[rule.signalType]}
-                            </Badge>
+                            <SignalBadge signalType={rule.signalType} />
                           </TableCell>
                           <TableCell>
-                            {rule.serviceNames?.length > 0
-                              ? <div className="flex flex-wrap gap-1">{rule.serviceNames.map((s) => <Badge key={s} variant="outline" className="text-xs">{s}</Badge>)}</div>
-                              : <span className="font-mono text-muted-foreground text-sm">{rule.groupBy && rule.groupBy.length > 0 ? `all (per ${rule.groupBy.join(" \u00b7 ")})` : "all"}</span>}
+                            {rule.serviceNames?.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {rule.serviceNames.map((s) => (
+                                  <Badge key={s} variant="outline" className="text-xs">
+                                    {s}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="font-mono text-muted-foreground text-xs">
+                                {rule.groupBy && rule.groupBy.length > 0 ? `all · per ${rule.groupBy.join(" · ")}` : "all"}
+                              </span>
+                            )}
                             {rule.excludeServiceNames?.length > 0 && (
                               <div className="flex flex-wrap gap-1 mt-0.5">
-                                {rule.excludeServiceNames.map((s) => <Badge key={s} variant="outline" className="text-xs text-muted-foreground line-through">{s}</Badge>)}
+                                {rule.excludeServiceNames.map((s) => (
+                                  <Badge key={s} variant="outline" className="text-xs text-muted-foreground line-through">
+                                    {s}
+                                  </Badge>
+                                ))}
                               </div>
                             )}
                           </TableCell>
                           <TableCell>
-                            <span className="font-mono text-sm">
+                            <span className="font-mono text-xs">
                               {comparatorLabels[rule.comparator]} {formatSignalValue(rule.signalType, rule.threshold)} / {rule.windowMinutes}min
                             </span>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className={severityTone[rule.severity]}>
-                              {rule.severity === "critical" ? "Critical" : "Warning"}
-                            </Badge>
+                            <AlertSeverityBadge severity={rule.severity} />
                           </TableCell>
                           <TableCell>
-                            <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
                               {rule.destinationIds.length}
                               <PaperPlaneIcon size={12} />
                             </span>
                           </TableCell>
                           <TableCell>
-                            <span className="flex items-center gap-1.5 text-sm">
-                              <span className={cn("size-1.5 rounded-full", status.dot)} />
-                              <span className={cn(
-                                status.label === "Firing" && "text-red-500 font-medium",
-                                status.label === "Disabled" && "text-muted-foreground",
-                                status.label === "OK" && "text-green-500",
-                              )}>
-                                {status.label}
-                              </span>
-                            </span>
+                            <AlertStatusBadge state={status} />
                           </TableCell>
                         </TableRow>
                       )
@@ -708,260 +719,232 @@ function AlertsPage() {
             </div>
           )}
 
-          {/* ─── Incidents Tab ─── */}
-          {activeTab === "incidents" && (
-            <div className="space-y-4">
-              {Result.isInitial(incidentsResult) ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-28 w-full" />
-                  <Skeleton className="h-28 w-full" />
-                </div>
-              ) : !Result.isSuccess(incidentsResult) ? (
-                <div className="text-muted-foreground py-8 text-center text-sm">
-                  Failed to load incidents.
-                </div>
-              ) : incidents.length === 0 ? (
-                <Empty className="py-12">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <CircleWarningIcon size={18} />
-                    </EmptyMedia>
-                    <EmptyTitle>No incidents yet</EmptyTitle>
-                    <EmptyDescription>
-                      Open incidents and recovery events will appear here once rules start evaluating against live traffic.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              ) : (
-                <div className="space-y-3">
-                  {incidents.map((incident) => (
-                    <Card key={incident.id}>
-                      <CardContent className="space-y-3 p-4">
-                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                          <div className="space-y-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <div className="text-sm font-semibold">{incident.ruleName}</div>
-                              <Badge variant="outline" className={severityTone[incident.severity]}>
-                                {incident.severity}
-                              </Badge>
-                              <Badge variant={incident.status === "open" ? "default" : "secondary"}>
-                                {incident.status}
-                              </Badge>
-                              <Badge variant="outline">{signalLabels[incident.signalType]}</Badge>
-                            </div>
-                            <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-                              <span>
-                                Current: {formatSignalValue(incident.signalType, incident.lastObservedValue)}
-                              </span>
-                              <span>
-                                Threshold: {comparatorLabels[incident.comparator]} {formatSignalValue(incident.signalType, incident.threshold)}
-                              </span>
-                              <span>Triggered {formatRelativeTime(incident.lastTriggeredAt)}</span>
-                              <span>Last notified {formatAlertDateTime(incident.lastNotifiedAt)}</span>
-                            </div>
-                          </div>
-                          <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/alerts/$ruleId" params={{ ruleId: incident.ruleId }} />}>
-                            <BellIcon size={14} />
-                            Open Rule
-                          </Button>
-                        </div>
-                        <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-                          <span>First triggered {formatAlertDateTime(incident.firstTriggeredAt)}</span>
-                          <span>Resolved {formatAlertDateTime(incident.resolvedAt)}</span>
-                          <span>Group {incident.groupKey ?? "all"}</span>
-                          <span>Dedupe key {incident.dedupeKey}</span>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-
-              {deliveryEvents.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Delivery History</CardTitle>
-                  <CardDescription>
-                    Every queued, retried, and completed notification attempt across alert destinations.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {Result.isInitial(deliveryEventsResult) ? (
-                    <div className="space-y-2">
-                      <Skeleton className="h-12 w-full" />
-                      <Skeleton className="h-12 w-full" />
-                    </div>
-                  ) : !Result.isSuccess(deliveryEventsResult) ? (
-                    <div className="text-muted-foreground py-8 text-center text-sm">
-                      Failed to load delivery history.
-                    </div>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Destination</TableHead>
-                          <TableHead>Event</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Attempt</TableHead>
-                          <TableHead>Scheduled</TableHead>
-                          <TableHead>Result</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {deliveryEvents.map((event) => (
-                          <TableRow key={event.id}>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span className="font-medium">{event.destinationName}</span>
-                                <span className="text-muted-foreground text-xs">
-                                  {destinationTypeLabels[event.destinationType]}
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell>{event.eventType}</TableCell>
-                            <TableCell>
-                              <Badge variant={event.status === "success" ? "secondary" : event.status === "failed" ? "destructive" : "outline"}>
-                                {event.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>{event.attemptNumber}</TableCell>
-                            <TableCell>
-                              <div className="flex flex-col">
-                                <span>{formatAlertDateTime(event.scheduledAt)}</span>
-                                <span className="text-muted-foreground text-xs">
-                                  {formatRelativeTime(event.scheduledAt)}
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="max-w-[320px]">
-                              <div className="text-sm">
-                                {event.providerMessage ?? event.errorMessage ?? "Queued"}
-                              </div>
-                              {event.providerReference && (
-                                <div className="text-muted-foreground truncate text-xs">
-                                  Ref: {event.providerReference}
-                                </div>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </CardContent>
-              </Card>
-              )}
-            </div>
-          )}
-
-          {/* ─── Destinations Tab ─── */}
-          {activeTab === "destinations" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-muted-foreground text-sm">
-                  Destinations are reusable across rules and keep provider retries and failures auditable.
-                </div>
-                {isAdmin && (
-                  <Button size="sm" onClick={() => openDestinationDialog()}>
-                    <PlusIcon size={14} />
-                    Add Destination
-                  </Button>
-                )}
-              </div>
-
-              {Result.isInitial(destinationsResult) ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-28 w-full" />
-                  <Skeleton className="h-28 w-full" />
-                </div>
-              ) : !Result.isSuccess(destinationsResult) ? (
-                <div className="text-muted-foreground py-8 text-center text-sm">
-                  Failed to load alert destinations.
-                </div>
-              ) : destinations.length === 0 ? (
-                <Empty className="py-12">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <FireIcon size={18} />
-                    </EmptyMedia>
-                    <EmptyTitle>No destinations configured</EmptyTitle>
-                    <EmptyDescription>
-                      Add Slack, PagerDuty, or webhook destinations before creating alert rules.
-                    </EmptyDescription>
-                  </EmptyHeader>
+          {/* ─── Settings Tab ─── */}
+          {activeTab === "settings" && (
+            <div className="space-y-10">
+              {/* Destinations section */}
+              <section className="space-y-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-lg font-semibold">Destinations</h2>
+                    <p className="text-muted-foreground text-sm">
+                      Destinations are reusable across rules and keep provider retries and failures auditable.
+                    </p>
+                  </div>
                   {isAdmin && (
                     <Button size="sm" onClick={() => openDestinationDialog()}>
                       <PlusIcon size={14} />
-                      Add Destination
+                      Add destination
                     </Button>
                   )}
-                </Empty>
-              ) : (
-                <div className="space-y-3">
-                  {destinations.map((destination) => (
-                    <Card key={destination.id}>
-                      <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <div className="text-sm font-semibold">{destination.name}</div>
-                            <Badge variant="outline">{destinationTypeLabels[destination.type]}</Badge>
-                            <Badge variant="outline">{destination.enabled ? "Enabled" : "Disabled"}</Badge>
-                          </div>
-                          <div className="text-muted-foreground text-sm">{destination.summary}</div>
-                          <div className="text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-                            <span>
-                              Last tested {destination.lastTestedAt ? formatRelativeTime(destination.lastTestedAt) : "never"}
-                            </span>
-                          </div>
-                          {destination.lastTestError && (
-                            <div className="flex items-center gap-2 text-xs text-destructive">
-                              <AlertWarningIcon size={12} />
-                              <span>{destination.lastTestError}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Switch checked={destination.enabled} onCheckedChange={() => handleDestinationToggle(destination)} disabled={!isAdmin} />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDestinationTest(destination)}
-                            disabled={!isAdmin || testingDestinationId === destination.id}
-                          >
-                            {testingDestinationId === destination.id ? <LoaderIcon size={14} className="animate-spin" /> : <CheckIcon size={14} />}
-                            Send Test
-                          </Button>
-                          {isAdmin && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger
-                                render={<Button variant="ghost" size="icon-sm" className="shrink-0" />}
-                              >
-                                <DotsVerticalIcon size={14} />
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => openDestinationDialog(destination)}>
-                                  <PencilIcon size={14} />
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  variant="destructive"
-                                  onClick={() => handleDestinationDelete(destination)}
-                                  disabled={deletingDestinationId === destination.id}
-                                >
-                                  <TrashIcon size={14} />
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
                 </div>
-              )}
+
+                {Result.isInitial(destinationsResult) ? (
+                  <div className="space-y-3">
+                    <Skeleton className="h-24 w-full" />
+                    <Skeleton className="h-24 w-full" />
+                  </div>
+                ) : !Result.isSuccess(destinationsResult) ? (
+                  <Empty className="py-12">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <CircleWarningIcon size={18} />
+                      </EmptyMedia>
+                      <EmptyTitle>Failed to load alert destinations</EmptyTitle>
+                      <EmptyDescription>
+                        Refresh the page or check your connection.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                ) : destinations.length === 0 ? (
+                  <Empty className="py-12">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <FireIcon size={18} />
+                      </EmptyMedia>
+                      <EmptyTitle>No destinations configured</EmptyTitle>
+                      <EmptyDescription>
+                        Add Slack, PagerDuty, or webhook destinations before creating alert rules.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                    {isAdmin && (
+                      <Button size="sm" onClick={() => openDestinationDialog()}>
+                        <PlusIcon size={14} />
+                        Add destination
+                      </Button>
+                    )}
+                  </Empty>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                    {destinations.map((destination) => (
+                      <Card key={destination.id}>
+                        <CardContent className="p-5">
+                          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="space-y-2 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="text-sm font-semibold truncate">{destination.name}</div>
+                                <Badge variant="outline" className="text-xs">{destinationTypeLabels[destination.type]}</Badge>
+                                <AlertStatusBadge state={destination.enabled ? "ok" : "disabled"} label={destination.enabled ? "Enabled" : "Disabled"} />
+                              </div>
+                              <div className="text-muted-foreground text-sm truncate">{destination.summary}</div>
+                              <div className="text-muted-foreground text-xs">
+                                Last tested {destination.lastTestedAt ? formatRelativeTime(destination.lastTestedAt) : "never"}
+                              </div>
+                              {destination.lastTestError && (
+                                <div className="flex items-center gap-2 text-xs text-destructive">
+                                  <AlertWarningIcon size={12} />
+                                  <span className="truncate">{destination.lastTestError}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Switch
+                                checked={destination.enabled}
+                                onCheckedChange={() => handleDestinationToggle(destination)}
+                                disabled={!isAdmin}
+                              />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleDestinationTest(destination)}
+                                disabled={!isAdmin || testingDestinationId === destination.id}
+                              >
+                                {testingDestinationId === destination.id ? (
+                                  <LoaderIcon size={14} className="animate-spin" />
+                                ) : (
+                                  <CheckIcon size={14} />
+                                )}
+                                Send test
+                              </Button>
+                              {isAdmin && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger
+                                    render={<Button variant="ghost" size="icon-sm" className="shrink-0" />}
+                                  >
+                                    <DotsVerticalIcon size={14} />
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => openDestinationDialog(destination)}>
+                                      <PencilIcon size={14} />
+                                      Edit
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      variant="destructive"
+                                      onClick={() => handleDestinationDelete(destination)}
+                                      disabled={deletingDestinationId === destination.id}
+                                    >
+                                      <TrashIcon size={14} />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <Separator />
+
+              {/* Delivery log section */}
+              <section className="space-y-4">
+                <div>
+                  <h2 className="text-lg font-semibold">Delivery log</h2>
+                  <p className="text-muted-foreground text-sm">
+                    Every queued, retried, and completed notification attempt across alert destinations.
+                  </p>
+                </div>
+
+                {Result.isInitial(deliveryEventsResult) ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                ) : !Result.isSuccess(deliveryEventsResult) ? (
+                  <Empty className="py-12">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <CircleWarningIcon size={18} />
+                      </EmptyMedia>
+                      <EmptyTitle>Failed to load delivery history</EmptyTitle>
+                      <EmptyDescription>
+                        Refresh the page or check your connection.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                ) : deliveryEvents.length === 0 ? (
+                  <Empty className="py-12">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <PaperPlaneIcon size={18} />
+                      </EmptyMedia>
+                      <EmptyTitle>No notifications sent yet</EmptyTitle>
+                      <EmptyDescription>
+                        Once rules start triggering, delivery attempts will show up here.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Destination</TableHead>
+                        <TableHead>Event</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Attempt</TableHead>
+                        <TableHead>Scheduled</TableHead>
+                        <TableHead>Result</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {deliveryEvents.map((event) => (
+                        <TableRow key={event.id}>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="font-medium">{event.destinationName}</span>
+                              <span className="text-muted-foreground text-xs">
+                                {destinationTypeLabels[event.destinationType]}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="capitalize">{event.eventType}</TableCell>
+                          <TableCell>
+                            <Badge variant={event.status === "success" ? "secondary" : event.status === "failed" ? "destructive" : "outline"}>
+                              {event.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="tabular-nums">{event.attemptNumber}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span>{formatAlertDateTime(event.scheduledAt)}</span>
+                              <span className="text-muted-foreground text-xs">
+                                {formatRelativeTime(event.scheduledAt)}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="max-w-[320px]">
+                            <div className="text-sm truncate">
+                              {event.providerMessage ?? event.errorMessage ?? "Queued"}
+                            </div>
+                            {event.providerReference && (
+                              <div className="text-muted-foreground truncate text-xs">
+                                Ref: {event.providerReference}
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </section>
             </div>
           )}
         </div>

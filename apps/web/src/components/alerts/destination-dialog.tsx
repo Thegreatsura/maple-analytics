@@ -1,4 +1,6 @@
+import type { AlertDestinationType } from "@maple/domain/http"
 import { type DestinationFormState, defaultDestinationForm } from "@/lib/alerts/form-utils"
+import { AlertSegmentedSelect } from "@/components/alerts/alert-segmented-select"
 import { LoaderIcon } from "@/components/icons"
 import { Button } from "@maple/ui/components/ui/button"
 import {
@@ -11,13 +13,7 @@ import {
 } from "@maple/ui/components/ui/dialog"
 import { Input } from "@maple/ui/components/ui/input"
 import { Label } from "@maple/ui/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@maple/ui/components/ui/select"
+import { Separator } from "@maple/ui/components/ui/separator"
 import { Switch } from "@maple/ui/components/ui/switch"
 
 interface DestinationDialogProps {
@@ -28,6 +24,26 @@ interface DestinationDialogProps {
   isEditing: boolean
   saving: boolean
   onSave: () => void
+}
+
+const typeOptions = [
+  { value: "slack" as const,     label: "Slack"     },
+  { value: "pagerduty" as const, label: "PagerDuty" },
+  { value: "webhook" as const,   label: "Webhook"   },
+]
+
+function SectionHeader({ step, title, description }: { step: number; title: string; description?: string }) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold tabular-nums text-muted-foreground">
+        {step}
+      </span>
+      <div className="space-y-0.5">
+        <div className="text-sm font-semibold">{title}</div>
+        {description && <div className="text-muted-foreground text-xs">{description}</div>}
+      </div>
+    </div>
+  )
 }
 
 export function DestinationDialog({
@@ -43,115 +59,129 @@ export function DestinationDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit Destination" : "Add Destination"}</DialogTitle>
+          <DialogTitle>{isEditing ? "Edit destination" : "Add destination"}</DialogTitle>
           <DialogDescription>
-            Reuse the same destination across multiple alert rules and verify it with synthetic test events.
+            Reuse the same destination across alert rules and verify it with synthetic test events.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-6">
+          {/* Section 1: Type */}
           {!isEditing && (
-            <div className="space-y-2">
-              <Label htmlFor="destination-type">Type</Label>
-              <Select
-                items={{ slack: "Slack", pagerduty: "PagerDuty", webhook: "Webhook" }}
-                value={form.type}
-                onValueChange={(value) => {
-                  if (!value) return
-                  onFormChange(() => defaultDestinationForm(value))
-                }}
-              >
-                <SelectTrigger id="destination-type">
-                  <SelectValue placeholder="Select destination type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="slack">Slack</SelectItem>
-                  <SelectItem value="pagerduty">PagerDuty</SelectItem>
-                  <SelectItem value="webhook">Webhook</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <>
+              <div className="space-y-3">
+                <SectionHeader step={1} title="Type" description="Where should notifications go?" />
+                <AlertSegmentedSelect<AlertDestinationType>
+                  options={typeOptions}
+                  value={form.type}
+                  onChange={(value) => onFormChange(() => defaultDestinationForm(value))}
+                  aria-label="Destination type"
+                  className="pl-8"
+                />
+              </div>
+              <Separator />
+            </>
           )}
 
-          <div className="space-y-2">
-            <Label htmlFor="destination-name">Name</Label>
-            <Input
-              id="destination-name"
-              value={form.name}
-              onChange={(event) => onFormChange((current) => ({ ...current, name: event.target.value }))}
-              placeholder="Production paging"
+          {/* Section 2: Credentials */}
+          <div className="space-y-3">
+            <SectionHeader
+              step={isEditing ? 1 : 2}
+              title="Credentials"
+              description="A friendly name plus the provider connection."
             />
+            <div className="space-y-4 pl-8">
+              <div className="space-y-2">
+                <Label htmlFor="destination-name">Name</Label>
+                <Input
+                  id="destination-name"
+                  value={form.name}
+                  onChange={(event) => onFormChange((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Production paging"
+                />
+              </div>
+
+              {form.type === "slack" && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="destination-webhook">Slack webhook URL</Label>
+                    <Input
+                      id="destination-webhook"
+                      value={form.webhookUrl}
+                      onChange={(event) => onFormChange((current) => ({ ...current, webhookUrl: event.target.value }))}
+                      placeholder={isEditing ? "Leave blank to keep current webhook" : "https://hooks.slack.com/services/..."}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="destination-channel">Channel label</Label>
+                    <Input
+                      id="destination-channel"
+                      value={form.channelLabel}
+                      onChange={(event) => onFormChange((current) => ({ ...current, channelLabel: event.target.value }))}
+                      placeholder="#ops-alerts"
+                    />
+                  </div>
+                </>
+              )}
+
+              {form.type === "pagerduty" && (
+                <div className="space-y-2">
+                  <Label htmlFor="destination-integration">Integration key</Label>
+                  <Input
+                    id="destination-integration"
+                    value={form.integrationKey}
+                    onChange={(event) => onFormChange((current) => ({ ...current, integrationKey: event.target.value }))}
+                    placeholder={isEditing ? "Leave blank to keep current key" : "Routing key"}
+                  />
+                </div>
+              )}
+
+              {form.type === "webhook" && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="destination-url">Webhook URL</Label>
+                    <Input
+                      id="destination-url"
+                      value={form.url}
+                      onChange={(event) => onFormChange((current) => ({ ...current, url: event.target.value }))}
+                      placeholder={isEditing ? "Leave blank to keep current URL" : "https://example.com/maple-alerts"}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="destination-secret">Signing secret</Label>
+                    <Input
+                      id="destination-secret"
+                      value={form.signingSecret}
+                      onChange={(event) => onFormChange((current) => ({ ...current, signingSecret: event.target.value }))}
+                      placeholder={isEditing ? "Leave blank to keep current secret" : "Optional HMAC secret"}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
-          {form.type === "slack" && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="destination-webhook">Slack webhook URL</Label>
-                <Input
-                  id="destination-webhook"
-                  value={form.webhookUrl}
-                  onChange={(event) => onFormChange((current) => ({ ...current, webhookUrl: event.target.value }))}
-                  placeholder={isEditing ? "Leave blank to keep current webhook" : "https://hooks.slack.com/services/..."}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="destination-channel">Channel label</Label>
-                <Input
-                  id="destination-channel"
-                  value={form.channelLabel}
-                  onChange={(event) => onFormChange((current) => ({ ...current, channelLabel: event.target.value }))}
-                  placeholder="#ops-alerts"
-                />
-              </div>
-            </>
-          )}
+          <Separator />
 
-          {form.type === "pagerduty" && (
-            <div className="space-y-2">
-              <Label htmlFor="destination-integration">Integration key</Label>
-              <Input
-                id="destination-integration"
-                value={form.integrationKey}
-                onChange={(event) => onFormChange((current) => ({ ...current, integrationKey: event.target.value }))}
-                placeholder={isEditing ? "Leave blank to keep current key" : "Routing key"}
+          {/* Section 3: Delivery */}
+          <div className="space-y-3">
+            <SectionHeader
+              step={isEditing ? 2 : 3}
+              title="Delivery"
+              description="Pause notifications without deleting the destination."
+            />
+            <div className="flex items-center justify-between pl-8">
+              <div>
+                <div className="text-sm font-medium">Enabled</div>
+                <div className="text-muted-foreground text-xs">
+                  Disabled destinations stay attached to rules but won't receive notifications.
+                </div>
+              </div>
+              <Switch
+                checked={form.enabled}
+                onCheckedChange={(enabled) => onFormChange((current) => ({ ...current, enabled }))}
               />
             </div>
-          )}
-
-          {form.type === "webhook" && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="destination-url">Webhook URL</Label>
-                <Input
-                  id="destination-url"
-                  value={form.url}
-                  onChange={(event) => onFormChange((current) => ({ ...current, url: event.target.value }))}
-                  placeholder={isEditing ? "Leave blank to keep current URL" : "https://example.com/maple-alerts"}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="destination-secret">Signing secret</Label>
-                <Input
-                  id="destination-secret"
-                  value={form.signingSecret}
-                  onChange={(event) => onFormChange((current) => ({ ...current, signingSecret: event.target.value }))}
-                  placeholder={isEditing ? "Leave blank to keep current secret" : "Optional HMAC secret"}
-                />
-              </div>
-            </>
-          )}
-
-          <div className="flex items-center justify-between rounded-lg border px-3 py-2">
-            <div>
-              <div className="text-sm font-medium">Enabled</div>
-              <div className="text-muted-foreground text-xs">
-                Disabled destinations stay attached to rules but won't receive notifications.
-              </div>
-            </div>
-            <Switch
-              checked={form.enabled}
-              onCheckedChange={(enabled) => onFormChange((current) => ({ ...current, enabled }))}
-            />
           </div>
         </div>
 
@@ -161,7 +191,7 @@ export function DestinationDialog({
           </Button>
           <Button onClick={onSave} disabled={saving}>
             {saving ? <LoaderIcon size={14} className="animate-spin" /> : null}
-            {isEditing ? "Save Changes" : "Create Destination"}
+            {isEditing ? "Save changes" : "Create destination"}
           </Button>
         </DialogFooter>
       </DialogContent>

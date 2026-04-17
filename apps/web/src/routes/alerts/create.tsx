@@ -8,6 +8,12 @@ import { toast } from "sonner"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import { AlertPreviewChart } from "@/components/alerts/alert-preview-chart"
+import { AlertStatusBadge } from "@/components/alerts/alert-status-badge"
+import {
+  AlertSegmentedSelect,
+  AlertMultiSegmentedSelect,
+  type AlertSegmentedOption,
+} from "@/components/alerts/alert-segmented-select"
 import {
   type RuleFormState,
   defaultRuleForm,
@@ -29,6 +35,7 @@ import {
   type AlertComparator,
   type AlertMetricAggregation,
   type AlertMetricType,
+  type AlertSeverity,
   type AlertSignalType,
 } from "@maple/domain/http"
 import {
@@ -39,7 +46,6 @@ import { cn } from "@maple/ui/utils"
 import { Badge } from "@maple/ui/components/ui/badge"
 import { Button } from "@maple/ui/components/ui/button"
 import { Card, CardContent } from "@maple/ui/components/ui/card"
-import { Checkbox } from "@maple/ui/components/ui/checkbox"
 import { Input } from "@maple/ui/components/ui/input"
 import { Label } from "@maple/ui/components/ui/label"
 import {
@@ -213,24 +219,14 @@ function AlertCreatePage() {
         <div className="flex-1 min-w-0 space-y-6">
           {/* Signal Type */}
           <div>
-            <Label className="mb-2 block">Signal Type</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {signalTypes.map((st) => (
-                <button
-                  key={st.value}
-                  type="button"
-                  onClick={() => setRuleForm((c) => ({ ...c, signalType: st.value }))}
-                  className={cn(
-                    "rounded-md border px-3 py-1.5 text-sm font-medium transition-colors",
-                    ruleForm.signalType === st.value
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground",
-                  )}
-                >
-                  {st.label}
-                </button>
-              ))}
-            </div>
+            <Label className="mb-2 block">Signal type</Label>
+            <AlertSegmentedSelect<AlertSignalType>
+              options={signalTypes}
+              value={ruleForm.signalType}
+              onChange={(value) => setRuleForm((c) => ({ ...c, signalType: value }))}
+              aria-label="Signal type"
+              className="flex-wrap"
+            />
           </div>
 
           {/* Condition - inline builder */}
@@ -341,30 +337,23 @@ function AlertCreatePage() {
             <Card>
               <CardContent className="grid gap-4 p-4">
                 <div className="space-y-2">
-                  <Label>Data Source</Label>
-                  <div className="flex gap-1.5">
-                    {(["traces", "logs", "metrics"] as const).map((ds) => (
-                      <button
-                        key={ds}
-                        type="button"
-                        onClick={() =>
-                          setRuleForm((c) => ({
-                            ...c,
-                            queryDataSource: ds,
-                            queryAggregation: AGGREGATIONS_BY_SOURCE[ds][0].value,
-                          }))
-                        }
-                        className={cn(
-                          "rounded-md border px-3 py-1.5 text-sm font-medium capitalize transition-colors",
-                          ruleForm.queryDataSource === ds
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground",
-                        )}
-                      >
-                        {ds}
-                      </button>
-                    ))}
-                  </div>
+                  <Label>Data source</Label>
+                  <AlertSegmentedSelect<"traces" | "logs" | "metrics">
+                    options={[
+                      { value: "traces", label: "Traces" },
+                      { value: "logs", label: "Logs" },
+                      { value: "metrics", label: "Metrics" },
+                    ]}
+                    value={ruleForm.queryDataSource}
+                    onChange={(ds) =>
+                      setRuleForm((c) => ({
+                        ...c,
+                        queryDataSource: ds,
+                        queryAggregation: AGGREGATIONS_BY_SOURCE[ds][0].value,
+                      }))
+                    }
+                    aria-label="Query data source"
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -494,32 +483,15 @@ function AlertCreatePage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Severity</Label>
-              <div className="flex gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setRuleForm((c) => ({ ...c, severity: "warning" }))}
-                  className={cn(
-                    "rounded-md border px-4 py-1.5 text-sm font-medium transition-colors",
-                    ruleForm.severity === "warning"
-                      ? "border-yellow-500/50 bg-yellow-500/10 text-yellow-500"
-                      : "border-border text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Warning
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRuleForm((c) => ({ ...c, severity: "critical" }))}
-                  className={cn(
-                    "rounded-md border px-4 py-1.5 text-sm font-medium transition-colors",
-                    ruleForm.severity === "critical"
-                      ? "border-red-500/50 bg-red-500/10 text-red-500"
-                      : "border-border text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Critical
-                </button>
-              </div>
+              <AlertSegmentedSelect<AlertSeverity>
+                options={[
+                  { value: "warning", label: "Warning" },
+                  { value: "critical", label: "Critical" },
+                ]}
+                value={ruleForm.severity}
+                onChange={(value) => setRuleForm((c) => ({ ...c, severity: value }))}
+                aria-label="Severity"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="rule-breaches">Consecutive Breaches</Label>
@@ -541,41 +513,31 @@ function AlertCreatePage() {
             <Label className="mb-2 block">Notify via</Label>
             {destinations.length === 0 ? (
               <div className="text-muted-foreground text-sm">
-                <Link to="/alerts" search={{ tab: "destinations" }} className="underline">
+                <Link to="/alerts" search={{ tab: "settings" }} className="underline">
                   Create a destination
                 </Link>{" "}
                 before saving this rule.
               </div>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {destinations.map((destination) => {
-                  const selected = ruleForm.destinationIds.includes(destination.id)
-                  return (
-                    <button
-                      key={destination.id}
-                      type="button"
-                      className={cn(
-                        "flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors",
-                        selected
-                          ? "border-primary/40 bg-primary/5"
-                          : "border-border hover:border-foreground/30",
-                      )}
-                      onClick={() =>
-                        setRuleForm((current) => ({
-                          ...current,
-                          destinationIds: selected
-                            ? current.destinationIds.filter((id) => id !== destination.id)
-                            : [...current.destinationIds, destination.id],
-                        }))
-                      }
-                    >
-                      <Checkbox checked={selected} />
-                      <span className="font-medium">{destination.name}</span>
-                      <span className="text-muted-foreground text-xs">{destinationTypeLabels[destination.type]}</span>
-                    </button>
-                  )
-                })}
-              </div>
+              <AlertMultiSegmentedSelect<string>
+                options={destinations.map((d) => ({
+                  value: d.id as unknown as string,
+                  label: (
+                    <span className="flex items-center gap-2">
+                      <span className="font-medium">{d.name}</span>
+                      <span className="text-muted-foreground text-xs">{destinationTypeLabels[d.type]}</span>
+                    </span>
+                  ),
+                })) satisfies AlertSegmentedOption<string>[]}
+                value={ruleForm.destinationIds as unknown as string[]}
+                onChange={(values) =>
+                  setRuleForm((current) => ({
+                    ...current,
+                    destinationIds: values as typeof current.destinationIds,
+                  }))
+                }
+                aria-label="Notification destinations"
+              />
             )}
           </div>
         </div>
@@ -605,11 +567,11 @@ function AlertCreatePage() {
               {/* Current Value */}
               {previewResult && (
                 <div className="space-y-1">
-                  <span className="text-muted-foreground text-xs font-medium tracking-wider uppercase">Current Value</span>
+                  <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider">Current value</span>
                   <div className="flex items-baseline gap-2">
                     <span className={cn(
                       "text-2xl font-bold font-mono tabular-nums",
-                      previewResult.status === "breached" ? "text-red-500" : "text-green-500",
+                      previewResult.status === "breached" ? "text-destructive" : "text-emerald-500",
                     )}>
                       {formatSignalValue(ruleForm.signalType, previewResult.value)}
                     </span>
@@ -617,23 +579,16 @@ function AlertCreatePage() {
                       threshold: {formatSignalValue(ruleForm.signalType, threshold)}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-sm">
-                    <span className={cn(
-                      "size-1.5 rounded-full",
-                      previewResult.status === "breached" ? "bg-red-500" : "bg-green-500",
-                    )} />
-                    <span className={cn(
-                      previewResult.status === "breached" ? "text-red-500" : "text-green-500",
-                    )}>
-                      {previewResult.status === "breached" ? "Would trigger alert" : "Within threshold"}
-                    </span>
-                  </div>
+                  <AlertStatusBadge
+                    state={previewResult.status === "breached" ? "firing" : "ok"}
+                    label={previewResult.status === "breached" ? "Would trigger alert" : "Within threshold"}
+                  />
                 </div>
               )}
 
               {/* Chart */}
               <div className="space-y-2">
-                <span className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
+                <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider">
                   {signalLabels[ruleForm.signalType]} — Last 24h
                 </span>
                 <AlertPreviewChart
@@ -645,22 +600,22 @@ function AlertCreatePage() {
                 />
               </div>
 
-              {/* Rule Summary */}
+              {/* Rule Summary — order matches detail page Config */}
               <div className="space-y-2">
-                <span className="text-muted-foreground text-xs font-medium tracking-wider uppercase">Rule Summary</span>
+                <span className="text-muted-foreground text-xs font-medium uppercase tracking-wider">Rule summary</span>
                 <dl className="space-y-2 text-sm">
-                  <div className="flex justify-between">
+                  <div className="flex items-center justify-between">
                     <dt className="text-muted-foreground">Signal</dt>
                     <dd className="font-medium">{signalLabels[ruleForm.signalType]}</dd>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex items-center justify-between">
                     <dt className="text-muted-foreground">Condition</dt>
                     <dd className="font-mono font-medium">
-                      {comparatorLabels[ruleForm.comparator]} {ruleForm.threshold} over {ruleForm.windowMinutes}min
+                      {comparatorLabels[ruleForm.comparator]} {ruleForm.threshold} / {ruleForm.windowMinutes}min
                     </dd>
                   </div>
-                  <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Service</dt>
+                  <div className="flex items-center justify-between gap-4">
+                    <dt className="text-muted-foreground">Scope</dt>
                     <dd className="flex flex-wrap gap-1 justify-end">
                       {ruleForm.serviceNames.length > 0
                         ? ruleForm.serviceNames.map((s) => <Badge key={s} variant="outline" className="text-xs">{s}</Badge>)
@@ -668,25 +623,25 @@ function AlertCreatePage() {
                     </dd>
                   </div>
                   {ruleForm.excludeServiceNames.length > 0 && (
-                    <div className="flex justify-between">
-                      <dt className="text-muted-foreground">Exclude</dt>
+                    <div className="flex items-center justify-between gap-4">
+                      <dt className="text-muted-foreground">Excluded</dt>
                       <dd className="flex flex-wrap gap-1 justify-end">
                         {ruleForm.excludeServiceNames.map((s) => <Badge key={s} variant="outline" className="text-xs line-through">{s}</Badge>)}
                       </dd>
                     </div>
                   )}
-                  <div className="flex justify-between">
+                  <div className="flex items-center justify-between">
                     <dt className="text-muted-foreground">Severity</dt>
                     <dd className={cn(
                       "font-medium capitalize",
-                      ruleForm.severity === "critical" ? "text-red-500" : "text-yellow-500",
+                      ruleForm.severity === "critical" ? "text-destructive" : "text-severity-warn",
                     )}>
                       {ruleForm.severity}
                     </dd>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex items-center justify-between">
                     <dt className="text-muted-foreground">Destinations</dt>
-                    <dd className="font-medium">{ruleForm.destinationIds.length} selected</dd>
+                    <dd className="font-medium tabular-nums">{ruleForm.destinationIds.length} selected</dd>
                   </div>
                 </dl>
               </div>
