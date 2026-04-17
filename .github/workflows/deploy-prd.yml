@@ -1,6 +1,9 @@
 name: Deploy PRD (Cloudflare via Alchemy)
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 concurrency:
