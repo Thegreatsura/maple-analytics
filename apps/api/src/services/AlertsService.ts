@@ -2845,9 +2845,14 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
           IncidentTransition: capturedTransition,
           EvaluationDurationMs: Math.max(0, now() - timestamp),
         }
+        // Awaited (not forked) so the Cloudflare Worker isolate doesn't dispose
+        // mid-POST once the scheduled handler resolves. Errors are logged inside
+        // TinybirdService.ingest and swallowed here so a slow/failed Tinybird
+        // never blocks the scheduler tick's state/incident writes (those already
+        // committed above).
         yield* tinybird
           .ingest(systemTenant(row.orgId as OrgId), "alert_checks", [checkRow])
-          .pipe(Effect.ignore, Effect.forkDetach)
+          .pipe(Effect.ignore)
       })
 
       /* -------------------------------------------------------------------------- */
