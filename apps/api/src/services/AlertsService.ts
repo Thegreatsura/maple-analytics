@@ -2817,8 +2817,6 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
         if (incidentAction === "resolved") yield* Metric.update(AlertingMetrics.incidentsResolvedTotal, 1)
 
         // Record one audit row per evaluation to the Tinybird alert_checks datasource.
-        // Forked as a daemon so ingest latency/failure never blocks the scheduler tick —
-        // ingest errors are logged inside TinybirdService.ingest and swallowed here.
         // Tinybird DateTime64(3) wire format: "YYYY-MM-DD HH:MM:SS.SSS" (UTC, no timezone).
         const toIngestDateTime64 = (epochMs: number) => {
           const d = new Date(epochMs)
