@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react"
 import { toast } from "sonner"
-import { Link } from "@tanstack/react-router"
-import { XmarkIcon, ClockIcon, PulseIcon, CopyIcon, MagnifierIcon } from "@/components/icons"
+import { CircleInfoIcon, PulseIcon, SquareTerminalIcon, CopyIcon, MagnifierIcon, XmarkIcon } from "@/components/icons"
 import { useClipboard } from "@maple/ui/hooks/use-clipboard"
 import { Input } from "@maple/ui/components/ui/input"
 import { Result, useAtomValue } from "@/lib/effect-atom"
@@ -10,22 +9,21 @@ import {
   Sheet,
   SheetContent,
   SheetTitle,
-  SheetClose,
 } from "@maple/ui/components/ui/sheet"
-import { Badge } from "@maple/ui/components/ui/badge"
-import { Button } from "@maple/ui/components/ui/button"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@maple/ui/components/ui/tabs"
 import { ScrollArea } from "@maple/ui/components/ui/scroll-area"
 import { Skeleton } from "@maple/ui/components/ui/skeleton"
 import { cn } from "@maple/ui/utils"
-import { SeverityBadge } from "./severity-badge"
 import { getSeverityColor } from "@/lib/severity"
 import type { Log, LogsResponse } from "@/api/tinybird/logs"
 import type { SpanHierarchyResponse } from "@/api/tinybird/traces"
-import { CopyableValue, AttributesTable, ResourceAttributesSection } from "@/components/attributes"
+import { AttributesTable, ResourceAttributesSection } from "@/components/attributes"
 import { listLogsResultAtom, getSpanHierarchyResultAtom } from "@/lib/services/atoms/tinybird-query-atoms"
 import { disabledResultAtom } from "@/lib/services/atoms/disabled-result-atom"
 import { useTimezonePreference } from "@/hooks/use-timezone-preference"
-import { formatTimestampInTimezone } from "@/lib/timezone-format"
+import { LogHeroHeader } from "./log-hero-header"
+import { LogMetaStrip } from "./log-meta-strip"
+import { LogErrorBanner } from "./log-error-banner"
 
 function formatRelativeMs(ms: number): string {
   if (ms < 1) return "+0ms"
@@ -106,7 +104,6 @@ function TraceTimeline({
 
           const traceStart = new Date(logs[0].timestamp).getTime()
 
-          // Build spanId → spanName lookup from span hierarchy data
           const spanNameMap = new Map<string, string>()
           if (Result.isSuccess(spansResult)) {
             for (const span of spansResult.value.spans) {
@@ -217,167 +214,127 @@ export function LogDetailSheet({ log, open, onOpenChange }: LogDetailSheetProps)
 
   if (!viewedLog) return null
 
+  const sev = viewedLog.severityText.toUpperCase()
+  const showErrorBanner = sev === "ERROR" || sev === "FATAL"
+  const hasAttributes =
+    Object.keys(viewedLog.logAttributes).length > 0 ||
+    Object.keys(viewedLog.resourceAttributes).length > 0
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="p-0 sm:max-w-lg" showCloseButton={false}>
-        {/* Header */}
-        <div className="flex items-center justify-between border-b px-3 py-2 shrink-0">
-          <div className="flex-1 min-w-0 mr-2">
-            <SheetTitle className="text-sm font-semibold">Log Details</SheetTitle>
-            <div className="flex items-center gap-2 mt-0.5">
-              <Badge variant="outline" className="font-mono text-[10px]">
-                <CopyableValue value={viewedLog.serviceName}>{viewedLog.serviceName}</CopyableValue>
-              </Badge>
-              <SeverityBadge severity={viewedLog.severityText} />
-            </div>
-          </div>
-          <SheetClose
-            render={
-              <Button variant="ghost" size="icon" className="shrink-0" />
-            }
-          >
-            <XmarkIcon size={16} />
-          </SheetClose>
-        </div>
+      <SheetContent className="p-0 sm:max-w-2xl" showCloseButton={false}>
+        <SheetTitle className="sr-only">
+          Log: {viewedLog.body.slice(0, 80)}
+        </SheetTitle>
 
-        {/* Summary stats */}
-        <div className="flex items-center gap-4 border-b px-3 py-1.5 text-xs shrink-0">
-          <div className="flex items-center gap-1.5">
-            <ClockIcon size={12} className="text-muted-foreground" />
-            <span className="font-mono">
-              <CopyableValue value={viewedLog.timestamp}>
-                {formatTimestampInTimezone(viewedLog.timestamp, {
-                  timeZone: effectiveTimezone,
-                  withMilliseconds: true,
-                })}
-              </CopyableValue>
-            </span>
-          </div>
-          <span className="text-muted-foreground">
-            Severity {viewedLog.severityNumber}
-          </span>
-        </div>
+        <LogHeroHeader log={viewedLog} />
 
-        {/* Trace link banner */}
-        {viewedLog.traceId && (
-          <div className="border-b px-3 py-2 shrink-0">
-            <Link
-              to="/traces/$traceId"
-              params={{ traceId: viewedLog.traceId }}
-              className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs hover:bg-primary/10 transition-colors"
-            >
-              <PulseIcon size={14} className="text-primary shrink-0" />
-              <span className="font-medium">View Trace</span>
-              <span className="font-mono text-muted-foreground truncate ml-auto">
-                {viewedLog.traceId.slice(0, 16)}...
-              </span>
-            </Link>
-          </div>
-        )}
+        <LogMetaStrip
+          log={viewedLog}
+          timeZone={effectiveTimezone}
+          jsonPayload={jsonPayload}
+        />
 
-        {/* Scrollable content */}
-        <ScrollArea className="flex-1 overflow-hidden">
-          <div className="p-3 space-y-3">
-            {/* Message */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-medium text-muted-foreground">Message</h4>
-                <button
-                  type="button"
-                  onClick={() => {
-                    clipboard.copy(jsonPayload)
-                    toast.success("Copied log as JSON")
-                  }}
-                  className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                  title="Copy entire log as JSON"
-                >
-                  <CopyIcon size={10} />
-                  Copy JSON
-                </button>
-              </div>
-              <div className="rounded-md border p-2">
-                <CopyableValue value={viewedLog.body}>
-                  <p className="font-mono text-[11px] whitespace-pre-wrap break-all">
-                    {viewedLog.body}
-                  </p>
-                </CopyableValue>
-              </div>
-            </div>
+        {showErrorBanner && <LogErrorBanner log={viewedLog} />}
 
-            {/* Identifiers */}
-            {(viewedLog.traceId || viewedLog.spanId) && (
-              <div className="space-y-1">
-                <h4 className="text-xs font-medium text-muted-foreground">Identifiers</h4>
-                <div className="rounded-md border p-2 space-y-1 text-xs">
-                  {viewedLog.traceId && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Trace ID</span>
-                      <span className="font-mono">
-                        <CopyableValue value={viewedLog.traceId}>{viewedLog.traceId}</CopyableValue>
-                      </span>
-                    </div>
-                  )}
-                  {viewedLog.spanId && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Span ID</span>
-                      <span className="font-mono">
-                        <CopyableValue value={viewedLog.spanId}>{viewedLog.spanId}</CopyableValue>
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
+        <Tabs defaultValue="attributes" className="flex-1 flex flex-col min-h-0">
+          <TabsList variant="line" className="shrink-0 px-4">
+            <TabsTrigger value="attributes">
+              <CircleInfoIcon size={14} /> Attributes
+            </TabsTrigger>
+            {viewedLog.traceId && (
+              <TabsTrigger value="trace">
+                <PulseIcon size={14} /> Trace
+              </TabsTrigger>
             )}
+            <TabsTrigger value="raw">
+              <SquareTerminalIcon size={14} /> Raw
+            </TabsTrigger>
+          </TabsList>
 
-            {/* Attribute search */}
-            {(Object.keys(viewedLog.logAttributes).length > 0 ||
-              Object.keys(viewedLog.resourceAttributes).length > 0) && (
-              <div className="relative">
-                <MagnifierIcon
-                  strokeWidth={2}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none"
+          <TabsContent value="attributes" className="flex-1 min-h-0 mt-0">
+            <ScrollArea className="h-full">
+              <div className="p-3 space-y-3">
+                {hasAttributes && (
+                  <div className="relative">
+                    <MagnifierIcon
+                      strokeWidth={2}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none"
+                    />
+                    <Input
+                      type="text"
+                      value={attrSearch}
+                      onChange={(e) => setAttrSearch(e.target.value)}
+                      placeholder="Search attributes..."
+                      className="h-7 pl-7 pr-7 text-xs"
+                    />
+                    {attrSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setAttrSearch("")}
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
+                      >
+                        <XmarkIcon strokeWidth={2} className="size-3" />
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                <AttributesTable
+                  attributes={viewedLog.logAttributes}
+                  title="Log Attributes"
+                  searchQuery={attrSearch}
+                  groupByNamespace
                 />
-                <Input
-                  type="text"
-                  value={attrSearch}
-                  onChange={(e) => setAttrSearch(e.target.value)}
-                  placeholder="Search attributes..."
-                  className="h-7 pl-7 pr-7 text-xs"
+
+                <ResourceAttributesSection
+                  attributes={viewedLog.resourceAttributes}
+                  searchQuery={attrSearch}
+                  groupByNamespace
                 />
-                {attrSearch && (
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          {viewedLog.traceId && (
+            <TabsContent value="trace" className="flex-1 min-h-0 mt-0">
+              <ScrollArea className="h-full">
+                <div className="p-3">
+                  <TraceTimeline
+                    currentLog={viewedLog}
+                    onLogSelect={setViewedLog}
+                  />
+                </div>
+              </ScrollArea>
+            </TabsContent>
+          )}
+
+          <TabsContent value="raw" className="flex-1 min-h-0 mt-0">
+            <ScrollArea className="h-full">
+              <div className="p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    JSON Payload
+                  </span>
                   <button
                     type="button"
-                    onClick={() => setAttrSearch("")}
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      clipboard.copy(jsonPayload)
+                      toast.success("Copied log as JSON")
+                    }}
+                    className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                   >
-                    <XmarkIcon strokeWidth={2} className="size-3" />
+                    <CopyIcon size={10} />
+                    Copy
                   </button>
-                )}
+                </div>
+                <pre className="rounded-md border bg-muted/30 p-2 font-mono text-[11px] whitespace-pre-wrap break-all">
+                  {jsonPayload}
+                </pre>
               </div>
-            )}
-
-            {/* Log Attributes */}
-            <AttributesTable
-              attributes={viewedLog.logAttributes}
-              title="Log Attributes"
-              searchQuery={attrSearch}
-              groupByNamespace
-            />
-
-            {/* Resource Attributes */}
-            <ResourceAttributesSection
-              attributes={viewedLog.resourceAttributes}
-              searchQuery={attrSearch}
-              groupByNamespace
-            />
-
-            {/* Trace Timeline */}
-            <TraceTimeline
-              currentLog={viewedLog}
-              onLogSelect={setViewedLog}
-            />
-          </div>
-        </ScrollArea>
+            </ScrollArea>
+          </TabsContent>
+        </Tabs>
       </SheetContent>
     </Sheet>
   )

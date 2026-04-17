@@ -14,7 +14,7 @@ import { pickImportantAttributes } from "@/lib/log-attributes"
 import { LogAttributeChip } from "./log-attribute-chip"
 
 const VISIBLE_CHIPS = 4
-const ROW_HEIGHT = 28
+const ROW_HEIGHT = 36
 
 export interface LogsTableViewProps {
   allData: Log[]
@@ -36,7 +36,7 @@ function LoadingState() {
         {Array.from({ length: 40 }).map((_, i) => (
           <div
             key={i}
-            className="border-l-2 border-l-transparent flex items-center gap-2 px-3 py-1 border-b border-border"
+            className="border-l-[3px] border-l-transparent flex items-center gap-2 px-3 py-1.5 border-b border-border"
           >
             <Skeleton className="h-3 w-[72px] shrink-0" />
             <Skeleton className="h-3 w-16 shrink-0" />
@@ -53,6 +53,7 @@ interface LogRowProps {
   index: number
   top: number
   timeZone: string
+  isSelected: boolean
   measureRef: (node: Element | null) => void
   onClick: (log: Log) => void
 }
@@ -62,6 +63,7 @@ const LogRow = React.memo(function LogRow({
   index,
   top,
   timeZone,
+  isSelected,
   measureRef,
   onClick,
 }: LogRowProps) {
@@ -71,20 +73,23 @@ const LogRow = React.memo(function LogRow({
   )
   const chips = all.slice(0, VISIBLE_CHIPS)
   const overflow = Math.max(0, all.length - VISIBLE_CHIPS)
+  const severityColor = getSeverityColor(log.severityText)
 
   return (
     <div
       ref={measureRef}
       data-index={index}
+      data-selected={isSelected || undefined}
       style={{
         position: "absolute",
         top: 0,
         left: 0,
         width: "100%",
         transform: `translateY(${top}px)`,
-        borderLeftColor: getSeverityColor(log.severityText),
+        borderLeftWidth: "3px",
+        borderLeftColor: severityColor,
       }}
-      className="border-l-2 flex items-center gap-2 px-3 py-1 text-xs font-mono cursor-pointer border-b border-border hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset"
+      className="flex items-center gap-2 px-3 py-1.5 text-xs font-mono cursor-pointer border-b border-border hover:bg-muted/50 data-[selected]:bg-primary/5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset"
       tabIndex={0}
       role="listitem"
       onClick={() => onClick(log)}
@@ -95,17 +100,23 @@ const LogRow = React.memo(function LogRow({
         }
       }}
     >
+      <span
+        className="shrink-0 w-12 text-[10px] uppercase tabular-nums font-semibold hidden md:inline-block"
+        style={{ color: severityColor }}
+      >
+        {log.severityText}
+      </span>
       <span className="shrink-0 text-muted-foreground tabular-nums">
         {formatCompactTimeInTimezone(log.timestamp, { timeZone })}
       </span>
       <span className="shrink-0 text-muted-foreground/60 truncate w-[120px] hidden md:inline-block">
         {log.serviceName}
       </span>
-      <span className="min-w-0 flex-1 truncate text-foreground">
+      <span className="min-w-0 flex-1 truncate text-foreground text-[12px]">
         {log.body}
       </span>
       {chips.length > 0 && (
-        <div className="hidden md:flex items-center gap-1 shrink min-w-0 max-w-[50%] overflow-hidden">
+        <div className="hidden md:flex items-center gap-1 shrink min-w-0 max-w-[45%] overflow-hidden">
           {chips.map((chip) => (
             <LogAttributeChip
               key={chip.key}
@@ -146,6 +157,10 @@ export function LogsTableView({
     setSelectedLog(log)
     setSheetOpen(true)
   }, [onLogClick])
+
+  React.useEffect(() => {
+    if (!sheetOpen) setSelectedLog(null)
+  }, [sheetOpen])
 
   const virtualizer = useVirtualizer({
     count: allData.length,
@@ -189,6 +204,7 @@ export function LogsTableView({
             >
               {virtualItems.map((virtualRow) => {
                 const log = allData[virtualRow.index]
+                const isSelected = selectedLog === log
                 return (
                   <LogRow
                     key={virtualRow.index}
@@ -196,6 +212,7 @@ export function LogsTableView({
                     index={virtualRow.index}
                     top={virtualRow.start}
                     timeZone={effectiveTimezone}
+                    isSelected={isSelected}
                     measureRef={virtualizer.measureElement}
                     onClick={handleRowClick}
                   />
