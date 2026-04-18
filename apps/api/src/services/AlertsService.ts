@@ -2200,6 +2200,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
           WHERE ${predicates.join(" AND ")}
           ORDER BY Timestamp DESC
           LIMIT ${limit}
+          FORMAT JSON
         `.trim()
 
         const tenant = systemTenant(orgId)

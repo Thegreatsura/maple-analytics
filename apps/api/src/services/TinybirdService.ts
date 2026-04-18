@@ -130,13 +130,18 @@ export class TinybirdService extends Context.Service<TinybirdService, TinybirdSe
         })
       }
 
+      const trimmedSql = sql.trim().replace(/;\s*$/, "")
+      const sqlWithFormat = /\bFORMAT\s+\w+\s*$/i.test(trimmedSql)
+        ? trimmedSql
+        : `${trimmedSql}\nFORMAT JSON`
+
       const client = yield* resolveClient(tenant, pipe)
       const result = yield* Effect.tryPromise({
-        try: () => client.sql(sql),
+        try: () => client.sql(sqlWithFormat),
         catch: (error) => toTinybirdQueryError(pipe, error),
       }).pipe(
         Effect.tapError((error) =>
-          Effect.logError("TinybirdService.executeSql failed", { pipe, error: String(error), message: error.message, sql: truncateSql(sql) }),
+          Effect.logError("TinybirdService.executeSql failed", { pipe, error: String(error), message: error.message, sql: truncateSql(sqlWithFormat) }),
         ),
       )
 
