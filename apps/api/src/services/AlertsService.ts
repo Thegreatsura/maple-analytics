@@ -2180,7 +2180,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
 
         const sql = `
           SELECT
-            formatDateTime(Timestamp, '%Y-%m-%dT%H:%M:%S.%fZ') AS timestamp,
+            formatDateTime(Timestamp, '%Y-%m-%dT%H:%i:%S.%fZ') AS timestamp,
             GroupKey AS groupKey,
             Status AS status,
             SignalType AS signalType,
@@ -2189,8 +2189,8 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
             ObservedValue AS observedValue,
             SampleCount AS sampleCount,
             WindowMinutes AS windowMinutes,
-            formatDateTime(WindowStart, '%Y-%m-%dT%H:%M:%S.%fZ') AS windowStart,
-            formatDateTime(WindowEnd, '%Y-%m-%dT%H:%M:%S.%fZ') AS windowEnd,
+            formatDateTime(WindowStart, '%Y-%m-%dT%H:%i:%S.%fZ') AS windowStart,
+            formatDateTime(WindowEnd, '%Y-%m-%dT%H:%i:%S.%fZ') AS windowEnd,
             ConsecutiveBreaches AS consecutiveBreaches,
             ConsecutiveHealthy AS consecutiveHealthy,
             IncidentId AS incidentId,
