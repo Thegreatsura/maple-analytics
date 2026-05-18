@@ -99,7 +99,7 @@ export function CreateApiKeyDialog({ open, onOpenChange, onCreated, kind }: Crea
 								Copy your API key now. You won't be able to see it again.
 							</DialogDescription>
 						</DialogHeader>
-						<div className="space-y-3">
+						<div className="space-y-3 px-6">
 							<InputGroup>
 								<InputGroupInput
 									readOnly
@@ -138,7 +138,7 @@ export function CreateApiKeyDialog({ open, onOpenChange, onCreated, kind }: Crea
 								API keys are used to authenticate with the Maple API and MCP server.
 							</DialogDescription>
 						</DialogHeader>
-						<div className="space-y-3">
+						<div className="space-y-3 px-6">
 							<div className="space-y-1.5">
 								<Label htmlFor="api-key-name">Name</Label>
 								<Input

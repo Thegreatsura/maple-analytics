@@ -395,7 +395,7 @@ export function MembersSection() {
 						<DialogTitle>Invite member</DialogTitle>
 						<DialogDescription>Send an invitation to join {organization.name}.</DialogDescription>
 					</DialogHeader>
-					<div className="space-y-4 py-2">
+					<div className="space-y-4 px-6 py-2">
 						<div className="space-y-2">
 							<Label htmlFor="invite-email" className="text-xs font-medium">
 								Email address

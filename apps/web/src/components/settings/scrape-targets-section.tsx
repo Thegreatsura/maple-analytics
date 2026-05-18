@@ -402,7 +402,7 @@ export function ScrapeTargetsSection() {
 								: "Enter the URL of a Prometheus exporter endpoint. Maple will periodically scrape this endpoint for metrics."}
 						</DialogDescription>
 					</DialogHeader>
-					<div className="space-y-4 py-2">
+					<div className="space-y-4 px-6 py-2">
 						<div className="space-y-2">
 							<Label htmlFor="scrape-name">Name</Label>
 							<Input

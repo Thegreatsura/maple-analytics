@@ -537,7 +537,7 @@ export function PricingCards() {
 					</DialogHeader>
 
 					{confirmDialog && (
-						<div className="space-y-2 text-xs">
+						<div className="space-y-2 px-6 text-xs">
 							{confirmDialog.lines.map((line, i) => (
 								<div key={i} className="flex justify-between">
 									<span className="text-muted-foreground">{line.description}</span>

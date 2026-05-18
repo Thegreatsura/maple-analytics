@@ -452,7 +452,7 @@ export function CloudflareLogpushSection() {
 						</DialogDescription>
 					</DialogHeader>
 
-					<div className="space-y-4">
+					<div className="space-y-4 px-6">
 						<div className="space-y-2">
 							<Label htmlFor="cf-name">Name</Label>
 							<Input
@@ -530,16 +530,16 @@ export function CloudflareLogpushSection() {
 					</DialogHeader>
 
 					{!setup && Result.isInitial(setupResult) ? (
-						<div className="text-muted-foreground flex items-center justify-center gap-2 py-10 text-sm">
+						<div className="text-muted-foreground flex items-center justify-center gap-2 px-6 py-10 text-sm">
 							<LoaderIcon size={14} className="animate-spin" />
 							Loading setup details…
 						</div>
 					) : !setup ? (
-						<div className="text-muted-foreground py-6 text-sm">
+						<div className="text-muted-foreground px-6 py-6 text-sm">
 							Failed to load setup details.
 						</div>
 					) : (
-						<div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+						<div className="max-h-[70vh] space-y-4 overflow-y-auto px-6">
 							<CopyableField
 								label="destination_conf"
 								value={setup.destinationConf}
