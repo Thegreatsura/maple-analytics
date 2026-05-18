@@ -1,8 +1,17 @@
 import type { IconProps } from "./icon"
 
 const paths: ReadonlyArray<string> = [
-	"M4 4H20V15H9L5 19V15H4Z",
-	"M13 5L14 8L17 9L14 10L13 13L12 10L9 9L12 8L13 5Z",
+	"M12 11.01V11",
+	"M16 11.01V11",
+	"M8 11.01V11",
+	"M4 4H20",
+	"M4 18H8",
+	"M16 18H20",
+	"M22 6V16",
+	"M2 6V16",
+	"M10 20H10.01",
+	"M12 22H12.01",
+	"M14 20H14.01",
 ]
 
 function ChatBubbleSparkleIcon({ size = 24, className, ...props }: IconProps) {
