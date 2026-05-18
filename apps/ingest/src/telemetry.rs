@@ -817,7 +817,7 @@ impl ExportWorker {
             self.cfg.endpoint.trim_end_matches('/'),
             datasource
         );
-        let compressed = gzip(body)?;
+        let compressed = bytes::Bytes::from(gzip(body)?);
         let max_attempts = self.cfg.export_max_attempts;
         let mut attempt = 0u32;
         loop {

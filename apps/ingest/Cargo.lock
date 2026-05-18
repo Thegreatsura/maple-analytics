@@ -1176,6 +1176,7 @@ dependencies = [
  "async-trait",
  "axum",
  "base64",
+ "bytes",
  "chrono",
  "crc32fast",
  "criterion",
