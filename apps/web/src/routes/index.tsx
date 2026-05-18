@@ -8,6 +8,7 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { PageRefreshProvider } from "@/components/time-range-picker/page-refresh-context"
 import { TimeRangeHeaderControls } from "@/components/time-range-picker/time-range-header-controls"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@maple/ui/components/ui/select"
+import { formatErrorRate } from "@maple/ui/lib/format"
 import { useEffectiveTimeRange } from "@/hooks/use-effective-time-range"
 import { useRetainedRefreshableResultValue } from "@/hooks/use-retained-refreshable-result-value"
 import { ServiceUsageCards } from "@/components/dashboard/service-usage-cards"
@@ -247,6 +248,18 @@ function DashboardContent({ defaultPreset }: { defaultPreset: string }) {
 			"log-volume": logPoints,
 		}
 
+		const totalVolume = overviewPoints.reduce(
+			(sum, point) => sum + (typeof point.throughput === "number" ? point.throughput : 0),
+			0,
+		)
+		// `errorRate` is a fraction (errors / requests); volume-weight it across buckets.
+		const weightedErrors = overviewPoints.reduce((sum, point) => {
+			const requests = typeof point.throughput === "number" ? point.throughput : 0
+			const rate = typeof point.errorRate === "number" ? point.errorRate : 0
+			return sum + requests * rate
+		}, 0)
+		const avgErrorRate = totalVolume > 0 ? weightedErrors / totalVolume : 0
+
 		return OVERVIEW_CHARTS.map((chart) => ({
 			id: chart.id,
 			chartId: chart.chartId,
@@ -257,6 +270,19 @@ function DashboardContent({ defaultPreset }: { defaultPreset: string }) {
 			tooltip: chart.tooltip,
 			rateMode: chart.rateMode,
 			isLoading: loadingMap[chart.id] ?? false,
+			headerValue:
+				chart.id === "error-rate" && !isOverviewLoading ? (
+					<span className="text-chart-error">{formatErrorRate(avgErrorRate)}</span>
+				) : undefined,
+			footer:
+				chart.id === "throughput" && !isOverviewLoading ? (
+					<>
+						Total{" "}
+						<span className="font-medium text-foreground tabular-nums">
+							{totalVolume.toLocaleString()}
+						</span>
+					</>
+				) : undefined,
 		}))
 	}, [overviewPoints, logPoints, isOverviewLoading, isLogVolumeLoading])
 

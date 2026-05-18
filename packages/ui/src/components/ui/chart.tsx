@@ -35,6 +35,18 @@ function useChart() {
 	return context
 }
 
+export type ChartLegendItem = { key: string; label: React.ReactNode; color?: string }
+
+/**
+ * Optional slot for hoisting a chart's legend out of the plot area and into an
+ * ancestor (e.g. a card header). When a provider is present, `ChartContainer`
+ * publishes its series into it and the in-plot `ChartLegendContent` renders
+ * nothing.
+ */
+export const ChartLegendSlotContext = React.createContext<{
+	setItems: (items: ChartLegendItem[]) => void
+} | null>(null)
+
 function ChartContainer({
 	id,
 	className,
@@ -48,6 +60,24 @@ function ChartContainer({
 	const uniqueId = React.useId()
 	const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`
 	const containerRef = React.useRef<HTMLDivElement>(null)
+
+	const legendSlot = React.use(ChartLegendSlotContext)
+	const legendItems = React.useMemo<ChartLegendItem[]>(
+		() =>
+			Object.entries(config)
+				.filter(([key, item]) => item.label != null && !key.endsWith("_incomplete"))
+				.map(([key, item]) => ({
+					key,
+					label: item.label,
+					color: "color" in item ? item.color : undefined,
+				})),
+		[config],
+	)
+	React.useEffect(() => {
+		if (!legendSlot) return
+		legendSlot.setItems(legendItems)
+		return () => legendSlot.setItems([])
+	}, [legendSlot, legendItems])
 
 	return (
 		<ChartContext.Provider value={{ config, containerRef, chartId }}>
@@ -315,6 +345,13 @@ function ChartLegendContent({
 		nameKey?: string
 	}) {
 	const { config } = useChart()
+	const legendSlot = React.use(ChartLegendSlotContext)
+
+	// When an ancestor hosts the legend (e.g. a card header), don't draw it in
+	// the plot area — `ChartContainer` publishes the series to that slot.
+	if (legendSlot) {
+		return null
+	}
 
 	if (!payload?.length) {
 		return null

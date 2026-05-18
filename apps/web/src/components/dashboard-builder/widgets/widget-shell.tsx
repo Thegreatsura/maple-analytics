@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import { cn } from "@maple/ui/utils"
+import { ChartLegendSlotContext, type ChartLegendItem } from "@maple/ui/components/ui/chart"
 import {
 	GripDotsIcon,
 	TrashIcon,
@@ -35,6 +36,10 @@ interface WidgetShellProps {
 	onConfigure?: () => void
 	/** When set, a "Create alert" menu item is shown (in edit and view mode). */
 	onCreateAlert?: () => void
+	/** Headline stat rendered at the top-right of the card header. */
+	headerValue?: ReactNode
+	/** Summary stat rendered below the card content. */
+	footer?: ReactNode
 	contentClassName?: string
 	children: ReactNode
 }
@@ -46,6 +51,8 @@ export function WidgetShell({
 	onClone,
 	onConfigure,
 	onCreateAlert,
+	headerValue,
+	footer,
 	contentClassName,
 	children,
 }: WidgetShellProps) {
@@ -59,17 +66,42 @@ export function WidgetShell({
 	// alerts can be spun off a chart without entering dashboard edit mode.
 	const showMenu = isEditable || createAlert != null
 	const [menuOpen, setMenuOpen] = useState(false)
+	const [legendItems, setLegendItems] = useState<ChartLegendItem[]>([])
+	const legendSlot = useMemo(() => ({ setItems: setLegendItems }), [])
 
 	return (
 		<Card className="h-full flex flex-col">
-			<CardHeader className="border-b py-2">
-				<div className="flex items-center gap-2">
+			<CardHeader className="py-2.5">
+				<div className="flex min-w-0 items-center gap-2">
 					{isEditable && (
 						<div className="widget-drag-handle cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground">
 							<GripDotsIcon size={14} />
 						</div>
 					)}
-					<CardTitle className="flex-1 truncate text-xs">{title}</CardTitle>
+					<CardTitle className="min-w-0 truncate text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+						{title}
+					</CardTitle>
+					{headerValue != null && (
+						<div className="ml-auto shrink-0 font-mono font-semibold text-xs tabular-nums">
+							{headerValue}
+						</div>
+					)}
+					{legendItems.length >= 2 && (
+						<div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-3 gap-y-1">
+							{legendItems.map((item) => (
+								<span
+									key={item.key}
+									className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[10px] text-muted-foreground"
+								>
+									<span
+										className="size-2 shrink-0 rounded-[2px]"
+										style={{ backgroundColor: item.color }}
+									/>
+									{item.label}
+								</span>
+							))}
+						</div>
+					)}
 				</div>
 				{showMenu && (
 					<CardAction
@@ -120,7 +152,14 @@ export function WidgetShell({
 					</CardAction>
 				)}
 			</CardHeader>
-			<CardContent className={contentClassName ?? "flex-1 min-h-0 p-2"}>{children}</CardContent>
+			<CardContent className={contentClassName ?? "flex-1 min-h-0 p-2"}>
+				<ChartLegendSlotContext.Provider value={legendSlot}>
+					{children}
+				</ChartLegendSlotContext.Provider>
+			</CardContent>
+			{footer != null && (
+				<div className="shrink-0 px-3 pb-2.5 text-[11px] text-muted-foreground">{footer}</div>
+			)}
 		</Card>
 	)
 }

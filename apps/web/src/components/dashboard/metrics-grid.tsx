@@ -1,4 +1,4 @@
-import { Suspense } from "react"
+import { Suspense, type ReactNode } from "react"
 
 import { cn } from "@maple/ui/utils"
 import { Skeleton } from "@maple/ui/components/ui/skeleton"
@@ -21,6 +21,10 @@ interface MetricsGridItem {
 	rateMode?: "per_second"
 	referenceLines?: ChartReferenceLine[]
 	isLoading?: boolean
+	/** Headline stat rendered at the top-right of the card header. */
+	headerValue?: ReactNode
+	/** Summary stat rendered below the chart. */
+	footer?: ReactNode
 }
 
 interface MetricsGridProps {
@@ -54,7 +58,11 @@ export function MetricsGrid({ items, className, waiting, syncId }: MetricsGridPr
 
 				return (
 					<div key={item.id} className={cn("h-[280px]", fullWidth && "md:col-span-2")}>
-						<ReadonlyWidgetShell title={item.title}>
+						<ReadonlyWidgetShell
+							title={item.title}
+							headerValue={item.headerValue}
+							footer={item.footer}
+						>
 							{item.isLoading ? (
 								<Skeleton className="h-full w-full" />
 							) : (
