@@ -165,6 +165,15 @@ const TREE_SPAN_ATTR_KEYS = [
  */
 const TREE_RESOURCE_ATTR_KEYS = ["deployment.environment", "deployment.commit_sha"] as const
 
+/**
+ * Hard cap on spans returned for one trace. A waterfall with more than a few
+ * thousand rows is unrenderable, and pathological traces (hundreds of thousands
+ * of spans) otherwise produce a response large enough to stall the API. The cap
+ * keeps the earliest spans (ORDER BY StartTime ASC) so the root and its subtree
+ * stay connected.
+ */
+const SPAN_HIERARCHY_MAX_SPANS = 5_000
+
 export interface SpanHierarchyOpts {
 	traceId: string
 	spanId?: string
@@ -247,8 +256,10 @@ export function spanHierarchyQuery(opts: SpanHierarchyOpts) {
 			CH.whenTrue(!!opts.narrowByTime, () => $.Timestamp.gte(param.dateTime("startTime"))),
 			CH.whenTrue(!!opts.narrowByTime, () => $.Timestamp.lte(param.dateTime("endTime"))),
 		])
-		// No ORDER BY — buildSpanTree (web) rebuilds the tree and sorts children
-		// client-side, so a server-side sort over wide rows is pure overhead.
+		// ORDER BY + LIMIT bounds pathological traces — the earliest spans keep
+		// the root subtree connected. buildSpanTree (web) re-sorts children anyway.
+		.orderBy(["startTime", "asc"])
+		.limit(SPAN_HIERARCHY_MAX_SPANS)
 		.format("JSON")
 }
 

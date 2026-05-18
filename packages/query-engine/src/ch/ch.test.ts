@@ -1029,8 +1029,9 @@ describe("converted queries", () => {
 		expect(sql).toContain("AS resourceAttributes")
 		expect(sql).toContain("TraceId = 'abc123'")
 		expect(sql).toContain("'related' AS relationship")
-		// No server-side sort — buildSpanTree re-sorts client-side.
-		expect(sql).not.toContain("ORDER BY")
+		// Capped so pathological traces can't stall the API.
+		expect(sql).toContain("ORDER BY startTime ASC")
+		expect(sql).toContain("LIMIT 5000")
 	})
 
 	it("spanHierarchyQuery with spanId marks target", () => {
