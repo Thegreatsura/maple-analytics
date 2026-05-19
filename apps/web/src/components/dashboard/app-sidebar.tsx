@@ -18,7 +18,7 @@ import {
 	ChevronRightIcon,
 	NetworkNodesIcon,
 	ChatBubbleSparkleIcon,
-	GridIcon,
+	GridSquareCirclePlusIcon,
 } from "@/components/icons"
 import { OrgSwitcher } from "@/components/dashboard/org-switcher"
 import {
@@ -352,7 +352,7 @@ export function AppSidebar() {
 				<Collapsible defaultOpen className="group/dashboards flex flex-col">
 					<SidebarGroup className="flex flex-col">
 						<SidebarGroupLabel render={<CollapsibleTrigger />}>
-							<GridIcon size={14} className="mr-1 !size-3.5" />
+							<GridSquareCirclePlusIcon size={14} className="mr-1 !size-3.5" />
 							Dashboards
 							<Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">
 								Beta
@@ -374,7 +374,7 @@ export function AppSidebar() {
 												currentPath === "/dashboards/"
 											}
 										>
-											<GridIcon size={18} />
+											<GridSquareCirclePlusIcon size={18} />
 											<span>All Dashboards</span>
 										</SidebarMenuButton>
 									</SidebarMenuItem>

@@ -1,5 +1,5 @@
 import { Result } from "@/lib/effect-atom"
-import { FileIcon, PulseIcon, ChartLineIcon, DatabaseIcon } from "@/components/icons"
+import { FileIcon, GridSquareCirclePlusIcon, ChartLineIcon, DatabaseIcon } from "@/components/icons"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@maple/ui/components/ui/card"
 import { Skeleton } from "@maple/ui/components/ui/skeleton"
@@ -39,7 +39,7 @@ const cardConfig: Array<{
 	format: (n: number) => string
 }> = [
 	{ title: "Total Logs", key: "logs", icon: FileIcon, format: formatNumber },
-	{ title: "Total Traces", key: "traces", icon: PulseIcon, format: formatNumber },
+	{ title: "Total Traces", key: "traces", icon: GridSquareCirclePlusIcon, format: formatNumber },
 	{ title: "Total Metrics", key: "metrics", icon: ChartLineIcon, format: formatNumber },
 	{ title: "Data Size", key: "dataSize", icon: DatabaseIcon, format: formatBytes },
 ]

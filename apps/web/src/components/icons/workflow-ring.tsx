@@ -43,7 +43,7 @@ function WorkflowRingIcon({ state, size = 14, className, ...props }: WorkflowRin
 
 	const common = {
 		xmlns: "http://www.w3.org/2000/svg",
-		viewBox: "0 0 16 16",
+		viewBox: "0 0 24 24",
 		width: size,
 		height: size,
 		className,
@@ -56,8 +56,8 @@ function WorkflowRingIcon({ state, size = 14, className, ...props }: WorkflowRin
 	if (state === "triage") {
 		return (
 			<svg {...common}>
-				<circle cx="8" cy="8" r="6" stroke={color} strokeWidth="1.5" strokeDasharray="2.4 2" />
-				<circle cx="8" cy="8" r="1.6" fill={color} />
+				<circle cx="12" cy="12" r="9" stroke={color} strokeWidth="2" strokeDasharray="3 3" />
+				<circle cx="12" cy="12" r="3" fill={color} />
 			</svg>
 		)
 	}
@@ -65,7 +65,7 @@ function WorkflowRingIcon({ state, size = 14, className, ...props }: WorkflowRin
 	if (state === "todo") {
 		return (
 			<svg {...common}>
-				<circle cx="8" cy="8" r="6" stroke={color} strokeWidth="1.5" />
+				<circle cx="12" cy="12" r="9" stroke={color} strokeWidth="2" />
 			</svg>
 		)
 	}
@@ -73,8 +73,8 @@ function WorkflowRingIcon({ state, size = 14, className, ...props }: WorkflowRin
 	if (state === "in_progress") {
 		return (
 			<svg {...common}>
-				<circle cx="8" cy="8" r="6" stroke={color} strokeWidth="1.5" />
-				<path d={describeArc(8, 8, 5.1, 0, 140)} fill={color} />
+				<circle cx="12" cy="12" r="9" stroke={color} strokeWidth="2" />
+				<path d={describeArc(12, 12, 7, 0, 140)} fill={color} />
 			</svg>
 		)
 	}
@@ -82,8 +82,8 @@ function WorkflowRingIcon({ state, size = 14, className, ...props }: WorkflowRin
 	if (state === "in_review") {
 		return (
 			<svg {...common}>
-				<circle cx="8" cy="8" r="6" stroke={color} strokeWidth="1.5" />
-				<path d={describeArc(8, 8, 5.1, 0, 280)} fill={color} />
+				<circle cx="12" cy="12" r="9" stroke={color} strokeWidth="2" />
+				<path d={describeArc(12, 12, 7, 0, 280)} fill={color} />
 			</svg>
 		)
 	}
@@ -91,11 +91,11 @@ function WorkflowRingIcon({ state, size = 14, className, ...props }: WorkflowRin
 	if (state === "done") {
 		return (
 			<svg {...common}>
-				<circle cx="8" cy="8" r="6.75" fill={color} />
+				<circle cx="12" cy="12" r="10" fill={color} />
 				<path
-					d="M5.25 8.2 L7.1 10.05 L10.75 6.4"
+					d="M8 12 L11 15 L16 9"
 					stroke="white"
-					strokeWidth="1.6"
+					strokeWidth="2"
 					strokeLinecap="round"
 					strokeLinejoin="round"
 				/>
@@ -106,13 +106,8 @@ function WorkflowRingIcon({ state, size = 14, className, ...props }: WorkflowRin
 	if (state === "cancelled") {
 		return (
 			<svg {...common}>
-				<circle cx="8" cy="8" r="6.75" fill={color} />
-				<path
-					d="M5.75 5.75 L10.25 10.25 M10.25 5.75 L5.75 10.25"
-					stroke="white"
-					strokeWidth="1.6"
-					strokeLinecap="round"
-				/>
+				<circle cx="12" cy="12" r="10" fill={color} />
+				<path d="M9 9 L15 15 M15 9 L9 15" stroke="white" strokeWidth="2" strokeLinecap="round" />
 			</svg>
 		)
 	}
@@ -120,8 +115,8 @@ function WorkflowRingIcon({ state, size = 14, className, ...props }: WorkflowRin
 	// wontfix
 	return (
 		<svg {...common}>
-			<circle cx="8" cy="8" r="6.75" fill={color} />
-			<path d="M5.2 8 L10.8 8" stroke="white" strokeWidth="1.6" strokeLinecap="round" />
+			<circle cx="12" cy="12" r="10" fill={color} />
+			<path d="M8 12 L16 12" stroke="white" strokeWidth="2" strokeLinecap="round" />
 		</svg>
 	)
 }
