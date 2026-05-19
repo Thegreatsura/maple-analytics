@@ -6,7 +6,13 @@ import {
 } from "@maple/query-engine"
 import { Effect, Schema } from "effect"
 
-import { buildBucketTimeline, computeBucketSeconds, toIsoBucket } from "@/api/tinybird/timeseries-utils"
+import {
+	buildBucketTimeline,
+	computeBucketSeconds,
+	firstFullBucketIso,
+	toIsoBucket,
+	trimSparseLeadingBuckets,
+} from "@/api/tinybird/timeseries-utils"
 import {
 	TinybirdDateTimeString,
 	decodeInput,
@@ -92,7 +98,7 @@ function fillServiceDetailPoints(
 		byBucket.set(toIsoBucket(point.bucket), point)
 	}
 
-	return timeline.map((bucket) => {
+	const filled = timeline.map((bucket) => {
 		const existing = byBucket.get(bucket)
 		if (existing) {
 			return existing
@@ -110,6 +116,11 @@ function fillServiceDetailPoints(
 			p99LatencyMs: 0,
 		}
 	})
+
+	// Trim leading buckets where the trace count is essentially zero next to the
+	// rest of the chart. Without this, ingestion ramp-up at the start of the
+	// requested window plots a leading 0 → spike that reads as a broken chart.
+	return trimSparseLeadingBuckets(filled, (row) => row.tracedThroughput ?? 0)
 }
 
 function fillServiceSparklinePoints(
@@ -322,12 +333,27 @@ const getCustomChartTimeSeriesEffect = Effect.fn("Tinybird.getCustomChartTimeSer
 		return yield* invalidTinybirdInput("getCustomChartTimeSeries", "Unexpected query result kind")
 	}
 
-	return {
-		data: response.result.data.map((point) => ({
+	// Drop the partial leading bucket that ClickHouse returns for `Timestamp >= startTime`
+	// when startTime isn't bucket-aligned — matches the `ceil` invariant in
+	// `buildBucketTimeline` used by `fillServiceDetailPoints`. Without this, charts
+	// like Log Volume divide a fractional bucket's count by full `bucketSeconds`
+	// and render a near-zero leading point.
+	const bucketSeconds = input.bucketSeconds ?? computeBucketSeconds(input.startTime, input.endTime)
+	const firstIso = firstFullBucketIso(input.startTime, bucketSeconds)
+
+	const filtered = response.result.data
+		.filter((point) => firstIso == null || toIsoBucket(point.bucket) >= firstIso)
+		.map((point) => ({
 			bucket: point.bucket,
 			series: { ...point.series },
-		})),
-	}
+		}))
+
+	// Also trim leading buckets whose total volume is a tiny fraction of the next.
+	// Covers the case where the first full bucket of the window happens to fall in
+	// an ingestion ramp-up — the row exists but contains only a few stray events.
+	const sumSeries = (p: { series: Record<string, number> }) =>
+		Object.values(p.series).reduce((s, v) => s + (typeof v === "number" ? v : 0), 0)
+	return { data: trimSparseLeadingBuckets(filtered, sumSeries) }
 })
 
 const CustomChartBreakdownInputSchema = Schema.Struct({
@@ -572,7 +598,13 @@ function extractAllMetricsSeries(response: {
 	const map = new Map<string, AllMetricsPoint>()
 	if (response.result.kind !== "timeseries") return map
 	for (const point of response.result.data) {
-		map.set(point.bucket, {
+		// Normalize to ISO so this map's keys line up with `metricsMap` (which already
+		// `toIsoBucket`s its keys). Without this, the same time bucket lands under two
+		// different string keys in the merged `allBuckets` Set, producing duplicate
+		// points — one with traces data only, one with metrics throughput only — and
+		// the metrics-only duplicate (sorted after the raw key) overwrites the traces
+		// entry in `byBucket`, dropping latency/error-rate and stranding throughput.
+		map.set(toIsoBucket(point.bucket), {
 			count: point.series.count ?? 0,
 			errorRate: point.series.error_rate ?? 0,
 			p50: point.series.p50_duration ?? 0,
@@ -803,13 +835,18 @@ const getCustomChartServiceSparklinesEffect = Effect.fn("QueryEngine.getCustomCh
 		) => {
 			if (response.result.kind !== "timeseries") return
 			for (const point of response.result.data) {
+				// Normalize to ISO so the per-service maps line up with `metricsMap`
+				// (keyed by `service::toIsoBucket(bucket)` above). Without this, the
+				// `${service}::${bucket}` lookup below would miss every time and the
+				// SpanMetrics-derived throughput would never apply.
+				const bucketIso = toIsoBucket(point.bucket)
 				for (const [service, value] of Object.entries(point.series)) {
 					let serviceMap = target.get(service)
 					if (!serviceMap) {
 						serviceMap = new Map()
 						target.set(service, serviceMap)
 					}
-					serviceMap.set(point.bucket, Number(value))
+					serviceMap.set(bucketIso, Number(value))
 				}
 			}
 		}

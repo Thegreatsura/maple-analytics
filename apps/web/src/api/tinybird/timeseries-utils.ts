@@ -11,6 +11,65 @@ function floorToBucketMs(epochMs: number, bucketSeconds: number): number {
 	return Math.floor(epochMs / bucketMs) * bucketMs
 }
 
+function ceilToBucketMs(epochMs: number, bucketSeconds: number): number {
+	const bucketMs = bucketSeconds * 1000
+	return Math.ceil(epochMs / bucketMs) * bucketMs
+}
+
+/**
+ * ISO timestamp of the first bucket that's fully on-or-after `startTime`.
+ *
+ * Mirrors the leading-bucket invariant in `buildBucketTimeline`: callers that
+ * don't use the timeline (e.g. `getCustomChartTimeSeries`, which streams the
+ * query response directly) can use this to drop the partial leading bucket
+ * the query returned for `Timestamp >= startTime`.
+ */
+export function firstFullBucketIso(
+	startTime: string | undefined,
+	bucketSeconds: number,
+): string | null {
+	if (!startTime) return null
+	const startMs = toEpochMs(startTime)
+	if (Number.isNaN(startMs)) return null
+	return new Date(ceilToBucketMs(startMs, bucketSeconds)).toISOString()
+}
+
+/**
+ * Drop leading buckets whose value is a tiny fraction of the next bucket's
+ * value. Catches two visually-broken-looking-but-data-accurate scenarios:
+ *
+ *  1. **Zero-filled gaps** — the query returned no rows for the first bucket
+ *     and `fillServiceDetailPoints` synthesized a `throughput: 0` entry.
+ *  2. **Ingestion ramp-up** — the leading bucket falls during a startup
+ *     window where only a handful of stray events landed before normal
+ *     volume kicked in. The chart correctly plots, e.g., 0.1/s next to a
+ *     neighbor of 2,300/s, but on a 0-2.8K scale the leading point sits
+ *     visually on the zero line and reads as a bug.
+ *
+ * The threshold compares each leading bucket to its **next** neighbor, not to
+ * the mean/median, so legitimate diurnal dips (a 3-AM bucket at ~30% of peak)
+ * stay on the chart — they're nowhere near `nextRatio` of the next bucket.
+ *
+ * Default `nextRatio = 0.01` (1%) is wide of any real cycle but narrow enough
+ * to remove the leading-0 ramp every time it appears.
+ */
+export function trimSparseLeadingBuckets<T>(
+	rows: ReadonlyArray<T>,
+	getValue: (row: T) => number,
+	nextRatio = 0.01,
+): T[] {
+	if (rows.length < 2) return Array.from(rows)
+	let cutoff = 0
+	while (cutoff < rows.length - 1) {
+		const v = getValue(rows[cutoff])
+		const next = getValue(rows[cutoff + 1])
+		if (next <= 0) break
+		if (v >= next * nextRatio) break
+		cutoff++
+	}
+	return rows.slice(cutoff)
+}
+
 export function toIsoBucket(value: string | Date): string {
 	if (value instanceof Date) {
 		return value.toISOString()
@@ -66,7 +125,7 @@ export function buildBucketTimeline(
 	}
 
 	const bucketMs = bucketSeconds * 1000
-	const firstBucketMs = floorToBucketMs(startMs, bucketSeconds)
+	const firstBucketMs = ceilToBucketMs(startMs, bucketSeconds)
 	const lastBucketMs = floorToBucketMs(endMs, bucketSeconds)
 	const buckets: string[] = []
 

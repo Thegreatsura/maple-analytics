@@ -2,7 +2,12 @@ import { Effect, Schema } from "effect"
 import { QueryEngineExecuteRequest } from "@maple/query-engine"
 import { ServiceOverviewRequest, ServiceApdexRequest, ServiceReleasesRequest } from "@maple/domain/http"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
-import { buildBucketTimeline, computeBucketSeconds, toIsoBucket } from "@/api/tinybird/timeseries-utils"
+import {
+	buildBucketTimeline,
+	computeBucketSeconds,
+	toIsoBucket,
+	trimSparseLeadingBuckets,
+} from "@/api/tinybird/timeseries-utils"
 import { summarizeSampling } from "@/lib/sampling"
 import {
 	TinybirdDateTimeString,
@@ -209,7 +214,7 @@ function fillServiceApdexPoints(
 		byBucket.set(toIsoBucket(point.bucket), point)
 	}
 
-	return timeline.map((bucket) => {
+	const filled = timeline.map((bucket) => {
 		const existing = byBucket.get(bucket)
 		if (existing) {
 			return existing
@@ -221,6 +226,11 @@ function fillServiceApdexPoints(
 			totalCount: 0,
 		}
 	})
+
+	// Same leading-ramp guard as `fillServiceDetailPoints` — apdex is computed
+	// against the bucket's `totalCount`, so a sparse first bucket would plot a
+	// noisy apdex value against a backdrop of well-populated neighbors.
+	return trimSparseLeadingBuckets(filled, (row) => row.totalCount ?? 0)
 }
 
 // Service facets types
