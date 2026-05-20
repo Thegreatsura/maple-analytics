@@ -80,6 +80,12 @@ export function compileCH<
 		// Compile the inner query lazily
 		const innerCompiled = compileCH(state.fromQuery, params, { skipFormat: true })
 		fromFragment = raw(`(${innerCompiled.sql}) AS ${state.fromQueryAlias}`)
+	} else if (state.fromUnion) {
+		// Compile the inner union without an outer FORMAT — the outer query
+		// owns formatting. Strips a trailing `\nFORMAT <fmt>` defensively.
+		const innerCompiled = compileUnion(state.fromUnion, params)
+		const innerSql = innerCompiled.sql.replace(/\nFORMAT \w+$/, "")
+		fromFragment = raw(`(\n${innerSql}\n) AS ${state.fromQueryAlias}`)
 	} else if (state.tableAlias) {
 		fromFragment = raw(`${state.tableName} AS ${state.tableAlias}`)
 	} else {

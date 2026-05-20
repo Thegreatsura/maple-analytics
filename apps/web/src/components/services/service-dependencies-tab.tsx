@@ -3,8 +3,8 @@ import { cn } from "@maple/ui/utils"
 import { Result } from "@/lib/effect-atom"
 import { useRetainedRefreshableResultValue } from "@/hooks/use-retained-refreshable-result-value"
 import {
-	getServiceMapResultAtom,
-	getServiceMapDbEdgesResultAtom,
+	getServiceMapForServiceResultAtom,
+	getServiceMapDbEdgesForServiceResultAtom,
 	getServiceExternalEdgesResultAtom,
 } from "@/lib/services/atoms/tinybird-query-atoms"
 import { formatLatency } from "@/lib/format"
@@ -61,13 +61,13 @@ export function ServiceDependenciesTab({
 	effectiveEndTime,
 }: ServiceDependenciesTabProps) {
 	const servicesResult = useRetainedRefreshableResultValue(
-		getServiceMapResultAtom({
-			data: { startTime: effectiveStartTime, endTime: effectiveEndTime },
+		getServiceMapForServiceResultAtom({
+			data: { serviceName, startTime: effectiveStartTime, endTime: effectiveEndTime },
 		}),
 	)
 	const dbsResult = useRetainedRefreshableResultValue(
-		getServiceMapDbEdgesResultAtom({
-			data: { startTime: effectiveStartTime, endTime: effectiveEndTime },
+		getServiceMapDbEdgesForServiceResultAtom({
+			data: { serviceName, startTime: effectiveStartTime, endTime: effectiveEndTime },
 		}),
 	)
 	const externalResult = useRetainedRefreshableResultValue(
@@ -100,7 +100,9 @@ export function ServiceDependenciesTab({
 			.orElse(() => [] as RawEdge[])
 
 		for (const edge of serviceEdges) {
-			if (edge.sourceService !== serviceName || !edge.targetService) continue
+			// Server-side filter on `SourceService = ?` already scopes the result;
+			// only need to guard against rows missing a target name.
+			if (!edge.targetService) continue
 			const callCount = Number(edge.callCount ?? 0)
 			const estimated = Number(edge.estimatedCallCount ?? callCount)
 			const target = String(edge.targetService)
@@ -122,7 +124,9 @@ export function ServiceDependenciesTab({
 		}
 
 		for (const edge of dbEdges) {
-			if (edge.sourceService !== serviceName || !edge.dbSystem) continue
+			// Server-side filter on `ServiceName = ?` already scopes the result;
+			// only need to guard against rows with no db system identified.
+			if (!edge.dbSystem) continue
 			const callCount = Number(edge.callCount ?? 0)
 			const estimated = Number(edge.estimatedCallCount ?? callCount)
 			const target = String(edge.dbSystem)
@@ -181,7 +185,7 @@ export function ServiceDependenciesTab({
 		}
 
 		return out
-	}, [servicesResult, dbsResult, externalResult, serviceName, durationSeconds])
+	}, [servicesResult, dbsResult, externalResult, durationSeconds])
 
 	// Fold HTTP rows that look like a known internal service into that service's
 	// row. The address-resolutions rollup eventually catches this server-side

@@ -251,6 +251,28 @@ export class ServiceExternalEdgesRequest extends Schema.Class<ServiceExternalEdg
 	deploymentEnv: Schema.optional(Schema.String),
 }) {}
 
+// Service-scoped variants for the service-detail page's Dependencies tab.
+// Same response shape as the org-wide ServiceDependencies* / ServiceDbEdges*
+// pair — adding `serviceName` lets the query pre-filter at the source instead
+// of fetching every org-wide edge and discarding ~95% of rows in the client.
+export class ServiceDependenciesForServiceRequest extends Schema.Class<ServiceDependenciesForServiceRequest>(
+	"ServiceDependenciesForServiceRequest",
+)({
+	serviceName: Schema.String,
+	startTime: TinybirdDateTime,
+	endTime: TinybirdDateTime,
+	deploymentEnv: Schema.optional(Schema.String),
+}) {}
+
+export class ServiceDbEdgesForServiceRequest extends Schema.Class<ServiceDbEdgesForServiceRequest>(
+	"ServiceDbEdgesForServiceRequest",
+)({
+	serviceName: Schema.String,
+	startTime: TinybirdDateTime,
+	endTime: TinybirdDateTime,
+	deploymentEnv: Schema.optional(Schema.String),
+}) {}
+
 export class ServiceExternalEdgesResponse extends Schema.Class<ServiceExternalEdgesResponse>(
 	"ServiceExternalEdgesResponse",
 )({
@@ -1102,8 +1124,26 @@ export class QueryEngineApiGroup extends HttpApiGroup.make("queryEngine")
 		}),
 	)
 	.add(
+		HttpApiEndpoint.post(
+			"serviceDependenciesForService",
+			"/service-dependencies-for-service",
+			{
+				payload: ServiceDependenciesForServiceRequest,
+				success: ServiceDependenciesResponse,
+				error: queryEngineEndpointErrors,
+			},
+		),
+	)
+	.add(
 		HttpApiEndpoint.post("serviceDbEdges", "/service-db-edges", {
 			payload: ServiceDbEdgesRequest,
+			success: ServiceDbEdgesResponse,
+			error: queryEngineEndpointErrors,
+		}),
+	)
+	.add(
+		HttpApiEndpoint.post("serviceDbEdgesForService", "/service-db-edges-for-service", {
+			payload: ServiceDbEdgesForServiceRequest,
 			success: ServiceDbEdgesResponse,
 			error: queryEngineEndpointErrors,
 		}),

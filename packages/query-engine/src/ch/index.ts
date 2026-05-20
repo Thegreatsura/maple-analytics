@@ -120,6 +120,7 @@ export {
 	type InferQueryOutput,
 	from,
 	fromQuery,
+	fromUnion,
 } from "./query"
 
 // Compilation
@@ -260,12 +261,16 @@ export {
 // Queries — Service Map
 export {
 	serviceDependenciesSQL,
+	serviceDependenciesForServiceQuery,
 	serviceDbEdgesSQL,
+	serviceDbEdgesForServiceQuery,
 	servicePlatformsSQL,
 	serviceMapEdgeJoinSQL,
 	type ServiceDependenciesOpts,
+	type ServiceDependenciesForServiceOpts,
 	type ServiceDependenciesOutput,
 	type ServiceDbEdgesOpts,
+	type ServiceDbEdgesForServiceOpts,
 	type ServiceDbEdgesOutput,
 	type ServicePlatformsOpts,
 	type ServicePlatformsOutput,

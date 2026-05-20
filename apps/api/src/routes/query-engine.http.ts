@@ -420,6 +420,30 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 					return new ServiceDependenciesResponse({ data: compiled.castRows(rows) as any[] })
 				}),
 			)
+			.handle("serviceDependenciesForService", ({ payload }) =>
+				Effect.gen(function* () {
+					const tenant = yield* CurrentTenant.Context
+					const compiled = CH.compile(
+						CH.serviceDependenciesForServiceQuery({
+							serviceName: payload.serviceName,
+							deploymentEnv: payload.deploymentEnv,
+						}),
+						{
+							orgId: tenant.orgId,
+							startTime: payload.startTime,
+							endTime: payload.endTime,
+						},
+					)
+					const rows = yield* mapExecError(
+						warehouse.sqlQuery(tenant, compiled.sql, {
+							profile: "aggregation",
+							context: "serviceDependenciesForService",
+						}),
+						"serviceDependenciesForService query failed",
+					)
+					return new ServiceDependenciesResponse({ data: compiled.castRows(rows) as any[] })
+				}),
+			)
 			.handle("serviceDbEdges", ({ payload }) =>
 				Effect.gen(function* () {
 					const tenant = yield* CurrentTenant.Context
@@ -433,6 +457,30 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 							context: "serviceDbEdges",
 						}),
 						"serviceDbEdges query failed",
+					)
+					return new ServiceDbEdgesResponse({ data: compiled.castRows(rows) as any[] })
+				}),
+			)
+			.handle("serviceDbEdgesForService", ({ payload }) =>
+				Effect.gen(function* () {
+					const tenant = yield* CurrentTenant.Context
+					const compiled = CH.compile(
+						CH.serviceDbEdgesForServiceQuery({
+							serviceName: payload.serviceName,
+							deploymentEnv: payload.deploymentEnv,
+						}),
+						{
+							orgId: tenant.orgId,
+							startTime: payload.startTime,
+							endTime: payload.endTime,
+						},
+					)
+					const rows = yield* mapExecError(
+						warehouse.sqlQuery(tenant, compiled.sql, {
+							profile: "aggregation",
+							context: "serviceDbEdgesForService",
+						}),
+						"serviceDbEdgesForService query failed",
 					)
 					return new ServiceDbEdgesResponse({ data: compiled.castRows(rows) as any[] })
 				}),

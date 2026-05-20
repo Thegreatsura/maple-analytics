@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { serviceExternalEdgesSQL } from "./service-map"
+import { compileCH } from "../compile"
+import {
+	serviceDbEdgesForServiceQuery,
+	serviceDependenciesForServiceQuery,
+	serviceExternalEdgesSQL,
+} from "./service-map"
 import { serviceMapResolutionsRollupSQL } from "./service-map-rollup"
 
 const baseParams = {
@@ -139,5 +144,143 @@ describe("serviceMapResolutionsRollupSQL", () => {
 			"GROUP BY OrgId, Hour, SourceService, ParentServerAddress, ResolvedTargetService, DeploymentEnv",
 		)
 		expect(sql).toContain("FORMAT JSON")
+	})
+})
+
+// ---------------------------------------------------------------------------
+// serviceDependenciesForServiceQuery — service-scoped service↔service edges
+// ---------------------------------------------------------------------------
+
+describe("serviceDependenciesForServiceQuery", () => {
+	it("filters SourceService on the hourly branch", () => {
+		const { sql } = compileCH(
+			serviceDependenciesForServiceQuery({ serviceName: "artifacts-api" }),
+			baseParams,
+		)
+		expect(sql).toContain("FROM service_map_edges_hourly")
+		expect(sql).toContain("SourceService = 'artifacts-api'")
+	})
+
+	it("pushes parent ServiceName into the live topology JOIN's left subquery", () => {
+		const { sql } = compileCH(
+			serviceDependenciesForServiceQuery({ serviceName: "artifacts-api" }),
+			baseParams,
+		)
+		// The DSL emits the parent subquery against service_map_spans with a
+		// `ServiceName = ?` predicate so the JOIN's left side is pre-shrunk.
+		expect(sql).toContain("FROM service_map_spans")
+		expect(sql).toContain("ServiceName = 'artifacts-api'")
+		// Both the hourly branch and the in-progress-hour join must filter — so
+		// the service name string should appear at least twice in the emitted SQL.
+		const matches = sql.match(/'artifacts-api'/g)
+		expect(matches && matches.length >= 2).toBe(true)
+	})
+
+	it("unions hourly MV with the in-progress-hour topology JOIN", () => {
+		const { sql } = compileCH(
+			serviceDependenciesForServiceQuery({ serviceName: "artifacts-api" }),
+			baseParams,
+		)
+		expect(sql).toContain("UNION ALL")
+		expect(sql).toContain("FROM service_map_edges_hourly")
+		expect(sql).toContain("INNER JOIN")
+	})
+
+	it("threads deploymentEnv through both branches (hourly + parent + child)", () => {
+		const { sql } = compileCH(
+			serviceDependenciesForServiceQuery({
+				serviceName: "artifacts-api",
+				deploymentEnv: "production",
+			}),
+			baseParams,
+		)
+		const matches = sql.match(/DeploymentEnv = 'production'/g)
+		// hourly branch + parent subquery + child subquery in the live join.
+		expect(matches && matches.length >= 3).toBe(true)
+	})
+
+	it("orders by callCount desc, limits to 200, formats as JSON", () => {
+		const { sql } = compileCH(
+			serviceDependenciesForServiceQuery({ serviceName: "artifacts-api" }),
+			baseParams,
+		)
+		expect(sql).toContain("ORDER BY callCount DESC")
+		expect(sql).toContain("LIMIT 200")
+		expect(sql).toContain("FORMAT JSON")
+	})
+
+	it("escapes single quotes in serviceName to prevent SQL injection", () => {
+		const { sql } = compileCH(
+			serviceDependenciesForServiceQuery({ serviceName: "weird'service" }),
+			baseParams,
+		)
+		expect(sql).toContain("ServiceName = 'weird\\'service'")
+		expect(sql).toContain("SourceService = 'weird\\'service'")
+	})
+})
+
+// ---------------------------------------------------------------------------
+// serviceDbEdgesForServiceQuery — service-scoped service↔database edges
+// ---------------------------------------------------------------------------
+
+describe("serviceDbEdgesForServiceQuery", () => {
+	it("filters ServiceName on both branches (hourly MV + raw traces)", () => {
+		const { sql } = compileCH(
+			serviceDbEdgesForServiceQuery({ serviceName: "artifacts-api" }),
+			baseParams,
+		)
+		const matches = sql.match(/ServiceName = 'artifacts-api'/g)
+		// One in the hourly branch, one in the raw-traces fallback.
+		expect(matches && matches.length === 2).toBe(true)
+	})
+
+	it("unions service_map_db_edges_hourly with raw traces for the in-progress hour", () => {
+		const { sql } = compileCH(
+			serviceDbEdgesForServiceQuery({ serviceName: "artifacts-api" }),
+			baseParams,
+		)
+		expect(sql).toContain("FROM service_map_db_edges_hourly")
+		expect(sql).toContain("FROM traces")
+		expect(sql).toContain("UNION ALL")
+		expect(sql).toContain("Timestamp >= toStartOfHour('2024-01-02 00:00:00')")
+	})
+
+	it("restricts the raw branch to Client/Producer spans with db.system.name set", () => {
+		const { sql } = compileCH(
+			serviceDbEdgesForServiceQuery({ serviceName: "artifacts-api" }),
+			baseParams,
+		)
+		expect(sql).toContain("SpanKind IN ('Client', 'Producer')")
+		expect(sql).toContain("SpanAttributes['db.system.name'] != ''")
+	})
+
+	it("threads deploymentEnv through both branches", () => {
+		const { sql } = compileCH(
+			serviceDbEdgesForServiceQuery({
+				serviceName: "artifacts-api",
+				deploymentEnv: "production",
+			}),
+			baseParams,
+		)
+		expect(sql).toContain("DeploymentEnv = 'production'")
+		expect(sql).toContain("ResourceAttributes['deployment.environment'] = 'production'")
+	})
+
+	it("orders by callCount desc, limits to 200, formats as JSON", () => {
+		const { sql } = compileCH(
+			serviceDbEdgesForServiceQuery({ serviceName: "artifacts-api" }),
+			baseParams,
+		)
+		expect(sql).toContain("ORDER BY callCount DESC")
+		expect(sql).toContain("LIMIT 200")
+		expect(sql).toContain("FORMAT JSON")
+	})
+
+	it("escapes single quotes in serviceName to prevent SQL injection", () => {
+		const { sql } = compileCH(
+			serviceDbEdgesForServiceQuery({ serviceName: "weird'service" }),
+			baseParams,
+		)
+		expect(sql).toContain("ServiceName = 'weird\\'service'")
 	})
 })

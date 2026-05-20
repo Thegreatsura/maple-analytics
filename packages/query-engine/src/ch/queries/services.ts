@@ -8,8 +8,8 @@ import * as CH from "../expr"
 import { param } from "../param"
 import { from, type ColumnAccessor } from "../query"
 import { unionAll, type CHUnionQuery } from "../union"
-import { ServiceOverviewSpans, ServiceUsage, Traces } from "../tables"
-import { apdexExprs } from "./query-helpers"
+import { ServiceOverviewSpans, ServiceUsage } from "../tables"
+import { apdexExprs, serviceOverviewWhereConditions } from "./query-helpers"
 
 // ---------------------------------------------------------------------------
 // Service overview
@@ -117,19 +117,20 @@ export interface ServiceApdexTimeseriesOutput {
 export function serviceApdexTimeseriesQuery(opts: ServiceApdexTimeseriesOpts) {
 	const thresholdMs = opts.apdexThresholdMs ?? 500
 
-	return from(Traces)
+	// Routes through `service_overview_spans` (the entry-point MV) rather than
+	// raw `traces`. The MV pre-filters at write time to
+	// `SpanKind IN ('Server','Consumer') OR ParentSpanId = ''` — exactly the
+	// root-span predicate apdex needs — and pre-extracts `DeploymentEnv` /
+	// `CommitSha` from ResourceAttributes. Cuts scan volume by ~20-100x vs.
+	// the raw-table path (same pattern `tracesTimeseriesQuery` already uses via
+	// `canUseServiceOverviewMv`).
+	return from(ServiceOverviewSpans)
 		.select(($) => ({
 			bucket: CH.toStartOfInterval($.Timestamp, param.int("bucketSeconds")),
 			totalCount: CH.count(),
 			...apdexExprs($.Duration.div(1000000), thresholdMs),
 		}))
-		.where(($) => [
-			$.SpanKind.in_("Server", "Consumer").or($.ParentSpanId.eq("")),
-			$.OrgId.eq(param.string("orgId")),
-			$.ServiceName.eq(opts.serviceName),
-			$.Timestamp.gte(param.dateTime("startTime")),
-			$.Timestamp.lte(param.dateTime("endTime")),
-		])
+		.where(($) => serviceOverviewWhereConditions($, { serviceName: opts.serviceName }))
 		.groupBy("bucket")
 		.orderBy(["bucket", "asc"])
 		.format("JSON")

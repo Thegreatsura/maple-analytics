@@ -88,7 +88,10 @@ describe("serviceApdexTimeseriesQuery", () => {
 	it("compiles apdex timeseries with default threshold", () => {
 		const q = serviceApdexTimeseriesQuery({ serviceName: "api" })
 		const { sql } = compileCH(q, baseParams)
-		expect(sql).toContain("FROM traces")
+		// Routes through the service_overview_spans MV (pre-filtered to
+		// entry-point spans at write time) — ~20-100x cheaper than raw traces.
+		expect(sql).toContain("FROM service_overview_spans")
+		expect(sql).not.toContain("FROM traces")
 		expect(sql).toContain("ServiceName = 'api'")
 		expect(sql).toContain("count() AS totalCount")
 		expect(sql).toContain("Duration / 1000000 < 500")
@@ -97,8 +100,9 @@ describe("serviceApdexTimeseriesQuery", () => {
 		expect(sql).toContain("AS apdexScore")
 		expect(sql).toContain("GROUP BY bucket")
 		expect(sql).toContain("ORDER BY bucket ASC")
-		// Root-only filter
-		expect(sql).toContain("SpanKind IN ('Server', 'Consumer') OR ParentSpanId = ''")
+		// The MV pre-filters at write time — the runtime root-only predicate is
+		// no longer needed in the query body.
+		expect(sql).not.toContain("SpanKind IN ('Server', 'Consumer') OR ParentSpanId = ''")
 	})
 
 	it("compiles with custom threshold", () => {

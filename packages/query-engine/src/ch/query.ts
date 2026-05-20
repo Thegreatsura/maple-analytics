@@ -90,6 +90,8 @@ export interface CHQueryState {
 	/** Typed FROM subquery. Compiled lazily at compileCH time. */
 	readonly fromQuery?: CHQuery<any, any, any>
 	readonly fromQueryAlias?: string
+	/** Typed FROM union (UNION ALL of branches with identical Output shape). */
+	readonly fromUnion?: import("./union").CHUnionQuery<any>
 	/** Typed joins (compiled lazily at compileCH time). */
 	readonly typedJoins: TypedJoinClause[]
 	/** CTE definitions prepended as WITH clauses. */
@@ -465,6 +467,37 @@ export function fromQuery<
 		typedJoins: [],
 		ctes: [],
 		fromQuery: query,
+		fromQueryAlias: alias,
+	})
+}
+
+/**
+ * Start a query from a UNION ALL of typed branches (type-safe subquery in
+ * FROM). Use this when you need an outer aggregation/grouping over multiple
+ * branches that share an Output shape — for example combining a sealed
+ * hourly-MV branch with a live raw-table fallback for the in-progress hour,
+ * then re-aggregating across the union.
+ *
+ * Usage:
+ *   const branchA = CH.from(MvTable).select(...).where(...).groupBy(...)
+ *   const branchB = CH.from(RawTable).select(...).where(...).groupBy(...)
+ *   const combined = CH.unionAll(branchA, branchB)
+ *   const outer = CH.fromUnion(combined, "edges")
+ *     .select($ => ({ ..., total: CH.sum($.edges.partial) }))
+ *     .groupBy("...")
+ */
+export function fromUnion<Output extends Record<string, any>, Alias extends string>(
+	union: import("./union").CHUnionQuery<Output>,
+	alias: Alias,
+): CHQuery<OutputToColumnDefs<Output>, {}, {}> {
+	return makeQuery({
+		tableName: alias,
+		columns: {},
+		groupByKeys: [],
+		orderBySpecs: [],
+		typedJoins: [],
+		ctes: [],
+		fromUnion: union,
 		fromQueryAlias: alias,
 	})
 }

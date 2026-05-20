@@ -6,10 +6,25 @@
 
 import { escapeClickHouseString } from "../../sql/sql-fragment"
 import { compileCH, type CompiledQuery } from "../compile"
+import { defineCondFn, defineFn } from "../define-fn"
 import * as CH from "../expr"
 import { param } from "../param"
-import { from } from "../query"
-import { ServicePlatformsHourly } from "../tables"
+import { from, fromQuery, fromUnion } from "../query"
+import {
+	ServiceMapChildren,
+	ServiceMapDbEdgesHourly,
+	ServiceMapEdgesHourly,
+	ServiceMapSpans,
+	ServicePlatformsHourly,
+	Traces,
+} from "../tables"
+import { unionAll } from "../union"
+
+// Local CH function declarations used by the live topology-join branch's
+// sample-weighting math. Kept here (not promoted to ch/functions/) because
+// they're niche and only this builder uses them; promote later if reused.
+const _toFloat64 = defineFn<[CH.Expr<unknown>], number>("toFloat64")
+const _matchRegex = defineCondFn<[CH.Expr<string>, string]>("match")
 
 // ---------------------------------------------------------------------------
 // Service dependencies
@@ -61,11 +76,23 @@ export function serviceMapEdgeJoinSQL(params: {
 	startExpr: string
 	endExpr: string
 	deploymentEnv?: string
+	/**
+	 * Optional source-service filter applied to the parent (`p`) subquery — the
+	 * Client/Producer span emitting the outbound call. Pushing this filter into
+	 * the inner SELECT (rather than the outer WHERE) lets ClickHouse skip the
+	 * full Client/Producer scan and shrink the JOIN's left side to a single
+	 * service's outbound spans. The rollup callers in `service-map-rollup.ts`
+	 * omit this so they continue to cover every service.
+	 */
+	parentServiceName?: string
 }): string {
 	const esc = escapeClickHouseString
 	const orgFilter = params.orgId ? `AND OrgId = '${esc(params.orgId)}'` : ""
 	const envFilter = params.deploymentEnv
 		? `AND DeploymentEnv = '${esc(params.deploymentEnv)}'`
+		: ""
+	const parentServiceFilter = params.parentServiceName
+		? `AND ServiceName = '${esc(params.parentServiceName)}'`
 		: ""
 	return `SELECT
       p.OrgId AS OrgId,
@@ -92,6 +119,7 @@ export function serviceMapEdgeJoinSQL(params: {
         AND Timestamp < ${params.endExpr}
         ${orgFilter}
         ${envFilter}
+        ${parentServiceFilter}
     ) AS p
     INNER JOIN (
       SELECT TraceId, ParentSpanId, ServiceName, Duration, StatusCode, TraceState
@@ -188,6 +216,155 @@ FORMAT JSON`
 		sql,
 		castRows: (rows) => rows as unknown as ReadonlyArray<ServiceDependenciesOutput>,
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Service ↔ service dependencies — scoped to one source service
+//
+// The service-detail page's Dependencies tab only needs outbound edges for the
+// currently-displayed service. The org-wide variant above is kept for the
+// global Services map (which renders every edge). This variant pushes the
+// `SourceService` filter into both branches so:
+//   - the hourly branch reads only rows tagged with this service (cheap), and
+//   - the live topology JOIN's left side (Client/Producer spans) shrinks to a
+//     single service's outbound spans instead of every span in the org.
+// Output shape matches `ServiceDependenciesOutput` so callers can reuse the
+// same row-transform code.
+// ---------------------------------------------------------------------------
+
+export interface ServiceDependenciesForServiceOpts {
+	serviceName: string
+	deploymentEnv?: string
+}
+
+/**
+ * Typesafe-DSL builder for the service-detail page's "Services" dependency
+ * panel. Hourly MV branch (sealed buckets) UNION ALL live topology JOIN
+ * (in-progress hour), then re-aggregated through `fromUnion()` so the outer
+ * SELECT can compute properly-weighted averages across both sources.
+ *
+ * Returns a `CHQuery`; caller passes `{orgId, startTime, endTime}` to
+ * `CH.compile(q, params)` to get the executable SQL.
+ */
+export function serviceDependenciesForServiceQuery(opts: ServiceDependenciesForServiceOpts) {
+	const envFilterMv = (deploymentEnv: CH.Expr<string>) =>
+		opts.deploymentEnv ? deploymentEnv.eq(opts.deploymentEnv) : undefined
+
+	// Hourly branch — sealed buckets from the cross-span rollup.
+	const hourlyBranch = from(ServiceMapEdgesHourly)
+		.select(($) => ({
+			sourceService: $.SourceService,
+			targetService: $.TargetService,
+			bucketCallCount: CH.sum($.CallCount),
+			bucketErrorCount: CH.sum($.ErrorCount),
+			bucketDurationSumMs: CH.sum($.DurationSumMs),
+			bucketMaxDurationMs: CH.max_($.MaxDurationMs),
+			// Historical buckets pre-date the SampleRateSum column (it was added
+			// later) — fall back to CallCount for those rows so they count as
+			// unsampled (degraded but safe).
+			bucketEstimatedSpanCount: CH.sum(
+				CH.if_($.SampleRateSum.gt(0), $.SampleRateSum, _toFloat64($.CallCount)),
+			),
+		}))
+		.where(($) => [
+			$.OrgId.eq(param.string("orgId")),
+			$.SourceService.eq(opts.serviceName),
+			$.Hour.gte(CH.toStartOfHour(param.dateTime("startTime"))),
+			$.Hour.lt(CH.toStartOfHour(param.dateTime("endTime"))),
+			envFilterMv($.DeploymentEnv),
+		])
+		.groupBy("sourceService", "targetService")
+
+	// Live topology JOIN for the in-progress hour only — the rollup hasn't
+	// sealed this hour yet. Mirrors the all-orgs `serviceMapEdgeJoinSQL`
+	// helper used by the rollup, but pushes `ServiceName = ?` into the parent
+	// subquery so the JOIN's left side shrinks to one service's outbound spans.
+	const parentSpans = from(ServiceMapSpans)
+		.select(($) => ({
+			TraceId: $.TraceId,
+			SpanId: $.SpanId,
+			ServiceName: $.ServiceName,
+			Timestamp: $.Timestamp,
+		}))
+		.where(($) => [
+			$.SpanKind.in_("Client", "Producer"),
+			$.Timestamp.gte(CH.toStartOfHour(param.dateTime("endTime"))),
+			$.Timestamp.lt(param.dateTime("endTime")),
+			$.OrgId.eq(param.string("orgId")),
+			$.ServiceName.eq(opts.serviceName),
+			envFilterMv($.DeploymentEnv),
+		])
+
+	const childSpans = from(ServiceMapChildren)
+		.select(($) => ({
+			TraceId: $.TraceId,
+			ParentSpanId: $.ParentSpanId,
+			ServiceName: $.ServiceName,
+			Duration: $.Duration,
+			StatusCode: $.StatusCode,
+			TraceState: $.TraceState,
+		}))
+		.where(($) => [
+			$.Timestamp.gte(CH.toStartOfHour(param.dateTime("endTime"))),
+			$.Timestamp.lt(param.dateTime("endTime")),
+			$.OrgId.eq(param.string("orgId")),
+			envFilterMv($.DeploymentEnv),
+		])
+
+	// Sample-weight expression: `1 / (1 - acceptanceProbability)` for spans
+	// carrying a `th:` TraceState threshold, else `1.0` (unsampled). The bit
+	// math is intentionally raw — these CH functions (reinterpret/unhex/
+	// rightPad/pow/reverse/greatest) aren't worth promoting to first-class
+	// DSL helpers for a single call site.
+	const sampleWeightExpr = CH.multiIf(
+		[
+			[
+				_matchRegex(CH.rawExpr<string>("c.TraceState"), "th:[0-9a-f]+"),
+				CH.rawExpr<number>(
+					"1.0 / greatest(1.0 - reinterpretAsUInt64(reverse(unhex(rightPad(extract(c.TraceState, 'th:([0-9a-f]+)'), 16, '0')))) / pow(2.0, 64), 0.0001)",
+				),
+			],
+		],
+		CH.rawExpr<number>("1.0"),
+	)
+
+	// In a join, the main subquery's columns are auto-qualified with its alias
+	// (`p.ServiceName`), and joined columns are reached via `$.<alias>.Column`.
+	const liveJoinBranch = fromQuery(parentSpans, "p")
+		.innerJoinQuery(childSpans, "c", (p, c) =>
+			p.SpanId.eq(c.ParentSpanId).and(p.TraceId.eq(c.TraceId)),
+		)
+		.select(($) => ({
+			sourceService: $.ServiceName,
+			targetService: $.c.ServiceName,
+			bucketCallCount: CH.count(),
+			bucketErrorCount: CH.countIf($.c.StatusCode.eq("Error")),
+			bucketDurationSumMs: CH.sum($.c.Duration.div(1000000)),
+			bucketMaxDurationMs: CH.max_($.c.Duration.div(1000000)),
+			bucketEstimatedSpanCount: CH.sum(sampleWeightExpr),
+		}))
+		.where(($) => [$.ServiceName.neq($.c.ServiceName)])
+		.groupBy("sourceService", "targetService")
+
+	// Outer wrap: re-aggregate across both branches so avg duration uses
+	// branch-summed numerators/denominators (avoids averaging averages). With
+	// no further joins, columns from the union are accessed bare.
+	return fromUnion(unionAll(hourlyBranch, liveJoinBranch), "edges")
+		.select(($) => ({
+			sourceService: $.sourceService,
+			targetService: $.targetService,
+			callCount: CH.sum($.bucketCallCount),
+			errorCount: CH.sum($.bucketErrorCount),
+			avgDurationMs: CH.sum($.bucketDurationSumMs).div(
+				CH.nullIf(CH.sum($.bucketCallCount), CH.lit(0)),
+			),
+			p95DurationMs: CH.max_($.bucketMaxDurationMs),
+			estimatedSpanCount: CH.sum($.bucketEstimatedSpanCount),
+		}))
+		.groupBy("sourceService", "targetService")
+		.orderBy(["callCount", "desc"])
+		.limit(200)
+		.format("JSON")
 }
 
 // ---------------------------------------------------------------------------
@@ -296,6 +473,99 @@ FORMAT JSON`
 		sql,
 		castRows: (rows) => rows as unknown as ReadonlyArray<ServiceDbEdgesOutput>,
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Service ↔ database edges — scoped to one source service
+//
+// Same shape as `serviceDbEdgesSQL` but pre-filters both branches by
+// `ServiceName = ?`. Mirrors the `serviceExternalEdgesSQL` pattern (which is
+// already service-scoped).
+// ---------------------------------------------------------------------------
+
+export interface ServiceDbEdgesForServiceOpts {
+	serviceName: string
+	deploymentEnv?: string
+}
+
+/**
+ * Typesafe-DSL builder for the service-detail page's "Databases" dependency
+ * panel. Same dual-source pattern as `serviceDependenciesForServiceQuery` —
+ * hourly MV + raw-traces fallback — but no topology JOIN (DB system is
+ * already on the parent span as `db.system.name`).
+ */
+export function serviceDbEdgesForServiceQuery(opts: ServiceDbEdgesForServiceOpts) {
+	const envFilterMv = (deploymentEnv: CH.Expr<string>) =>
+		opts.deploymentEnv ? deploymentEnv.eq(opts.deploymentEnv) : undefined
+	const envFilterRaw = (resourceAttributes: CH.ColumnRef<"ResourceAttributes", any>) =>
+		opts.deploymentEnv
+			? resourceAttributes.get("deployment.environment").eq(opts.deploymentEnv)
+			: undefined
+
+	// Hourly branch — sealed buckets from service_map_db_edges_hourly_mv.
+	const hourlyBranch = from(ServiceMapDbEdgesHourly)
+		.select(($) => ({
+			sourceService: $.ServiceName,
+			dbSystem: $.DbSystem,
+			bucketCallCount: CH.sum($.CallCount),
+			bucketErrorCount: CH.sum($.ErrorCount),
+			bucketDurationSumMs: CH.sum($.DurationSumMs),
+			bucketMaxDurationMs: CH.max_($.MaxDurationMs),
+			bucketEstimatedSpanCount: CH.sum(
+				CH.if_($.SampleRateSum.gt(0), $.SampleRateSum, _toFloat64($.CallCount)),
+			),
+		}))
+		.where(($) => [
+			$.OrgId.eq(param.string("orgId")),
+			$.ServiceName.eq(opts.serviceName),
+			$.Hour.gte(CH.toStartOfHour(param.dateTime("startTime"))),
+			$.Hour.lt(CH.toStartOfHour(param.dateTime("endTime"))),
+			$.DbSystem.neq(""),
+			envFilterMv($.DeploymentEnv),
+		])
+		.groupBy("sourceService", "dbSystem")
+
+	// Raw fallback for the in-progress hour only. `Traces.SampleRate` is a
+	// per-row materialized column (no inline weight math needed), and the
+	// untyped Output cast below mirrors the column types on the hourly
+	// branch so the union's `Output` shape stays consistent.
+	const recentBranch = from(Traces)
+		.select(($) => ({
+			sourceService: $.ServiceName,
+			dbSystem: $.SpanAttributes.get("db.system.name"),
+			bucketCallCount: CH.count(),
+			bucketErrorCount: CH.countIf($.StatusCode.eq("Error")),
+			bucketDurationSumMs: CH.sum($.Duration.div(1000000)),
+			bucketMaxDurationMs: CH.max_($.Duration.div(1000000)),
+			bucketEstimatedSpanCount: CH.sum($.SampleRate),
+		}))
+		.where(($) => [
+			$.OrgId.eq(param.string("orgId")),
+			$.ServiceName.eq(opts.serviceName),
+			$.Timestamp.gte(CH.toStartOfHour(param.dateTime("endTime"))),
+			$.Timestamp.lte(param.dateTime("endTime")),
+			$.SpanKind.in_("Client", "Producer"),
+			$.SpanAttributes.get("db.system.name").neq(""),
+			envFilterRaw($.ResourceAttributes),
+		])
+		.groupBy("sourceService", "dbSystem")
+
+	return fromUnion(unionAll(hourlyBranch, recentBranch), "edges")
+		.select(($) => ({
+			sourceService: $.sourceService,
+			dbSystem: $.dbSystem,
+			callCount: CH.sum($.bucketCallCount),
+			errorCount: CH.sum($.bucketErrorCount),
+			avgDurationMs: CH.sum($.bucketDurationSumMs).div(
+				CH.nullIf(CH.sum($.bucketCallCount), CH.lit(0)),
+			),
+			p95DurationMs: CH.max_($.bucketMaxDurationMs),
+			estimatedSpanCount: CH.sum($.bucketEstimatedSpanCount),
+		}))
+		.groupBy("sourceService", "dbSystem")
+		.orderBy(["callCount", "desc"])
+		.limit(200)
+		.format("JSON")
 }
 
 // ---------------------------------------------------------------------------
