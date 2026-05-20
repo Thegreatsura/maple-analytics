@@ -167,15 +167,18 @@ describe("serviceUsageQuery", () => {
 // ---------------------------------------------------------------------------
 
 describe("servicesFacetsQuery", () => {
-	it("compiles UNION ALL with environment and commit_sha facets", () => {
+	it("compiles UNION ALL with environment, commit_sha, and service facets", () => {
 		const q = servicesFacetsQuery()
 		const { sql } = compileUnion(q, baseParams)
 		const unionCount = (sql.match(/UNION ALL/g) || []).length
-		expect(unionCount).toBe(1)
+		// 3 branches → 2 UNION ALL separators
+		expect(unionCount).toBe(2)
 		expect(sql).toContain("'environment' AS facetType")
 		expect(sql).toContain("'commit_sha' AS facetType")
+		expect(sql).toContain("'service' AS facetType")
 		expect(sql).toContain("DeploymentEnv != ''")
 		expect(sql).toContain("CommitSha != ''")
+		expect(sql).toContain("ServiceName != ''")
 		expect(sql).toContain("FROM service_overview_spans")
 	})
 })

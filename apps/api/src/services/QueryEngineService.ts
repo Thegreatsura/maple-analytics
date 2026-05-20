@@ -170,7 +170,13 @@ export function snapWindowForQueryKind(kind: string): number {
 		case "attributeValues":
 			return 60 // 1 min
 		case "facets":
-			return 60 // 1 min
+			// 5 min — environments / commit SHAs / service names rarely change,
+			// and the dashboard route now reuses this cache for demo-detection
+			// (was a heavy `serviceOverview` probe). Wider snap also collapses
+			// near-simultaneous calls whose `startTime` ISO strings drift by
+			// milliseconds between renders (useEffectiveTimeRange recomputes
+			// `new Date()` per render).
+			return 300
 		default:
 			return CACHE_SNAP_S
 	}
@@ -188,7 +194,7 @@ export function cacheTtlForQueryKind(kind: string): number {
 		case "attributeValues":
 			return 60
 		case "facets":
-			return 60
+			return 300 // matches snapWindowForQueryKind — see comment above
 		default:
 			return 15
 	}
@@ -974,6 +980,7 @@ export const makeQueryEngineExecute = (warehouse: QueryEngineWarehouse) =>
 						? { deploymentEnv: request.query.filters.deploymentEnvMatchMode }
 						: undefined,
 					groupBy: request.query.groupBy as string[] | undefined,
+					bucketSeconds: bucketSeconds!,
 				}),
 				{
 					orgId: tenant.orgId,
@@ -1629,6 +1636,7 @@ export const makeQueryEngineEvaluate = (warehouse: QueryEngineWarehouse) =>
 						? { deploymentEnv: request.query.filters.deploymentEnvMatchMode }
 						: undefined,
 					groupBy: logsQuery.groupBy as readonly string[] | undefined,
+					bucketSeconds,
 				}),
 				{
 					orgId: tenant.orgId,

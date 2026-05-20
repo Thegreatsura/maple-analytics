@@ -242,6 +242,7 @@ export interface FacetItem {
 export interface ServicesFacets {
 	environments: FacetItem[]
 	commitShas: FacetItem[]
+	services: FacetItem[]
 }
 
 export interface ServicesFacetsResponse {
@@ -286,6 +287,7 @@ const getServicesFacetsEffect = Effect.fn("QueryEngine.getServicesFacets")(funct
 	const facetsData = extractFacets(response)
 	const environments: FacetItem[] = []
 	const commitShas: FacetItem[] = []
+	const services: FacetItem[] = []
 
 	for (const row of facetsData) {
 		const item = { name: row.name, count: Number(row.count) }
@@ -297,11 +299,14 @@ const getServicesFacetsEffect = Effect.fn("QueryEngine.getServicesFacets")(funct
 			case "commit_sha":
 				commitShas.push(item)
 				break
+			case "service":
+				services.push(item)
+				break
 		}
 	}
 
 	return {
-		data: { environments, commitShas },
+		data: { environments, commitShas, services },
 	}
 })
 

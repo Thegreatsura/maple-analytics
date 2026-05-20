@@ -236,5 +236,19 @@ export function servicesFacetsQuery(): CHUnionQuery<ServicesFacetsOutput> {
 		.orderBy(["count", "desc"])
 		.limit(50)
 
-	return unionAll(envQuery, commitQuery).format("JSON")
+	// Service-name facet — reused by `useDefaultPreset` on the dashboard route to
+	// detect the all-demo case without firing a separate `serviceOverview` query.
+	// Same MV scan as the env / commit branches; effectively free.
+	const serviceQuery = from(ServiceOverviewSpans)
+		.select(($) => ({
+			name: $.ServiceName,
+			count: CH.count(),
+			facetType: CH.lit("service"),
+		}))
+		.where(($) => [...baseWhere($), $.ServiceName.neq("")])
+		.groupBy("name")
+		.orderBy(["count", "desc"])
+		.limit(50)
+
+	return unionAll(envQuery, commitQuery, serviceQuery).format("JSON")
 }

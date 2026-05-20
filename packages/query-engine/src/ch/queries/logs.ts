@@ -7,9 +7,10 @@
 import { compileCH } from "../compile"
 import * as CH from "../expr"
 import { param } from "../param"
-import { from, type ColumnAccessor } from "../query"
+import { from, type CHQuery, type ColumnAccessor } from "../query"
+import type { ColumnDefs } from "../types"
 import { unionAll, type CHUnionQuery } from "../union"
-import { Logs } from "../tables"
+import { Logs, LogsAggregatesHourly } from "../tables"
 
 // ---------------------------------------------------------------------------
 // Shared options
@@ -44,6 +45,12 @@ function environmentCondition(
 
 export interface LogsTimeseriesOpts extends LogsQueryOpts {
 	groupBy?: readonly string[]
+	/**
+	 * Bucket size in seconds, supplied here so the query builder can route to
+	 * `logs_aggregates_hourly` when the bucket is hour-aligned. Optional: when
+	 * absent (or sub-hour), the raw `logs` table is used.
+	 */
+	bucketSeconds?: number
 }
 
 export interface LogsTimeseriesOutput {
@@ -52,11 +59,74 @@ export interface LogsTimeseriesOutput {
 	readonly count: number
 }
 
-export function logsTimeseriesQuery(opts: LogsTimeseriesOpts) {
+/**
+ * Predicate for routing to the pre-aggregated hourly MV.
+ *
+ * The MV stores per-hour buckets keyed by (OrgId, Hour, ServiceName,
+ * SeverityText, DeploymentEnv). It cannot answer queries that need raw row
+ * lookups (traceId, full-text search on Body) or sub-hour granularity, but for
+ * the dashboard log-volume chart at 1h+ ranges it cuts scan volume by orders
+ * of magnitude.
+ */
+export function canUseLogsAggregatesHourly(
+	opts: LogsTimeseriesOpts,
+	bucketSeconds: number | undefined,
+): boolean {
+	if (bucketSeconds === undefined || bucketSeconds < 3600 || bucketSeconds % 3600 !== 0) {
+		return false
+	}
+	if (opts.traceId) return false
+	if (opts.search) return false
+	// MV stores DeploymentEnv as a top-level column; the `contains` substring
+	// match is only supported via positionCaseInsensitive on the raw map column.
+	if (opts.matchModes?.deploymentEnv === "contains") return false
+	return true
+}
+
+function mvEnvironmentCondition(
+	$: ColumnAccessor<typeof LogsAggregatesHourly.columns>,
+	opts: LogsTimeseriesOpts,
+): CH.Condition | undefined {
+	if (!opts.environments?.length) return undefined
+	return CH.inList($.DeploymentEnv, opts.environments)
+}
+
+export function logsTimeseriesQuery(
+	opts: LogsTimeseriesOpts,
+): CHQuery<ColumnDefs, LogsTimeseriesOutput, {}> {
 	const groupByService = opts.groupBy?.includes("service")
 	const groupBySeverity = opts.groupBy?.includes("severity")
 
-	return from(Logs)
+	if (canUseLogsAggregatesHourly(opts, opts.bucketSeconds)) {
+		// MV path: read pre-aggregated hourly buckets. The upper bound is
+		// `Hour < toStartOfHour(endTime)` so a partial trailing hour (whose full
+		// hour-bucket on the MV would otherwise overcount vs. raw's
+		// `Timestamp <= endTime`) is excluded. The leading partial hour is
+		// already trimmed downstream by `firstFullBucketIso` /
+		// `trimSparseLeadingBuckets`, keeping behavior symmetric across edges.
+		const mv = from(LogsAggregatesHourly)
+			.select(($) => ({
+				bucket: CH.toStartOfInterval($.Hour, param.int("bucketSeconds")),
+				groupName: buildLogsGroupNameExpr($, groupByService, groupBySeverity),
+				count: CH.sum($.Count),
+			}))
+			.where(($) => [
+				$.OrgId.eq(param.string("orgId")),
+				$.Hour.gte(param.dateTime("startTime")),
+				// `param.dateTime("endTime")` substitutes as a quoted string literal;
+				// `toStartOfHour` only accepts Date/DateTime, so wrap with `toDateTime`.
+				$.Hour.lt(CH.toStartOfHour(CH.toDateTime(param.dateTime("endTime")))),
+				CH.when(opts.serviceName, (v: string) => $.ServiceName.eq(v)),
+				CH.when(opts.severity, (v: string) => $.SeverityText.eq(v)),
+				mvEnvironmentCondition($, opts),
+			])
+			.groupBy("bucket", "groupName")
+			.orderBy(["bucket", "asc"], ["groupName", "asc"])
+			.format("JSON")
+		return mv as unknown as CHQuery<ColumnDefs, LogsTimeseriesOutput, {}>
+	}
+
+	const raw = from(Logs)
 		.select(($) => ({
 			bucket: CH.toStartOfInterval($.Timestamp, param.int("bucketSeconds")),
 			groupName: buildLogsGroupNameExpr($, groupByService, groupBySeverity),
@@ -77,6 +147,7 @@ export function logsTimeseriesQuery(opts: LogsTimeseriesOpts) {
 		.groupBy("bucket", "groupName")
 		.orderBy(["bucket", "asc"], ["groupName", "asc"])
 		.format("JSON")
+	return raw as unknown as CHQuery<ColumnDefs, LogsTimeseriesOutput, {}>
 }
 
 function buildLogsGroupNameExpr(

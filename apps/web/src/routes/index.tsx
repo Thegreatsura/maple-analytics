@@ -19,11 +19,10 @@ import type { ChartLegendMode, ChartTooltipMode } from "@maple/ui/components/cha
 import {
 	getCustomChartTimeSeriesResultAtom,
 	getOverviewTimeSeriesResultAtom,
-	getServiceOverviewResultAtom,
 	getServicesFacetsResultAtom,
 } from "@/lib/services/atoms/tinybird-query-atoms"
 import type { CustomChartTimeSeriesResponse } from "@/api/tinybird/custom-charts"
-import type { ServiceDetailTimeSeriesPoint } from "@/api/tinybird/services"
+import type { ServiceDetailTimeSeriesPoint, ServicesFacetsResponse } from "@/api/tinybird/services"
 import { disabledResultAtom } from "@/lib/services/atoms/disabled-result-atom"
 import { applyTimeRangeSearch } from "@/components/time-range-picker/search"
 
@@ -86,37 +85,47 @@ const OVERVIEW_CHARTS: OverviewChartConfig[] = [
 
 function DashboardPage() {
 	const search = Route.useSearch()
-	const defaultPreset = useDefaultPreset()
+
+	// Stable 24h range, computed once per mount. Drives the single facets call
+	// shared by `useDefaultPreset` and `DashboardContent` so we issue one HTTP
+	// request instead of two. Environments / commit SHAs / service names move
+	// slowly enough that a fixed 24h window is fine for the dropdown — and it
+	// matches the old probe's range, so demo-detection behavior is unchanged.
+	// `TinybirdDateTime` requires `YYYY-MM-DD HH:mm:ss` (no `T`, no millis), so
+	// we strip the ISO suffix instead of passing `.toISOString()` raw.
+	const facetsRange = useMemo(() => {
+		const fmt = (d: Date) => d.toISOString().replace("T", " ").slice(0, 19)
+		const end = new Date()
+		const start = new Date(end.getTime() - 24 * 60 * 60 * 1000)
+		return { startTime: fmt(start), endTime: fmt(end) }
+	}, [])
+
+	const facetsResult = useRetainedRefreshableResultValue(
+		getServicesFacetsResultAtom({ data: facetsRange }),
+	)
+
+	const defaultPreset = useMemo(() => {
+		if (!Result.isSuccess(facetsResult)) return "24h"
+		const services = facetsResult.value.data.services
+		if (services.length === 0) return "24h"
+		const allDemo = services.every((s) => s.name.startsWith("demo-"))
+		return allDemo ? "6h" : "24h"
+	}, [facetsResult])
+
 	return (
 		<PageRefreshProvider timePreset={search.timePreset ?? defaultPreset}>
-			<DashboardContent defaultPreset={defaultPreset} />
+			<DashboardContent defaultPreset={defaultPreset} facetsResult={facetsResult} />
 		</PageRefreshProvider>
 	)
 }
 
-function useDefaultPreset() {
-	const probeRange = useMemo(() => {
-		const end = new Date()
-		const start = new Date(end.getTime() - 24 * 60 * 60 * 1000)
-		return { startTime: start.toISOString(), endTime: end.toISOString() }
-	}, [])
-
-	const servicesProbeResult = useRetainedRefreshableResultValue(
-		getServiceOverviewResultAtom({ data: probeRange }),
-	)
-
-	return useMemo(() => {
-		if (!Result.isSuccess(servicesProbeResult)) return "24h"
-		const services = servicesProbeResult.value.data
-		if (services.length === 0) return "24h"
-		const allDemo = services.every(
-			(s) => typeof s.serviceName === "string" && s.serviceName.startsWith("demo-"),
-		)
-		return allDemo ? "6h" : "24h"
-	}, [servicesProbeResult])
-}
-
-function DashboardContent({ defaultPreset }: { defaultPreset: string }) {
+function DashboardContent({
+	defaultPreset,
+	facetsResult,
+}: {
+	defaultPreset: string
+	facetsResult: Result.Result<ServicesFacetsResponse, unknown>
+}) {
 	const search = Route.useSearch()
 	const navigate = useNavigate({ from: Route.fullPath })
 
@@ -148,15 +157,6 @@ function DashboardContent({ defaultPreset }: { defaultPreset: string }) {
 			}),
 		})
 	}
-
-	const facetsResult = useRetainedRefreshableResultValue(
-		getServicesFacetsResultAtom({
-			data: {
-				startTime: effectiveStartTime,
-				endTime: effectiveEndTime,
-			},
-		}),
-	)
 
 	const environments = Result.builder(facetsResult)
 		.onSuccess((response) => response.data.environments)

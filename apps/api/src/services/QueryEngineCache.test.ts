@@ -36,9 +36,12 @@ describe("snapWindowForQueryKind", () => {
 		expect(snapWindowForQueryKind("attributeKeys")).toBe(300)
 	})
 
-	it("returns 1-min for attributeValues and facets", () => {
+	it("returns 5-min for facets — environments / commit SHAs / service names change slowly", () => {
+		expect(snapWindowForQueryKind("facets")).toBe(300)
+	})
+
+	it("returns 1-min for attributeValues", () => {
 		expect(snapWindowForQueryKind("attributeValues")).toBe(60)
-		expect(snapWindowForQueryKind("facets")).toBe(60)
 	})
 
 	it("returns 15s default for other kinds", () => {
@@ -53,9 +56,12 @@ describe("cacheTtlForQueryKind", () => {
 		expect(cacheTtlForQueryKind("attributeKeys")).toBe(300)
 	})
 
-	it("returns 1-min for attributeValues and facets", () => {
+	it("returns 5-min for facets — paired with the snap window", () => {
+		expect(cacheTtlForQueryKind("facets")).toBe(300)
+	})
+
+	it("returns 1-min for attributeValues", () => {
 		expect(cacheTtlForQueryKind("attributeValues")).toBe(60)
-		expect(cacheTtlForQueryKind("facets")).toBe(60)
 	})
 
 	it("returns 15s default for other kinds", () => {

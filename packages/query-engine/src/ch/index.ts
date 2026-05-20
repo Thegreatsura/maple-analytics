@@ -183,6 +183,7 @@ export {
 // Queries — Logs
 export {
 	logsTimeseriesQuery,
+	canUseLogsAggregatesHourly,
 	logsBreakdownQuery,
 	logsCountQuery,
 	logsListQuery,

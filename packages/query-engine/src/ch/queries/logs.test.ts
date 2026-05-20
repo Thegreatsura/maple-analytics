@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { compileCH, compileUnion } from "../compile"
 import {
+	canUseLogsAggregatesHourly,
 	logsTimeseriesQuery,
 	logsBreakdownQuery,
 	logsCountQuery,
@@ -65,6 +66,94 @@ describe("logsTimeseriesQuery", () => {
 		const q = logsTimeseriesQuery({ severity: "ERROR" })
 		const { sql } = compileCH(q, baseParams)
 		expect(sql).toContain("SeverityText = 'ERROR'")
+	})
+})
+
+// ---------------------------------------------------------------------------
+// canUseLogsAggregatesHourly + MV routing in logsTimeseriesQuery
+// ---------------------------------------------------------------------------
+
+describe("canUseLogsAggregatesHourly", () => {
+	it("accepts hour-aligned bucket sizes", () => {
+		expect(canUseLogsAggregatesHourly({}, 3600)).toBe(true)
+		expect(canUseLogsAggregatesHourly({}, 7200)).toBe(true)
+		expect(canUseLogsAggregatesHourly({}, 86400)).toBe(true)
+	})
+
+	it("rejects sub-hour and non-hour-aligned buckets", () => {
+		expect(canUseLogsAggregatesHourly({}, 60)).toBe(false)
+		expect(canUseLogsAggregatesHourly({}, 600)).toBe(false)
+		expect(canUseLogsAggregatesHourly({}, 1800)).toBe(false)
+		expect(canUseLogsAggregatesHourly({}, 5400)).toBe(false) // 1.5h
+		expect(canUseLogsAggregatesHourly({}, undefined)).toBe(false)
+	})
+
+	it("rejects when filters need raw columns the MV doesn't carry", () => {
+		expect(canUseLogsAggregatesHourly({ traceId: "abc" }, 3600)).toBe(false)
+		expect(canUseLogsAggregatesHourly({ search: "boom" }, 3600)).toBe(false)
+		expect(
+			canUseLogsAggregatesHourly(
+				{ environments: ["prod"], matchModes: { deploymentEnv: "contains" } },
+				3600,
+			),
+		).toBe(false)
+	})
+})
+
+describe("logsTimeseriesQuery MV routing", () => {
+	it("routes to logs_aggregates_hourly at bucketSeconds=3600", () => {
+		const q = logsTimeseriesQuery({ bucketSeconds: 3600 })
+		const { sql } = compileCH(q, baseParams)
+		expect(sql).toContain("FROM logs_aggregates_hourly")
+		expect(sql).not.toContain("FROM logs\n")
+		expect(sql).toContain("sum(Count) AS count")
+		// Hour column is the partition + ORDER BY prefix.
+		expect(sql).toContain("Hour >= '2024-01-01 00:00:00'")
+		// Trailing partial hour clamp — strict-less-than at the floored upper bound.
+		// `toDateTime(...)` wraps the literal so `toStartOfHour` gets a DateTime, not a String.
+		expect(sql).toContain("Hour < toStartOfHour(toDateTime('2024-01-02 00:00:00'))")
+	})
+
+	it("falls back to raw `logs` at sub-hour buckets", () => {
+		const q = logsTimeseriesQuery({ bucketSeconds: 60 })
+		const { sql } = compileCH(q, { ...baseParams, bucketSeconds: 60 })
+		expect(sql).toContain("FROM logs")
+		expect(sql).not.toContain("logs_aggregates_hourly")
+		expect(sql).toContain("count() AS count")
+	})
+
+	it("falls back to raw `logs` when traceId is filtered", () => {
+		const q = logsTimeseriesQuery({ bucketSeconds: 3600, traceId: "abc" })
+		const { sql } = compileCH(q, baseParams)
+		expect(sql).toContain("FROM logs")
+		expect(sql).not.toContain("logs_aggregates_hourly")
+	})
+
+	it("falls back to raw `logs` when search is set", () => {
+		const q = logsTimeseriesQuery({ bucketSeconds: 3600, search: "boom" })
+		const { sql } = compileCH(q, baseParams)
+		expect(sql).toContain("FROM logs")
+		expect(sql).not.toContain("logs_aggregates_hourly")
+	})
+
+	it("uses DeploymentEnv column on the MV branch (not the resource-attr map)", () => {
+		const q = logsTimeseriesQuery({ bucketSeconds: 3600, environments: ["production"] })
+		const { sql } = compileCH(q, baseParams)
+		expect(sql).toContain("FROM logs_aggregates_hourly")
+		expect(sql).toContain("DeploymentEnv IN ('production')")
+		expect(sql).not.toContain("ResourceAttributes")
+	})
+
+	it("falls back to raw `logs` for `contains`-mode environment match", () => {
+		const q = logsTimeseriesQuery({
+			bucketSeconds: 3600,
+			environments: ["prod"],
+			matchModes: { deploymentEnv: "contains" },
+		})
+		const { sql } = compileCH(q, baseParams)
+		expect(sql).toContain("FROM logs")
+		expect(sql).not.toContain("logs_aggregates_hourly")
+		expect(sql).toContain("positionCaseInsensitive(ResourceAttributes['deployment.environment'], 'prod')")
 	})
 })
 

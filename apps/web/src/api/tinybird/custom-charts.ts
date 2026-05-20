@@ -32,49 +32,60 @@ function querySpanMetricsCalls(params: {
 	bucket_seconds: number
 }) {
 	return Effect.gen(function* () {
-		for (const metricName of SPANMETRICS_CALLS_CANDIDATES) {
-			const response = yield* executeQueryEngine(
-				"queryEngine.spanMetricsCalls",
-				new QueryEngineExecuteRequest({
-					startTime: params.start_time ?? "2020-01-01 00:00:00",
-					endTime: params.end_time ?? "2099-12-31 23:59:59",
-					query: {
-						kind: "timeseries",
-						source: "metrics",
-						// `calls` is a monotonic cumulative counter — aggregate it as a
-						// per-bucket `increase` (counter-reset safe), not raw `sum`, which
-						// would plot the accumulated total as a linear ramp.
-						metric: "increase",
-						groupBy: ["service"],
-						filters: {
-							metricName,
-							metricType: "sum",
-							serviceName: params.service,
-							attributeFilters: [
-								{ key: "span.kind", value: "SPAN_KIND_SERVER", mode: "equals" },
-							],
+		// Most orgs have neither metric name. The old sequential `for` loop paid
+		// full wall time for two empty round-trips; running them concurrently caps
+		// the worst case at `max(t1, t2)`. Preserve the canonical-name priority by
+		// preferring the first candidate's non-empty result when both succeed.
+		const responses = yield* Effect.all(
+			SPANMETRICS_CALLS_CANDIDATES.map((metricName) =>
+				executeQueryEngine(
+					"queryEngine.spanMetricsCalls",
+					new QueryEngineExecuteRequest({
+						startTime: params.start_time ?? "2020-01-01 00:00:00",
+						endTime: params.end_time ?? "2099-12-31 23:59:59",
+						query: {
+							kind: "timeseries",
+							source: "metrics",
+							// `calls` is a monotonic cumulative counter — aggregate it as a
+							// per-bucket `increase` (counter-reset safe), not raw `sum`, which
+							// would plot the accumulated total as a linear ramp.
+							metric: "increase",
+							groupBy: ["service"],
+							filters: {
+								metricName,
+								metricType: "sum",
+								serviceName: params.service,
+								attributeFilters: [
+									{ key: "span.kind", value: "SPAN_KIND_SERVER", mode: "equals" },
+								],
+							},
+							bucketSeconds: params.bucket_seconds,
 						},
-						bucketSeconds: params.bucket_seconds,
-					},
-				}),
-			).pipe(Effect.orElseSucceed(() => null))
+					}),
+				).pipe(Effect.orElseSucceed(() => null)),
+			),
+			{ concurrency: SPANMETRICS_CALLS_CANDIDATES.length },
+		)
 
-			if (response && response.result.kind === "timeseries" && response.result.data.length > 0) {
-				// Transform grouped timeseries back to flat rows for compatibility
-				const data: Array<Record<string, unknown>> = []
-				for (const point of response.result.data) {
-					for (const [serviceName, value] of Object.entries(point.series)) {
-						data.push({
-							bucket: point.bucket,
-							serviceName,
-							sumValue: value,
-						})
-					}
-				}
-				return { data }
+		const hit = responses.find(
+			(r) => r && r.result.kind === "timeseries" && r.result.data.length > 0,
+		)
+		if (!hit || hit.result.kind !== "timeseries") {
+			return { data: [] as never[] }
+		}
+
+		// Transform grouped timeseries back to flat rows for compatibility
+		const data: Array<Record<string, unknown>> = []
+		for (const point of hit.result.data) {
+			for (const [serviceName, value] of Object.entries(point.series)) {
+				data.push({
+					bucket: point.bucket,
+					serviceName,
+					sumValue: value,
+				})
 			}
 		}
-		return { data: [] as never[] }
+		return { data }
 	})
 }
 

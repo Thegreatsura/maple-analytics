@@ -133,7 +133,10 @@ export const getServiceUsageResultAtom = makeQueryAtomFamily(getServiceUsage, {
 })
 
 export const getServicesFacetsResultAtom = makeQueryAtomFamily(getServicesFacets, {
-	staleTime: 60_000,
+	// 5 min idle TTL — environments / commit SHAs / service names move slowly,
+	// and the dashboard route now reuses this atom for demo-detection (was a
+	// separate serviceOverview probe). Cross-route navigation stays warm.
+	staleTime: 300_000,
 })
 
 export const getServiceOverviewResultAtom = makeQueryAtomFamily(getServiceOverview, {
