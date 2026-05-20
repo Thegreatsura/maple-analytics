@@ -9,33 +9,39 @@ interface PresetListProps {
 
 export function PresetList({ selectedValue, onSelect, onCustomClick }: PresetListProps) {
 	return (
-		<div className="flex flex-col">
-			<div className="px-2 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+		<div className="flex h-full flex-col py-2">
+			<div className="px-3 pb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
 				Presets
 			</div>
 			<div className="flex flex-col">
-				{PRESET_OPTIONS.map((preset) => (
-					<button
-						key={preset.value}
-						type="button"
-						onClick={() => onSelect(preset)}
-						className={cn(
-							"px-2 py-1.5 text-left text-xs hover:bg-muted transition-colors",
-							selectedValue === preset.value && "bg-muted text-foreground font-medium",
-						)}
-					>
-						{preset.label}
-					</button>
-				))}
-				<div className="h-px bg-border my-1" />
-				<button
-					type="button"
-					onClick={onCustomClick}
-					className="px-2 py-1.5 text-left text-xs hover:bg-muted transition-colors"
-				>
-					Custom
-				</button>
+				{PRESET_OPTIONS.map((preset) => {
+					const active = selectedValue === preset.value
+					return (
+						<button
+							key={preset.value}
+							type="button"
+							onClick={() => onSelect(preset)}
+							className={cn(
+								"relative flex h-7 items-center pl-3 pr-2 text-left text-xs transition-colors",
+								"before:absolute before:inset-y-1 before:left-0 before:w-[2px] before:rounded-r before:bg-transparent before:transition-colors",
+								"hover:bg-muted/50",
+								active && "text-foreground before:bg-primary",
+								!active && "text-foreground/80",
+							)}
+						>
+							<span className={cn("tabular-nums", active && "font-medium")}>{preset.label}</span>
+						</button>
+					)
+				})}
 			</div>
+			<div className="mx-3 mt-1 h-px bg-border/60" />
+			<button
+				type="button"
+				onClick={onCustomClick}
+				className="mt-1 flex h-7 items-center pl-3 pr-2 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+			>
+				Custom range…
+			</button>
 		</div>
 	)
 }

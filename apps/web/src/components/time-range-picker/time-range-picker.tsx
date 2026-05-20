@@ -1,27 +1,20 @@
-import { useState, useCallback } from "react"
-import { Popover, PopoverContent, PopoverTrigger } from "@maple/ui/components/ui/popover"
+import { useCallback, useState } from "react"
 import { Button } from "@maple/ui/components/ui/button"
-import { ScrollArea } from "@maple/ui/components/ui/scroll-area"
-import { Separator } from "@maple/ui/components/ui/separator"
+import { Popover, PopoverContent, PopoverTrigger } from "@maple/ui/components/ui/popover"
+
 import { ClockIcon } from "@/components/icons"
-
-import { formatTimeRangeDisplay, presetLabel, type TimePreset, relativeToAbsolute } from "@/lib/time-utils"
 import { useRecentlyUsedTimes, type RecentTimeRange } from "@/hooks/use-recently-used-times"
+import { formatTimeRangeDisplay, presetLabel, relativeToAbsolute, type TimePreset } from "@/lib/time-utils"
 
-import type { TimeRangePickerProps, TimeRangeTab } from "./types"
+import { CustomRangePicker } from "./custom-range-picker"
 import { PresetList } from "./preset-list"
 import { QuickSelectGrid } from "./quick-select-grid"
-import { ShorthandInput } from "./shorthand-input"
 import { RecentlyUsed } from "./recently-used"
+import { ShorthandInput } from "./shorthand-input"
 import { TimezoneDisplay } from "./timezone-display"
-import { CustomRangePicker } from "./custom-range-picker"
+import type { TimeRangePickerProps, TimeRangeTab } from "./types"
 
-export function TimeRangePicker({
-	startTime,
-	endTime,
-	presetValue,
-	onChange,
-}: TimeRangePickerProps) {
+export function TimeRangePicker({ startTime, endTime, presetValue, onChange }: TimeRangePickerProps) {
 	const [open, setOpen] = useState(false)
 	const [tab, setTab] = useState<TimeRangeTab>("relative")
 	const { recentTimes, addRecentTime } = useRecentlyUsedTimes()
@@ -121,39 +114,26 @@ export function TimeRangePicker({
 					/>
 				) : (
 					<div className="flex flex-col">
-						<div className="flex">
-							{/* Left column: Presets */}
-							<ScrollArea className="h-[320px] w-[160px] border-r">
+						<div className="flex items-stretch">
+							{/* Left rail: presets */}
+							<div className="w-[168px] shrink-0 border-r border-border/70">
 								<PresetList
-									selectedValue={undefined}
+									selectedValue={presetValue}
 									onSelect={handlePresetSelect}
 									onCustomClick={() => setTab("custom")}
 								/>
-							</ScrollArea>
+							</div>
 
-							{/* Right column: Quick select, input, recent, timezone */}
-							<div className="flex-1 p-3 space-y-4">
+							{/* Right pane: shorthand input + quick select + recent */}
+							<div className="flex-1 space-y-5 p-4">
 								<ShorthandInput onApply={handleShorthandApply} />
-
-								<Separator />
-
 								<QuickSelectGrid onSelect={handleQuickSelect} />
-
 								{recentTimes.length > 0 && (
-									<>
-										<Separator />
-										<RecentlyUsed
-											recentTimes={recentTimes}
-											onSelect={handleRecentSelect}
-										/>
-									</>
+									<RecentlyUsed recentTimes={recentTimes} onSelect={handleRecentSelect} />
 								)}
-
-								<Separator />
-
-								<TimezoneDisplay />
 							</div>
 						</div>
+						<TimezoneDisplay />
 					</div>
 				)}
 			</PopoverContent>

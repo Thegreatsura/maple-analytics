@@ -1,5 +1,4 @@
 import { QUICK_SELECT_OPTIONS, relativeToAbsolute } from "@/lib/time-utils"
-import { Button } from "@maple/ui/components/ui/button"
 
 interface QuickSelectGridProps {
 	onSelect: (range: { startTime: string; endTime: string }, value: string, label: string) => void
@@ -8,25 +7,24 @@ interface QuickSelectGridProps {
 export function QuickSelectGrid({ onSelect }: QuickSelectGridProps) {
 	return (
 		<div className="space-y-2">
-			<div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-				Relative Times
+			<div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
+				Quick select
 			</div>
-			<div className="grid grid-cols-3 gap-1">
+			<div className="grid grid-cols-4 gap-1.5">
 				{QUICK_SELECT_OPTIONS.map((option) => (
-					<Button
+					<button
 						key={option.value}
-						variant="outline"
-						size="xs"
+						type="button"
 						onClick={() => {
 							const range = relativeToAbsolute(option.value)
 							if (range) {
 								onSelect(range, option.value, option.label)
 							}
 						}}
-						className="font-mono"
+						className="flex h-7 items-center justify-center rounded-md border border-border/60 bg-background/30 font-mono text-[11px] tracking-wide text-foreground/90 transition-colors hover:border-border hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 					>
 						{option.label}
-					</Button>
+					</button>
 				))}
 			</div>
 		</div>
