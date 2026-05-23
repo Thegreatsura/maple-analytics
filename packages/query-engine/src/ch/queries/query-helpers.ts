@@ -21,13 +21,32 @@ import { buildAttrFilterCondition } from "../../traces-shared"
  * Build the standard APDEX aggregation expressions (satisfiedCount,
  * toleratingCount, apdexScore) from a duration expression and threshold.
  *
+ * Per the Apdex spec, a *failed* request counts as frustrated regardless of how
+ * fast it was. When `errorCondition` is supplied, errored spans are excluded
+ * from the satisfied and tolerating buckets (they remain in `total`, so they
+ * drag the score down). Omitting it falls back to latency-only classification.
+ *
  * @param durationMs - An expression representing span duration in milliseconds
  *                     (typically `$.Duration.div(1000000)`)
  * @param thresholdMs - The APDEX "T" threshold in milliseconds
+ * @param errorCondition - Optional predicate identifying errored spans
+ *                         (typically `$.StatusCode.eq("Error")`)
  */
-export function apdexExprs(durationMs: CH.Expr<number>, thresholdMs: number) {
-	const satisfied = CH.countIf(durationMs.lt(thresholdMs))
-	const tolerating = CH.countIf(durationMs.gte(thresholdMs).and(durationMs.lt(thresholdMs * 4)))
+export function apdexExprs(
+	durationMs: CH.Expr<number>,
+	thresholdMs: number,
+	errorCondition?: CH.Condition,
+) {
+	const satisfiedLatency = durationMs.lt(thresholdMs)
+	const toleratingLatency = durationMs.gte(thresholdMs).and(durationMs.lt(thresholdMs * 4))
+	// Gate the latency buckets on "not an error" so failed requests fall through
+	// to frustrated. `total` still counts every span, so errors pull the score down.
+	const satisfiedCond = errorCondition ? CH.not(errorCondition).and(satisfiedLatency) : satisfiedLatency
+	const toleratingCond = errorCondition
+		? CH.not(errorCondition).and(toleratingLatency)
+		: toleratingLatency
+	const satisfied = CH.countIf(satisfiedCond)
+	const tolerating = CH.countIf(toleratingCond)
 	const total = CH.count()
 	// Split the formula so SQL operator precedence stays correct.
 	// (s + t*0.5) / n  ≡  s/n + (t*0.5)/n

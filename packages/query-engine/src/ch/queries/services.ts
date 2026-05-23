@@ -128,7 +128,7 @@ export function serviceApdexTimeseriesQuery(opts: ServiceApdexTimeseriesOpts) {
 		.select(($) => ({
 			bucket: CH.toStartOfInterval($.Timestamp, param.int("bucketSeconds")),
 			totalCount: CH.count(),
-			...apdexExprs($.Duration.div(1000000), thresholdMs),
+			...apdexExprs($.Duration.div(1000000), thresholdMs, $.StatusCode.eq("Error")),
 		}))
 		.where(($) => serviceOverviewWhereConditions($, { serviceName: opts.serviceName }))
 		.groupBy("bucket")

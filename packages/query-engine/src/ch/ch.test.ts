@@ -210,9 +210,26 @@ describe("tracesTimeseriesQuery", () => {
 	it("builds apdex timeseries with threshold", () => {
 		const q = tracesTimeseriesQuery({ metric: "apdex", needsSampling: false, apdexThresholdMs: 250 })
 		const { sql } = compileCH(q, baseParams)
-		expect(sql).toContain("countIf(Duration / 1000000 < 250) AS satisfiedCount")
+		expect(sql).toContain(
+			"countIf((NOT (StatusCode = 'Error') AND Duration / 1000000 < 250)) AS satisfiedCount",
+		)
 		expect(sql).toContain("toleratingCount")
 		expect(sql).toContain("apdexScore")
+	})
+
+	it("counts errored spans as frustrated in apdex (excludes them from satisfied/tolerating)", () => {
+		const q = tracesTimeseriesQuery({ metric: "apdex", needsSampling: false, apdexThresholdMs: 250 })
+		const { sql } = compileCH(q, baseParams)
+		// A fast error must NOT inflate apdex: the non-error predicate gates both
+		// the satisfied and tolerating buckets, while count() still includes errors.
+		expect(sql).toContain(
+			"countIf((NOT (StatusCode = 'Error') AND Duration / 1000000 < 250)) AS satisfiedCount",
+		)
+		expect(sql).toContain(
+			"countIf((NOT (StatusCode = 'Error') AND (Duration / 1000000 >= 250 AND Duration / 1000000 < 1000))) AS toleratingCount",
+		)
+		// satisfied and tolerating are divided by the unfiltered count(), so errors drag the score down.
+		expect(sql).toContain("/ count()")
 	})
 
 	it("builds p95 duration timeseries", () => {
@@ -528,7 +545,9 @@ describe("tracesBreakdownQuery", () => {
 	it("includes apdex columns for apdex metric", () => {
 		const q = tracesBreakdownQuery({ metric: "apdex", groupBy: "service", apdexThresholdMs: 300 })
 		const { sql } = compileCH(q, baseParams)
-		expect(sql).toContain("countIf(Duration / 1000000 < 300) AS satisfiedCount")
+		expect(sql).toContain(
+			"countIf((NOT (StatusCode = 'Error') AND Duration / 1000000 < 300)) AS satisfiedCount",
+		)
 		expect(sql).toContain("apdexScore")
 	})
 

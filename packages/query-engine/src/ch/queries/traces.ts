@@ -50,7 +50,7 @@ function metricSelectExprs(
 	const durationMs = $.Duration.div(1000000)
 
 	const apdex = needs.has("apdex")
-		? apdexExprs(durationMs, apdexThresholdMs)
+		? apdexExprs(durationMs, apdexThresholdMs, $.StatusCode.eq("Error"))
 		: { satisfiedCount: CH.lit(0), toleratingCount: CH.lit(0), apdexScore: CH.lit(0) }
 
 	return {

@@ -98,6 +98,13 @@ describe("serviceApdexTimeseriesQuery", () => {
 		expect(sql).toContain("AS satisfiedCount")
 		expect(sql).toContain("AS toleratingCount")
 		expect(sql).toContain("AS apdexScore")
+		// Errored spans count as frustrated: the satisfied/tolerating buckets are
+		// gated on the non-error predicate, so a fast 5xx never inflates apdex.
+		expect(sql).toContain(
+			"countIf((NOT (StatusCode = 'Error') AND Duration / 1000000 < 500)) AS satisfiedCount",
+		)
+		// totalCount still counts every span (errors included), so they drag the score down.
+		expect(sql).toContain("count() AS totalCount")
 		expect(sql).toContain("GROUP BY bucket")
 		expect(sql).toContain("ORDER BY bucket ASC")
 		// The MV pre-filters at write time — the runtime root-only predicate is
