@@ -41,7 +41,7 @@ export function LogMetaStrip({ log, timeZone, showOpenFullPage = true }: LogMeta
 					to="/traces/$traceId"
 					params={{ traceId: log.traceId }}
 					search={{ t: log.timestamp }}
-					className="inline-flex shrink-0 items-center gap-1 rounded border border-primary/20 bg-primary/5 px-1.5 py-0.5 font-mono text-[10px] text-primary hover:bg-primary/10 transition-colors"
+					className="inline-flex shrink-0 items-center gap-1 rounded border border-primary/20 bg-primary/5 px-1.5 py-0.5 font-mono text-[11px] text-primary hover:bg-primary/10 transition-colors"
 					title={`View trace ${log.traceId}`}
 				>
 					<PulseIcon size={10} />
@@ -50,7 +50,7 @@ export function LogMetaStrip({ log, timeZone, showOpenFullPage = true }: LogMeta
 			)}
 
 			{log.spanId && (
-				<span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+				<span className="shrink-0 font-mono text-[11px] text-muted-foreground">
 					<CopyableValue value={log.spanId}>span:{log.spanId.slice(0, 8)}</CopyableValue>
 				</span>
 			)}

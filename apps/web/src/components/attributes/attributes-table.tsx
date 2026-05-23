@@ -44,14 +44,26 @@ export function tryParseJson(value: string): unknown | null {
 	}
 }
 
-function AttributeRow({ attrKey, value }: { attrKey: string; value: string }) {
+function AttributeRow({
+	attrKey,
+	value,
+	displayKey,
+}: {
+	attrKey: string
+	value: string
+	/** Label shown in the key column; defaults to `attrKey`. Copies still use the full `attrKey`. */
+	displayKey?: string
+}) {
 	const parsed = tryParseJson(value)
 	return (
-		<div className="px-2 py-1.5">
-			<div className="font-mono text-[11px] text-muted-foreground mb-0.5">
-				<CopyableValue value={attrKey}>{attrKey}</CopyableValue>
-			</div>
-			<div className="font-mono text-xs break-all">
+		<div className="grid grid-cols-[minmax(7rem,38%)_1fr] items-start gap-x-3 px-2 py-1 transition-colors hover:bg-muted/40">
+			<CopyableValue
+				value={attrKey}
+				className="font-mono text-[11px] leading-relaxed text-muted-foreground break-words"
+			>
+				{displayKey ?? attrKey}
+			</CopyableValue>
+			<div className="min-w-0 font-mono text-[11px] leading-relaxed text-foreground break-all">
 				{parsed !== null ? (
 					<CollapsibleJsonValue value={value} parsed={parsed} />
 				) : (
@@ -60,6 +72,19 @@ function AttributeRow({ attrKey, value }: { attrKey: string; value: string }) {
 			</div>
 		</div>
 	)
+}
+
+/**
+ * Drops the namespace prefix from a key for display inside its group
+ * (e.g. `k8s.pod.name` → `pod.name` under the `k8s` header). The group header
+ * already names the namespace, so the leaf is enough — and it keeps the key
+ * column tight. Returns the full key unchanged for the synthetic `Other` group
+ * or anything that doesn't actually start with `namespace.`.
+ */
+function stripNamespace(key: string, namespace: string): string {
+	if (namespace === "Other") return key
+	const prefix = `${namespace}.`
+	return key.startsWith(prefix) ? key.slice(prefix.length) : key
 }
 
 function filterEntries(entries: Array<[string, string]>, searchQuery?: string): Array<[string, string]> {
@@ -89,8 +114,8 @@ export function AttributesTable({ attributes, title, searchQuery, groupByNamespa
 
 		if (groups.length === 0) {
 			return (
-				<div className="space-y-1">
-					<h4 className="text-xs font-medium text-muted-foreground">{title}</h4>
+				<div className="space-y-1.5">
+					<h4 className="text-xs font-medium tracking-wide text-foreground/70">{title}</h4>
 					<div className="text-xs text-muted-foreground py-2">
 						No {title.toLowerCase()} match "{searchQuery}"
 					</div>
@@ -99,31 +124,35 @@ export function AttributesTable({ attributes, title, searchQuery, groupByNamespa
 		}
 
 		return (
-			<div className="space-y-1">
-				<h4 className="text-xs font-medium text-muted-foreground">{title}</h4>
-				<div className="space-y-1">
+			<div className="space-y-1.5">
+				<h4 className="text-xs font-medium tracking-wide text-foreground/70">{title}</h4>
+				<div className="divide-y divide-border/60 overflow-hidden rounded-md border">
 					{groups.map((group) => (
 						<Collapsible
 							key={group.namespace}
 							defaultOpen={group.entries.length <= 8 || !!searchQuery}
 						>
-							<CollapsibleTrigger className="flex items-center gap-1 w-full text-[11px] font-mono text-muted-foreground hover:text-foreground transition-colors group p-1 rounded hover:bg-muted/40">
+							<CollapsibleTrigger className="group flex w-full items-center gap-1.5 px-1.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground">
 								<ChevronRightIcon
-									size={10}
+									size={11}
 									className="transition-transform group-data-[panel-open]:rotate-90"
 								/>
-								<span className="font-semibold">{group.namespace}</span>
-								<span className="text-muted-foreground/60">
-									{group.namespace === "Other" ? "" : "."}
+								<span className="font-mono font-semibold text-foreground/80">
+									{group.namespace}
 								</span>
-								<span className="ml-auto text-[10px] text-muted-foreground/60">
+								<span className="ml-auto rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
 									{group.entries.length}
 								</span>
 							</CollapsibleTrigger>
 							<CollapsibleContent>
-								<div className="rounded-md border divide-y mt-1 ml-2">
+								<div className="divide-y divide-border/40 border-t border-border/60 bg-muted/15">
 									{group.entries.map(([key, value]) => (
-										<AttributeRow key={key} attrKey={key} value={value} />
+										<AttributeRow
+											key={key}
+											attrKey={key}
+											value={value}
+											displayKey={stripNamespace(key, group.namespace)}
+										/>
 									))}
 								</div>
 							</CollapsibleContent>
@@ -138,8 +167,8 @@ export function AttributesTable({ attributes, title, searchQuery, groupByNamespa
 
 	if (filtered.length === 0) {
 		return (
-			<div className="space-y-1">
-				<h4 className="text-xs font-medium text-muted-foreground">{title}</h4>
+			<div className="space-y-1.5">
+				<h4 className="text-xs font-medium tracking-wide text-foreground/70">{title}</h4>
 				<div className="text-xs text-muted-foreground py-2">
 					No {title.toLowerCase()} match "{searchQuery}"
 				</div>
@@ -148,9 +177,9 @@ export function AttributesTable({ attributes, title, searchQuery, groupByNamespa
 	}
 
 	return (
-		<div className="space-y-1">
-			<h4 className="text-xs font-medium text-muted-foreground">{title}</h4>
-			<div className="rounded-md border divide-y">
+		<div className="space-y-1.5">
+			<h4 className="text-xs font-medium tracking-wide text-foreground/70">{title}</h4>
+			<div className="divide-y divide-border/60 overflow-hidden rounded-md border">
 				{filtered.map(([key, value]) => (
 					<AttributeRow key={key} attrKey={key} value={value} />
 				))}

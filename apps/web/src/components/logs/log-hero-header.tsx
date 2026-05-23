@@ -60,7 +60,7 @@ export function LogHeroHeader({ log, showClose = true }: LogHeroHeaderProps) {
 				)}
 			</div>
 
-			<div className="mt-2.5">
+			<div className="mt-3">
 				{isLong ? (
 					<Collapsible open={expanded} onOpenChange={setExpanded}>
 						{!expanded && (
