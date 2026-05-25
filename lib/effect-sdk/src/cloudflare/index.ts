@@ -28,10 +28,7 @@
 // ---------------------------------------------------------------------------
 
 import { Layer, Redacted } from "effect"
-import {
-	type ResolvedResource,
-	resolveResourceFromEnv,
-} from "../server/resource.js"
+import { type ResolvedResource, resolveResourceFromEnv } from "../server/resource.js"
 import { type LogBuffer, type LogRecord, makeLogBuffer } from "./flushable-logger.js"
 import { makeSpanBuffer, type OtlpSpan, type SpanBuffer } from "./flushable-tracer.js"
 
@@ -194,7 +191,6 @@ const flushSignal = async (
 	state.disabledUntil = 0
 	try {
 		await post(url, headers, body())
-		console.log(`[MapleCloudflareSDK] ${signal} flushed ${count} record(s) to ${url}`)
 	} catch (err) {
 		state.disabledUntil = Date.now() + COOLDOWN_MS
 		console.error(`[MapleCloudflareSDK] ${signal} flush failed; cooldown 60s:`, err)

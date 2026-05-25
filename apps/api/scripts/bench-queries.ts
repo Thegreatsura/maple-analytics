@@ -43,32 +43,47 @@ import { CH } from "@maple/query-engine"
 // Errors
 // ---------------------------------------------------------------------------
 
-class MissingConfigError extends Schema.TaggedErrorClass<MissingConfigError>()("MissingConfigError", {
-	what: Schema.String,
-	message: Schema.String,
-}) {}
+class MissingConfigError extends Schema.TaggedErrorClass<MissingConfigError>()(
+	"@maple/api/scripts/bench-queries/MissingConfigError",
+	{
+		what: Schema.String,
+		message: Schema.String,
+	},
+) {}
 
-class HttpRequestError extends Schema.TaggedErrorClass<HttpRequestError>()("HttpRequestError", {
-	url: Schema.String,
-	message: Schema.String,
-}) {}
+class HttpRequestError extends Schema.TaggedErrorClass<HttpRequestError>()(
+	"@maple/api/scripts/bench-queries/HttpRequestError",
+	{
+		url: Schema.String,
+		message: Schema.String,
+	},
+) {}
 
-class UpstreamStatusError extends Schema.TaggedErrorClass<UpstreamStatusError>()("UpstreamStatusError", {
-	source: Schema.String,
-	status: Schema.Number,
-	message: Schema.String,
-}) {}
+class UpstreamStatusError extends Schema.TaggedErrorClass<UpstreamStatusError>()(
+	"@maple/api/scripts/bench-queries/UpstreamStatusError",
+	{
+		source: Schema.String,
+		status: Schema.Number,
+		message: Schema.String,
+	},
+) {}
 
-class BenchFileError extends Schema.TaggedErrorClass<BenchFileError>()("BenchFileError", {
-	path: Schema.String,
-	op: Schema.String,
-	message: Schema.String,
-}) {}
+class BenchFileError extends Schema.TaggedErrorClass<BenchFileError>()(
+	"@maple/api/scripts/bench-queries/BenchFileError",
+	{
+		path: Schema.String,
+		op: Schema.String,
+		message: Schema.String,
+	},
+) {}
 
-class InvalidDurationError extends Schema.TaggedErrorClass<InvalidDurationError>()("InvalidDurationError", {
-	input: Schema.String,
-	message: Schema.String,
-}) {}
+class InvalidDurationError extends Schema.TaggedErrorClass<InvalidDurationError>()(
+	"@maple/api/scripts/bench-queries/InvalidDurationError",
+	{
+		input: Schema.String,
+		message: Schema.String,
+	},
+) {}
 
 // ---------------------------------------------------------------------------
 // Internal data shapes (typed JSON; not branded — local dev tool)
@@ -262,7 +277,10 @@ export class ClickHouse extends Context.Service<ClickHouse, ClickHouseShape>()("
 				try: (signal) =>
 					fetch(url, {
 						method: "POST",
-						headers: { Authorization: authHeader(cfg), "Content-Type": "text/plain; charset=utf-8" },
+						headers: {
+							Authorization: authHeader(cfg),
+							"Content-Type": "text/plain; charset=utf-8",
+						},
 						body: sql,
 						signal,
 					}),
@@ -366,7 +384,11 @@ export class Tinybird extends Context.Service<Tinybird, TinybirdShape>()("bench/
 			})
 			if (!response.ok) {
 				return yield* Effect.fail(
-					new UpstreamStatusError({ source: "Tinybird", status: response.status, message: text.slice(0, 500) }),
+					new UpstreamStatusError({
+						source: "Tinybird",
+						status: response.status,
+						message: text.slice(0, 500),
+					}),
 				)
 			}
 			const parsed = yield* Effect.try({
@@ -395,7 +417,9 @@ const readJsonFile = <T>(path: string) =>
 		const fs = yield* FileSystem.FileSystem
 		const text = yield* fs
 			.readFileString(path)
-			.pipe(Effect.mapError((cause) => new BenchFileError({ path, op: "read", message: String(cause) })))
+			.pipe(
+				Effect.mapError((cause) => new BenchFileError({ path, op: "read", message: String(cause) })),
+			)
 		return yield* Effect.try({
 			try: () => JSON.parse(text) as T,
 			catch: (cause) => new BenchFileError({ path, op: "parse", message: String(cause) }),
@@ -407,10 +431,14 @@ const writeJsonFile = (path: string, value: unknown) =>
 		const fs = yield* FileSystem.FileSystem
 		yield* fs
 			.makeDirectory(dirname(resolve(path)), { recursive: true })
-			.pipe(Effect.mapError((cause) => new BenchFileError({ path, op: "mkdir", message: String(cause) })))
+			.pipe(
+				Effect.mapError((cause) => new BenchFileError({ path, op: "mkdir", message: String(cause) })),
+			)
 		yield* fs
 			.writeFileString(path, JSON.stringify(value, null, 2))
-			.pipe(Effect.mapError((cause) => new BenchFileError({ path, op: "write", message: String(cause) })))
+			.pipe(
+				Effect.mapError((cause) => new BenchFileError({ path, op: "write", message: String(cause) })),
+			)
 	})
 
 // ---------------------------------------------------------------------------
@@ -421,7 +449,10 @@ const parseRelativeDuration = (input: string): Effect.Effect<number, InvalidDura
 	const match = /^(\d+)\s*(s|m|h|d)$/i.exec(input.trim())
 	if (!match) {
 		return Effect.fail(
-			new InvalidDurationError({ input, message: `Expected NNs / NNm / NNh / NNd (e.g. 24h, 7d), got "${input}".` }),
+			new InvalidDurationError({
+				input,
+				message: `Expected NNs / NNm / NNh / NNd (e.g. 24h, 7d), got "${input}".`,
+			}),
 		)
 	}
 	const unit = { s: 1_000, m: 60_000, h: 3_600_000, d: 86_400_000 }[match[2]!.toLowerCase()]!
@@ -561,7 +592,10 @@ const fetchHandler = Effect.fn("bench.fetch")(function* (config: FetchConfig) {
 		return
 	}
 
-	const outputPath = Option.getOrElse(config.out, () => `apps/api/scripts/.bench/queries-${timestampSlug()}.json`)
+	const outputPath = Option.getOrElse(
+		config.out,
+		() => `apps/api/scripts/.bench/queries-${timestampSlug()}.json`,
+	)
 	const output: FetchOutput = {
 		fetchedAt: now.toISOString(),
 		source: host,
@@ -635,7 +669,11 @@ const benchmarkSample = Effect.fn("bench.sample")(function* (
 			const warm = yield* ch.run(replaySql)
 			if (warm.status !== 200) {
 				return yield* Effect.fail(
-					new UpstreamStatusError({ source: "ClickHouse", status: warm.status, message: warm.body.slice(0, 200) }),
+					new UpstreamStatusError({
+						source: "ClickHouse",
+						status: warm.status,
+						message: warm.body.slice(0, 200),
+					}),
 				)
 			}
 		}
@@ -645,7 +683,11 @@ const benchmarkSample = Effect.fn("bench.sample")(function* (
 			const res = yield* ch.run(replaySql)
 			if (res.status !== 200) {
 				return yield* Effect.fail(
-					new UpstreamStatusError({ source: "ClickHouse", status: res.status, message: res.body.slice(0, 200) }),
+					new UpstreamStatusError({
+						source: "ClickHouse",
+						status: res.status,
+						message: res.body.slice(0, 200),
+					}),
 				)
 			}
 			const log = yield* ch.queryLog(res.queryId)
@@ -663,8 +705,14 @@ const benchmarkSample = Effect.fn("bench.sample")(function* (
 					},
 					onSome: (l) => l.queryDurationMs,
 				}),
-				readRows: Option.match(log, { onNone: () => fromSummary("read_rows"), onSome: (l) => l.readRows }),
-				readBytes: Option.match(log, { onNone: () => fromSummary("read_bytes"), onSome: (l) => l.readBytes }),
+				readRows: Option.match(log, {
+					onNone: () => fromSummary("read_rows"),
+					onSome: (l) => l.readRows,
+				}),
+				readBytes: Option.match(log, {
+					onNone: () => fromSummary("read_bytes"),
+					onSome: (l) => l.readBytes,
+				}),
 				memoryUsage: Option.match(log, { onNone: () => null, onSome: (l) => l.memoryUsage }),
 			})
 		}
@@ -688,15 +736,19 @@ const benchmarkSample = Effect.fn("bench.sample")(function* (
 	}).pipe(
 		// A single bad query shouldn't abort the whole sweep — record and move on.
 		Effect.catchTags({
-			HttpRequestError: (err) => Effect.succeed(failedResult(sample, err.message)),
-			UpstreamStatusError: (err) => Effect.succeed(failedResult(sample, `status ${err.status}: ${err.message}`)),
-			MissingConfigError: (err) => Effect.fail(err),
+			"@maple/api/scripts/bench-queries/HttpRequestError": (err) =>
+				Effect.succeed(failedResult(sample, err.message)),
+			"@maple/api/scripts/bench-queries/UpstreamStatusError": (err) =>
+				Effect.succeed(failedResult(sample, `status ${err.status}: ${err.message}`)),
+			"@maple/api/scripts/bench-queries/MissingConfigError": (err) => Effect.fail(err),
 		}),
 	)
 
 	yield* Console.log(
 		`  ${truncate(`${sample.context}@${sample.fingerprint}`, 50).padEnd(50)} ` +
-			(result.error ? `FAILED — ${truncate(result.error, 60)}` : `p95 ${formatMs(result.aggregates.p95WallMs)}`),
+			(result.error
+				? `FAILED — ${truncate(result.error, 60)}`
+				: `p95 ${formatMs(result.aggregates.p95WallMs)}`),
 	)
 	return result
 })
@@ -714,7 +766,9 @@ const runHandler = Effect.fn("bench.run")(function* (config: RunConfig) {
 	const warmupRuns = config.warmup
 	const fetchOutput = yield* readJsonFile<FetchOutput>(config.file)
 
-	yield* Console.log(`Replaying ${fetchOutput.samples.length} queries (${runsPerQuery} runs each, warmup ${warmupRuns})`)
+	yield* Console.log(
+		`Replaying ${fetchOutput.samples.length} queries (${runsPerQuery} runs each, warmup ${warmupRuns})`,
+	)
 	yield* Console.log(`  source: ${config.file}\n`)
 
 	// Sequential on purpose: concurrent replays would distort per-query timings.
@@ -747,7 +801,10 @@ const runHandler = Effect.fn("bench.run")(function* (config: RunConfig) {
 			),
 	)
 
-	const outputPath = Option.getOrElse(config.out, () => `apps/api/scripts/.bench/results-${timestampSlug()}.json`)
+	const outputPath = Option.getOrElse(
+		config.out,
+		() => `apps/api/scripts/.bench/results-${timestampSlug()}.json`,
+	)
 	const runOutput: RunOutput = {
 		ranAt: new Date().toISOString(),
 		target: fetchOutput.source,
@@ -760,8 +817,7 @@ const runHandler = Effect.fn("bench.run")(function* (config: RunConfig) {
 	yield* Console.log(`\nWrote ${outputPath}`)
 })
 
-const stripFormatClause = (sql: string) =>
-	sql.replace(/\s+FORMAT\s+\w+\s*;?\s*$/i, "").replace(/;\s*$/, "")
+const stripFormatClause = (sql: string) => sql.replace(/\s+FORMAT\s+\w+\s*;?\s*$/i, "").replace(/;\s*$/, "")
 
 const inspectHandler = Effect.fn("bench.inspect")(function* (config: { readonly file: string }) {
 	const ch = yield* ClickHouse
@@ -803,7 +859,15 @@ const compareHandler = Effect.fn("bench.compare")(function* (config: {
 	const rows = a.results.map((aResult) => {
 		const bResult = bByFp.get(aResult.fingerprint)
 		if (!bResult) {
-			return [aResult.context || "—", aResult.fingerprint, formatMs(aResult.aggregates.p95WallMs), "—", "(missing in b)", "—", "—"]
+			return [
+				aResult.context || "—",
+				aResult.fingerprint,
+				formatMs(aResult.aggregates.p95WallMs),
+				"—",
+				"(missing in b)",
+				"—",
+				"—",
+			]
 		}
 		return [
 			aResult.context || "—",
@@ -840,10 +904,19 @@ const compareHandler = Effect.fn("bench.compare")(function* (config: {
 const fetchCommand = Command.make(
 	"fetch",
 	{
-		context: Flag.string("context").pipe(Flag.withDescription("Filter by query.context label"), Flag.optional),
+		context: Flag.string("context").pipe(
+			Flag.withDescription("Filter by query.context label"),
+			Flag.optional,
+		),
 		profile: Flag.string("profile").pipe(Flag.withDescription("Filter by query.profile"), Flag.optional),
-		since: Flag.string("since").pipe(Flag.withDescription("Look-back window, e.g. 24h or 7d"), Flag.withDefault("24h")),
-		top: Flag.integer("top").pipe(Flag.withDescription("Number of fingerprints to keep"), Flag.withDefault(20)),
+		since: Flag.string("since").pipe(
+			Flag.withDescription("Look-back window, e.g. 24h or 7d"),
+			Flag.withDefault("24h"),
+		),
+		top: Flag.integer("top").pipe(
+			Flag.withDescription("Number of fingerprints to keep"),
+			Flag.withDefault(20),
+		),
 		out: Flag.string("out").pipe(Flag.withDescription("Output JSON path"), Flag.optional),
 		org: Flag.string("org").pipe(Flag.withDescription("Source org (default: internal)"), Flag.optional),
 	},
@@ -855,7 +928,10 @@ const runCommand = Command.make(
 	{
 		file: Argument.string("file").pipe(Argument.withDescription("Queries JSON produced by `fetch`")),
 		runs: Flag.integer("runs").pipe(Flag.withDescription("Timed runs per query"), Flag.withDefault(5)),
-		warmup: Flag.integer("warmup").pipe(Flag.withDescription("Warmup runs before timing"), Flag.withDefault(1)),
+		warmup: Flag.integer("warmup").pipe(
+			Flag.withDescription("Warmup runs before timing"),
+			Flag.withDefault(1),
+		),
 		out: Flag.string("out").pipe(Flag.withDescription("Results JSON path"), Flag.optional),
 	},
 	runHandler,

@@ -1,6 +1,6 @@
 import { HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 import { Schema } from "effect"
-import { SessionId, TraceId } from "../primitives"
+import { SessionId, TraceId, UserId } from "../primitives"
 import { TinybirdDateTime } from "../query-engine"
 import { Authorization } from "./current-tenant"
 import { QueryEngineExecutionError, QueryEngineTimeoutError } from "./query-engine"
@@ -36,12 +36,12 @@ export class ListReplaysRequest extends Schema.Class<ListReplaysRequest>("ListRe
 }) {}
 
 export const SessionReplayListItem = Schema.Struct({
-	sessionId: Schema.String,
+	sessionId: SessionId,
 	startTime: Schema.String,
 	endTime: Schema.NullOr(Schema.String),
 	durationMs: Schema.NullOr(Schema.Number),
 	status: Schema.String,
-	userId: Schema.String,
+	userId: UserId,
 	urlInitial: Schema.String,
 	browserName: Schema.String,
 	osName: Schema.String,
@@ -67,12 +67,12 @@ export class GetReplayRequest extends Schema.Class<GetReplayRequest>("GetReplayR
 export class GetReplayResponse extends Schema.Class<GetReplayResponse>("GetReplayResponse")({
 	data: Schema.NullOr(
 		Schema.Struct({
-			sessionId: Schema.String,
+			sessionId: SessionId,
 			startTime: Schema.String,
 			endTime: Schema.NullOr(Schema.String),
 			durationMs: Schema.NullOr(Schema.Number),
 			status: Schema.String,
-			userId: Schema.String,
+			userId: UserId,
 			urlInitial: Schema.String,
 			userAgent: Schema.String,
 			browserName: Schema.String,
@@ -83,7 +83,7 @@ export class GetReplayResponse extends Schema.Class<GetReplayResponse>("GetRepla
 			pageViews: Schema.Number,
 			clickCount: Schema.Number,
 			errorCount: Schema.Number,
-			traceIds: Schema.Array(Schema.String),
+			traceIds: Schema.Array(TraceId),
 			resourceAttributes: Schema.String,
 		}),
 	),
@@ -91,9 +91,7 @@ export class GetReplayResponse extends Schema.Class<GetReplayResponse>("GetRepla
 
 // --- Events (rrweb chunks, payload inline) ---
 
-export class GetReplayEventsRequest extends Schema.Class<GetReplayEventsRequest>(
-	"GetReplayEventsRequest",
-)({
+export class GetReplayEventsRequest extends Schema.Class<GetReplayEventsRequest>("GetReplayEventsRequest")({
 	sessionId: SessionId,
 }) {}
 
@@ -108,33 +106,31 @@ export const SessionReplayChunk = Schema.Struct({
 	events: Schema.String,
 })
 
-export class GetReplayEventsResponse extends Schema.Class<GetReplayEventsResponse>(
-	"GetReplayEventsResponse",
-)({
-	chunks: Schema.Array(SessionReplayChunk),
-}) {}
+export class GetReplayEventsResponse extends Schema.Class<GetReplayEventsResponse>("GetReplayEventsResponse")(
+	{
+		chunks: Schema.Array(SessionReplayChunk),
+	},
+) {}
 
 // --- Reverse correlation (trace → sessions) ---
 
-export class ReplaysForTraceRequest extends Schema.Class<ReplaysForTraceRequest>(
-	"ReplaysForTraceRequest",
-)({
+export class ReplaysForTraceRequest extends Schema.Class<ReplaysForTraceRequest>("ReplaysForTraceRequest")({
 	traceId: TraceId,
 	startTime: TinybirdDateTime,
 	endTime: TinybirdDateTime,
 }) {}
 
-export class ReplaysForTraceResponse extends Schema.Class<ReplaysForTraceResponse>(
-	"ReplaysForTraceResponse",
-)({
-	data: Schema.Array(
-		Schema.Struct({
-			sessionId: Schema.String,
-			startTime: Schema.String,
-			durationMs: Schema.NullOr(Schema.Number),
-		}),
-	),
-}) {}
+export class ReplaysForTraceResponse extends Schema.Class<ReplaysForTraceResponse>("ReplaysForTraceResponse")(
+	{
+		data: Schema.Array(
+			Schema.Struct({
+				sessionId: SessionId,
+				startTime: Schema.String,
+				durationMs: Schema.NullOr(Schema.Number),
+			}),
+		),
+	},
+) {}
 
 // --- Trace summaries (one bar per correlated trace) ---
 
@@ -146,7 +142,7 @@ export class SessionTraceSummariesRequest extends Schema.Class<SessionTraceSumma
 }) {}
 
 export const SessionTraceSummary = Schema.Struct({
-	traceId: Schema.String,
+	traceId: TraceId,
 	startTime: Schema.String,
 	durationMs: Schema.Number,
 	rootSpanName: Schema.String,
@@ -174,7 +170,7 @@ export const SessionEventItem = Schema.Struct({
 	seq: Schema.Number,
 	type: Schema.String,
 	url: Schema.String,
-	traceId: Schema.String,
+	traceId: TraceId,
 	level: Schema.String,
 	message: Schema.String,
 	targetSelector: Schema.String,

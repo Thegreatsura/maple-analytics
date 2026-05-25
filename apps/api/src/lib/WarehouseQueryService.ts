@@ -348,18 +348,18 @@ export class WarehouseQueryService extends Context.Service<
 					? `clickhouse:${config.url}:${config.username}:${config.password}:${config.database}`
 					: `tinybird:${config.host}:${config.token}`
 
-			// Sync helper called from outside the Effect.gen runtime — uses
-			// `Date.now()` directly because there's no fiber to yield from. The
-			// TTL is purely an in-process cache eviction signal; not test-critical.
-			const getCachedOrCreateClient = (orgId: OrgId | "__managed__", config: SqlClientConfig) => {
-				const now = Date.now()
+			const getCachedOrCreateClient = (
+				orgId: OrgId | "__managed__",
+				config: SqlClientConfig,
+				nowMs: number,
+			) => {
 				const cacheKey = sqlClientCacheKey(config)
 				const cached = clientCache.get(orgId)
-				if (cached && cached.cacheKey === cacheKey && cached.expiresAt > now) {
+				if (cached && cached.cacheKey === cacheKey && cached.expiresAt > nowMs) {
 					return cached.client
 				}
 				const client = sqlClientFactory(config)
-				clientCache.set(orgId, { client, cacheKey, expiresAt: now + CLIENT_CACHE_TTL_MS })
+				clientCache.set(orgId, { client, cacheKey, expiresAt: nowMs + CLIENT_CACHE_TTL_MS })
 				return client
 			}
 
@@ -487,7 +487,7 @@ export class WarehouseQueryService extends Context.Service<
 				if (settings) yield* Effect.annotateCurrentSpan("ch.settings", JSON.stringify(settings))
 
 				const cacheKey = resolved.source === "managed" ? "__managed__" : tenant.orgId
-				const client = getCachedOrCreateClient(cacheKey, resolved.config)
+				const client = getCachedOrCreateClient(cacheKey, resolved.config, yield* Clock.currentTimeMillis)
 				let retryAttempts = 0
 				const result = yield* Effect.tryPromise({
 					try: () => client.sql(finalSql),

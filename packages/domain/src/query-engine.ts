@@ -2,8 +2,7 @@ import { Schema } from "effect"
 
 const dateTimePattern = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/
 
-export const TinybirdDateTime = Schema.String.pipe(
-	Schema.check(Schema.isPattern(dateTimePattern)),
+export const TinybirdDateTime = Schema.String.check(Schema.isPattern(dateTimePattern)).pipe(
 	Schema.annotate({
 		identifier: "TinybirdDateTime",
 		description: "Date time string in YYYY-MM-DD HH:mm:ss format",

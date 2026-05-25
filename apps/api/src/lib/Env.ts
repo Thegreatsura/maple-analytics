@@ -2,7 +2,7 @@ import { Config, Context, Effect, Layer, Option, Redacted, Schema } from "effect
 
 /** Fatal misconfiguration discovered at startup — surfaces as a tagged defect in the Cause. */
 class EnvValidationError extends Schema.TaggedErrorClass<EnvValidationError>()(
-	"EnvValidationError",
+	"@maple/api/lib/EnvValidationError",
 	{ message: Schema.String },
 ) {}
 
@@ -127,7 +127,7 @@ const makeEnv = Effect.gen(function* () {
 		return yield* Effect.die(new EnvValidationError({ message: "MAPLE_ROOT_PASSWORD cannot be empty" }))
 	}
 
-	return env
+	return Env.of(env)
 })
 
 export class Env extends Context.Service<Env, EnvShape>()("@maple/api/lib/Env") {

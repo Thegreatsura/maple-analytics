@@ -41,7 +41,7 @@ export type RpcStreamEnvelope = {
 	body: ReadableStream<Uint8Array>
 }
 
-export class RpcDecodeError extends Data.TaggedError("RpcDecodeError")<{
+export class RpcDecodeError extends Data.TaggedError("@maple/effect-cloudflare/RpcDecodeError")<{
 	readonly cause: unknown
 }> {
 	override get message() {
@@ -49,7 +49,7 @@ export class RpcDecodeError extends Data.TaggedError("RpcDecodeError")<{
 	}
 }
 
-export class RpcCallError extends Data.TaggedError("RpcCallError")<{
+export class RpcCallError extends Data.TaggedError("@maple/effect-cloudflare/RpcCallError")<{
 	readonly method: string
 	readonly cause: unknown
 }> {
@@ -60,7 +60,11 @@ export class RpcCallError extends Data.TaggedError("RpcCallError")<{
 	}
 }
 
-export class RpcRemoteStreamError extends Data.TaggedError("RpcRemoteStreamError")<{
+export class RpcRemoteError extends Data.TaggedError("@maple/effect-cloudflare/RpcRemoteError")<{
+	readonly error: unknown
+}> {}
+
+export class RpcRemoteStreamError extends Data.TaggedError("@maple/effect-cloudflare/RpcRemoteStreamError")<{
 	readonly error: unknown
 }> {}
 
@@ -174,9 +178,9 @@ export const decodeRpcValue = (value: unknown) => {
 	return value
 }
 
-export const decodeRpcResult = (value: unknown): Effect.Effect<unknown, unknown> => {
+export const decodeRpcResult = (value: unknown): Effect.Effect<unknown, RpcRemoteError> => {
 	if (isRpcErrorEnvelope(value)) {
-		return Effect.fail(value.error)
+		return Effect.fail(new RpcRemoteError({ error: value.error }))
 	}
 	return Effect.succeed(decodeRpcValue(value))
 }

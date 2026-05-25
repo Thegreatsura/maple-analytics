@@ -76,8 +76,9 @@ export const AutumnRouter = HttpRouter.use((router) =>
 			"aggregateEvents",
 		] as const
 
-		for (const route of routes) {
-			yield* router.add("POST", `/api/autumn/${route}`, handle(route))
-		}
+		yield* Effect.forEach(routes, (route) => router.add("POST", `/api/autumn/${route}`, handle(route)), {
+			concurrency: 1,
+			discard: true,
+		})
 	}),
 )

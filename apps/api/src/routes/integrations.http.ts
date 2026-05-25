@@ -252,18 +252,30 @@ export const IntegrationsCallbackRouter = HttpRouter.use((router) =>
 							),
 						),
 					),
-					Effect.catch(() =>
-						Effect.succeed(
-							htmlResponse(
-								renderCallbackPage({
-									status: "error",
-									message: "Failed to complete Hazel connection",
-									returnTo: null,
-								}),
-								400,
+					Effect.catchTags({
+						"@maple/http/errors/IntegrationsUpstreamError": () =>
+							Effect.succeed(
+								htmlResponse(
+									renderCallbackPage({
+										status: "error",
+										message: "Failed to complete Hazel connection",
+										returnTo: null,
+									}),
+									400,
+								),
 							),
-						),
-					),
+						"@maple/http/errors/IntegrationsPersistenceError": () =>
+							Effect.succeed(
+								htmlResponse(
+									renderCallbackPage({
+										status: "error",
+										message: "Failed to complete Hazel connection",
+										returnTo: null,
+									}),
+									400,
+								),
+							),
+					}),
 				)
 			})
 

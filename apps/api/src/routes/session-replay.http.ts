@@ -8,10 +8,17 @@ import {
 	ReplaysForTraceResponse,
 	SessionTranscriptResponse,
 	SessionTraceSummariesResponse,
+	SessionId,
+	TraceId,
+	UserId,
 } from "@maple/domain/http"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { CH } from "@maple/query-engine"
 import { WarehouseQueryService } from "../lib/WarehouseQueryService"
+
+const decodeSessionId = Schema.decodeSync(SessionId)
+const decodeTraceId = Schema.decodeSync(TraceId)
+const decodeUserId = Schema.decodeSync(UserId)
 
 export const HttpSessionReplaysLive = HttpApiBuilder.group(MapleApi, "sessionReplays", (handlers) =>
 	Effect.gen(function* () {
@@ -40,7 +47,13 @@ export const HttpSessionReplaysLive = HttpApiBuilder.group(MapleApi, "sessionRep
 						profile: "list",
 						context: "listReplays",
 					})
-					return new ListReplaysResponse({ data: compiled.castRows(rows) })
+					return new ListReplaysResponse({
+						data: compiled.castRows(rows).map((row) => ({
+							...row,
+							sessionId: decodeSessionId(row.sessionId),
+							userId: decodeUserId(row.userId),
+						})),
+					})
 				}),
 			)
 			.handle("getReplay", ({ payload }) =>
@@ -58,7 +71,17 @@ export const HttpSessionReplaysLive = HttpApiBuilder.group(MapleApi, "sessionRep
 						profile: "discovery",
 						context: "getReplay",
 					})
-					return new GetReplayResponse({ data: compiled.castRows(rows)[0] ?? null })
+					const data = compiled.castRows(rows)[0] ?? null
+					return new GetReplayResponse({
+						data: data
+							? {
+									...data,
+									sessionId: decodeSessionId(data.sessionId),
+									userId: decodeUserId(data.userId),
+									traceIds: data.traceIds.map((traceId) => decodeTraceId(traceId)),
+								}
+							: null,
+					})
 				}),
 			)
 			.handle("getReplayEvents", ({ payload }) =>
@@ -99,7 +122,12 @@ export const HttpSessionReplaysLive = HttpApiBuilder.group(MapleApi, "sessionRep
 						profile: "list",
 						context: "replaysForTrace",
 					})
-					return new ReplaysForTraceResponse({ data: compiled.castRows(rows) })
+					return new ReplaysForTraceResponse({
+						data: compiled.castRows(rows).map((row) => ({
+							...row,
+							sessionId: decodeSessionId(row.sessionId),
+						})),
+					})
 				}),
 			)
 			.handle("traceSummaries", ({ payload }) =>
@@ -122,7 +150,12 @@ export const HttpSessionReplaysLive = HttpApiBuilder.group(MapleApi, "sessionRep
 						profile: "list",
 						context: "sessionTraceSummaries",
 					})
-					return new SessionTraceSummariesResponse({ data: compiled.castRows(rows) })
+					return new SessionTraceSummariesResponse({
+						data: compiled.castRows(rows).map((row) => ({
+							...row,
+							traceId: decodeTraceId(row.traceId),
+						})),
+					})
 				}),
 			)
 			.handle("sessionTranscript", ({ payload }) =>
@@ -140,7 +173,12 @@ export const HttpSessionReplaysLive = HttpApiBuilder.group(MapleApi, "sessionRep
 						profile: "list",
 						context: "sessionTranscript",
 					})
-					return new SessionTranscriptResponse({ data: compiled.castRows(rows) })
+					return new SessionTranscriptResponse({
+						data: compiled.castRows(rows).map((row) => ({
+							...row,
+							traceId: decodeTraceId(row.traceId),
+						})),
+					})
 				}),
 			)
 	}),

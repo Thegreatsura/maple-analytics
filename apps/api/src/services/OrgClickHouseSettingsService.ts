@@ -155,13 +155,17 @@ const encryptToken = (
 	plaintext: string,
 	encryptionKey: Buffer,
 ): Effect.Effect<EncryptedValue, OrgClickHouseSettingsEncryptionError> =>
-	encryptAes256Gcm(plaintext, encryptionKey, () => toEncryptionError("Failed to encrypt ClickHouse password"))
+	encryptAes256Gcm(plaintext, encryptionKey, () =>
+		toEncryptionError("Failed to encrypt ClickHouse password"),
+	)
 
 const decryptToken = (
 	encrypted: EncryptedValue,
 	encryptionKey: Buffer,
 ): Effect.Effect<string, OrgClickHouseSettingsEncryptionError> =>
-	decryptAes256Gcm(encrypted, encryptionKey, () => toEncryptionError("Failed to decrypt ClickHouse password"))
+	decryptAes256Gcm(encrypted, encryptionKey, () =>
+		toEncryptionError("Failed to decrypt ClickHouse password"),
+	)
 
 // Both `qualifyStatementForDatabase` and `CLICKHOUSE_MV_SOURCE_TABLES` live
 // in `@maple/domain/clickhouse` now (so the `@maple/clickhouse-cli` package
@@ -512,21 +516,29 @@ const recordAppliedMigration = (config: ClickHouseExecConfig, version: number, d
  * Each migration's statements run sequentially; the version is recorded only
  * after all its statements succeed. Returns human-readable labels of what ran.
  */
-const runPendingMigrations = (config: ClickHouseExecConfig) =>
-	Effect.gen(function* () {
-		yield* ensureMigrationsTable(config)
-		const applied = yield* readAppliedMigrationVersions(config)
-		const ran: string[] = []
-		for (const migration of clickHouseMigrations) {
-			if (applied.has(migration.version)) continue
-			for (const stmt of migration.statements) {
-				yield* execClickHouse(config, qualifyStatementForDatabase(stmt, config.database))
-			}
-			yield* recordAppliedMigration(config, migration.version, migration.description)
-			ran.push(`migration ${migration.version}: ${migration.description}`)
-		}
-		return ran
-	})
+const runPendingMigrations = Effect.fn("OrgClickHouseSettingsService.runPendingMigrations")(function* (
+	config: ClickHouseExecConfig,
+) {
+	yield* ensureMigrationsTable(config)
+	const applied = yield* readAppliedMigrationVersions(config)
+	const ran: string[] = []
+	yield* Effect.forEach(
+		clickHouseMigrations,
+		(migration) =>
+				Effect.gen(function* () {
+					if (applied.has(migration.version)) return
+				yield* Effect.forEach(
+					migration.statements,
+					(stmt) => execClickHouse(config, qualifyStatementForDatabase(stmt, config.database)),
+					{ concurrency: 1, discard: true },
+				)
+				yield* recordAppliedMigration(config, migration.version, migration.description)
+				ran.push(`migration ${migration.version}: ${migration.description}`)
+			}),
+		{ concurrency: 1, discard: true },
+	)
+	return ran
+})
 
 // --- Service -----------------------------------------------------------------
 
@@ -602,9 +614,7 @@ export class OrgClickHouseSettingsService extends Context.Service<
 					)
 				: Effect.succeed("")
 
-		const toResponse = (
-			row: ActiveRow | null | undefined,
-		): OrgClickHouseSettingsResponse =>
+		const toResponse = (row: ActiveRow | null | undefined): OrgClickHouseSettingsResponse =>
 			new OrgClickHouseSettingsResponse({
 				configured: row != null,
 				chUrl: row?.chUrl ?? null,
@@ -661,13 +671,10 @@ export class OrgClickHouseSettingsService extends Context.Service<
 			if (plainPassword.length === 0 && Option.isSome(existingRow)) {
 				const existing = existingRow.value
 				const sameEndpoint =
-					existing.chUrl === url &&
-					existing.chUser === user &&
-					existing.chDatabase === dbName
+					existing.chUrl === url && existing.chUser === user && existing.chDatabase === dbName
 				if (!sameEndpoint) {
 					return yield* new OrgClickHouseSettingsValidationError({
-						message:
-							"Password is required when changing the ClickHouse URL, user, or database",
+						message: "Password is required when changing the ClickHouse URL, user, or database",
 					})
 				}
 				plainPassword = yield* decryptStoredPassword(existing)
@@ -677,10 +684,7 @@ export class OrgClickHouseSettingsService extends Context.Service<
 			// host or token surfaces here rather than after the user closes the
 			// dialog. No DDL is run — applying the schema is a separate explicit
 			// action via the diff/apply endpoints.
-			yield* execClickHouse(
-				{ url, user, password: plainPassword, database: dbName },
-				"SELECT 1",
-			)
+			yield* execClickHouse({ url, user, password: plainPassword, database: dbName }, "SELECT 1")
 
 			const encryptedPassword =
 				plainPassword.length > 0 ? yield* encryptToken(plainPassword, encryptionKey) : null
@@ -844,21 +848,25 @@ export class OrgClickHouseSettingsService extends Context.Service<
 
 					const addedColumns: string[] = []
 					const unresolvableAdds: string[] = []
-					for (const drift of missingDrifts) {
-						const colDef = extractColumnDefinition(table.createStatement, drift.column)
-						if (!colDef) {
-							// Shouldn't happen — `missing` drift means the column is in the
-							// desired schema by definition — but guard against parser drift.
-							unresolvableAdds.push(drift.column)
-							continue
-						}
-						const alter = `ALTER TABLE \`${config.database}\`.\`${entry.name}\` ADD COLUMN IF NOT EXISTS ${colDef}`
-						yield* execClickHouse(config, alter)
-						addedColumns.push(drift.column)
-					}
+					yield* Effect.forEach(
+						missingDrifts,
+						(drift) =>
+							Effect.gen(function* () {
+								const colDef = extractColumnDefinition(table.createStatement, drift.column)
+								if (!colDef) {
+									// Shouldn't happen — `missing` drift means the column is in the
+									// desired schema by definition — but guard against parser drift.
+									unresolvableAdds.push(drift.column)
+									return
+								}
+								const alter = `ALTER TABLE \`${config.database}\`.\`${entry.name}\` ADD COLUMN IF NOT EXISTS ${colDef}`
+								yield* execClickHouse(config, alter)
+								addedColumns.push(drift.column)
+							}),
+						{ concurrency: 1, discard: true },
+					)
 
-					const remainingIssues =
-						typeMismatches.length + unresolvableAdds.length
+					const remainingIssues = typeMismatches.length + unresolvableAdds.length
 					if (remainingIssues === 0) {
 						applied.push(entry.name)
 						fullyResolvedDrift.add(entry.name)

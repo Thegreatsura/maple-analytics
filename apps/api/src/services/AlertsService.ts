@@ -2827,54 +2827,52 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
 				)
 			})
 
-			const recoverDeliveryFailure = (
+			const recoverDeliveryFailure = Effect.fnUntraced(function* (
 				row: AlertDeliveryEventRow,
 				error: AlertValidationError | AlertDeliveryError | AlertPersistenceError,
-			) => {
+			) {
 				const failure = toDeliveryAttemptFailure(error)
 				failureCount += 1
-				return Effect.gen(function* () {
-					yield* Metric.update(AlertingMetrics.deliveriesFailedTotal, 1)
-					yield* finalizeClaimedDelivery(row.id, currentTime, {
-						status: "failed",
-						attemptedAt: currentTime,
-						errorMessage: failure.message,
-					})
-
-					if (failure.retryable && row.attemptNumber < MAX_DELIVERY_ATTEMPTS) {
-						// Carry the original delivery payload through the retry. Empty
-						// payloads here would force the next attempt to fall back on
-						// rule-row defaults, losing observed value, sample count,
-						// dedupe context, and links.
-						const retryPayload = (yield* parseDeliveryPayload(row.payloadJson).pipe(
-							Effect.orElseSucceed(() => ({})),
-						)) as Record<string, unknown>
-						yield* insertDeliveryEvent(
-							row.orgId as OrgId,
-							row.incidentId ? decodeAlertIncidentIdSync(row.incidentId) : null,
-							decodeAlertRuleIdSync(row.ruleId),
-							decodeAlertDestinationIdSync(row.destinationId),
-							decodeAlertEventTypeSync(row.eventType),
-							retryPayload,
-							currentTime + (yield* computeRetryDelayMs(row.attemptNumber)),
-							row.deliveryKey,
-							row.attemptNumber + 1,
-						)
-					}
-
-					yield* Effect.logWarning("Alert delivery attempt failed").pipe(
-						Effect.annotateLogs({
-							workerId,
-							deliveryKey: row.deliveryKey,
-							attemptNumber: row.attemptNumber,
-							destinationId: row.destinationId,
-							failureKind: failure.kind,
-							errorMessage: failure.message,
-							willRetry: failure.retryable && row.attemptNumber < MAX_DELIVERY_ATTEMPTS,
-						}),
-					)
+				yield* Metric.update(AlertingMetrics.deliveriesFailedTotal, 1)
+				yield* finalizeClaimedDelivery(row.id, currentTime, {
+					status: "failed",
+					attemptedAt: currentTime,
+					errorMessage: failure.message,
 				})
-			}
+
+				if (failure.retryable && row.attemptNumber < MAX_DELIVERY_ATTEMPTS) {
+					// Carry the original delivery payload through the retry. Empty
+					// payloads here would force the next attempt to fall back on
+					// rule-row defaults, losing observed value, sample count,
+					// dedupe context, and links.
+					const retryPayload = (yield* parseDeliveryPayload(row.payloadJson).pipe(
+						Effect.orElseSucceed(() => ({})),
+					)) as Record<string, unknown>
+					yield* insertDeliveryEvent(
+						row.orgId as OrgId,
+						row.incidentId ? decodeAlertIncidentIdSync(row.incidentId) : null,
+						decodeAlertRuleIdSync(row.ruleId),
+						decodeAlertDestinationIdSync(row.destinationId),
+						decodeAlertEventTypeSync(row.eventType),
+						retryPayload,
+						currentTime + (yield* computeRetryDelayMs(row.attemptNumber)),
+						row.deliveryKey,
+						row.attemptNumber + 1,
+					)
+				}
+
+				yield* Effect.logWarning("Alert delivery attempt failed").pipe(
+					Effect.annotateLogs({
+						workerId,
+						deliveryKey: row.deliveryKey,
+						attemptNumber: row.attemptNumber,
+						destinationId: row.destinationId,
+						failureKind: failure.kind,
+						errorMessage: failure.message,
+						willRetry: failure.retryable && row.attemptNumber < MAX_DELIVERY_ATTEMPTS,
+					}),
+				)
+			})
 
 			yield* Effect.forEach(rows, (row) =>
 				processOneDelivery(row).pipe(
@@ -3435,7 +3433,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
 			let evaluationFailureCount = 0
 			const pendingChecks = yield* Ref.make<AlertChecksRow[]>([])
 
-			const recordEvaluationFailure = (
+			const recordEvaluationFailure = Effect.fnUntraced(function* (
 				row: AlertRuleRow,
 				error:
 					| AlertValidationError
@@ -3450,24 +3448,22 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
 					readonly quotaSetting?: string
 					readonly pipe?: string
 				},
-			) => {
+			) {
 				evaluationFailureCount += 1
-				return Effect.gen(function* () {
-					yield* Metric.update(AlertingMetrics.evaluationFailuresTotal, 1)
-					yield* Effect.logError("Alert rule evaluation failed").pipe(
-						Effect.annotateLogs({
-							workerId,
-							ruleId: row.id,
-							orgId: row.orgId,
-							failureCategory,
-							errorMessage: error.message,
-							upstreamStatus: fields?.upstreamStatus,
-							quotaSetting: fields?.quotaSetting,
-							pipe: fields?.pipe,
-						}),
-					)
-				})
-			}
+				yield* Metric.update(AlertingMetrics.evaluationFailuresTotal, 1)
+				yield* Effect.logError("Alert rule evaluation failed").pipe(
+					Effect.annotateLogs({
+						workerId,
+						ruleId: row.id,
+						orgId: row.orgId,
+						failureCategory,
+						errorMessage: error.message,
+						upstreamStatus: fields?.upstreamStatus,
+						quotaSetting: fields?.quotaSetting,
+						pipe: fields?.pipe,
+					}),
+				)
+			})
 
 			yield* Effect.forEach(
 				rows,

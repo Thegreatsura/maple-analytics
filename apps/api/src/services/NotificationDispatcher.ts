@@ -1,6 +1,7 @@
 import type { AlertDestinationRow } from "@maple/db"
 import { alertDestinations } from "@maple/db"
 import {
+	AlertDeliveryError,
 	type AlertComparator,
 	type AlertDestinationId,
 	type AlertEventType,
@@ -90,9 +91,12 @@ export class NotificationDispatcher extends Context.Service<
 		const dispatchOne = (row: AlertDestinationRow, request: NotificationRequest) =>
 			Effect.gen(function* () {
 				const hydrated = yield* hydrateDestinationRow(row, encryptionKey, {
-					onPublicConfigInvalid: () => new Error("Stored destination config is invalid"),
-					onDecryptFailure: () => new Error("Failed to decrypt destination secret"),
-					onSecretConfigInvalid: () => new Error("Stored destination secret is invalid"),
+					onPublicConfigInvalid: () =>
+						new NotificationDispatchError({ message: "Stored destination config is invalid" }),
+					onDecryptFailure: () =>
+						new NotificationDispatchError({ message: "Failed to decrypt destination secret" }),
+					onSecretConfigInvalid: () =>
+						new NotificationDispatchError({ message: "Stored destination secret is invalid" }),
 				})
 				const enrichedSecret = yield* enrichSecretConfig(row, hydrated.secretConfig)
 				const context: DispatchContext = {
@@ -176,7 +180,9 @@ export class NotificationDispatcher extends Context.Service<
 								Effect.annotateLogs({ orgId, message: error.message }),
 							),
 						),
-						Effect.catch(() => Effect.succeed([] as Array<AlertDestinationRow>)),
+						Effect.catchTag("@maple/api/lib/DatabaseError", () =>
+							Effect.succeed([] as Array<AlertDestinationRow>),
+						),
 					)
 
 				const enabled = rows.filter((row) => row.enabled === 1)
@@ -196,7 +202,12 @@ export class NotificationDispatcher extends Context.Service<
 									}),
 								),
 							),
-							Effect.catch(() => Effect.succeed("failed" as const)),
+							Effect.catchTags({
+								"@maple/api/services/NotificationDispatchError": () =>
+									Effect.succeed("failed" as const),
+								"@maple/http/errors/AlertDeliveryError": () =>
+									Effect.succeed("failed" as const),
+							}),
 						),
 					{ concurrency: "unbounded" },
 				)

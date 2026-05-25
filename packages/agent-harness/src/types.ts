@@ -19,7 +19,7 @@ export interface AgentToolDefinition {
 	readonly name: string
 	readonly description: string
 	readonly schema: Schema.Decoder<unknown, never>
-	readonly execute: (params: unknown) => Effect.Effect<AgentToolResult, unknown, any>
+	readonly execute: (params: unknown) => Effect.Effect<AgentToolResult, AgentHarnessError, any>
 }
 
 export interface AgentToolRegistrar {
@@ -27,7 +27,7 @@ export interface AgentToolRegistrar {
 		name: string,
 		description: string,
 		schema: TSchema,
-		handler: (params: TSchema["Type"]) => Effect.Effect<AgentToolResult, unknown, any>,
+		handler: (params: TSchema["Type"]) => Effect.Effect<AgentToolResult, AgentHarnessError, any>,
 	): void
 }
 

@@ -434,8 +434,7 @@ export class TinybirdProjectSync extends Context.Service<TinybirdProjectSync, Ti
 							Effect.tryPromise({
 								try: () =>
 									api.request(`/v1/deployments/${deployment.id}`, { method: "DELETE" }),
-								catch: (error) =>
-									error instanceof Error ? error : new Error(String(error)),
+								catch: (error) => (error instanceof Error ? error : new Error(String(error))),
 							}).pipe(
 								Effect.tapError((error) =>
 									Effect.logWarning("Tinybird stale-deployment cleanup failed").pipe(
@@ -739,7 +738,7 @@ export class TinybirdProjectSync extends Context.Service<TinybirdProjectSync, Ti
 // ---------------------------------------------------------------------------
 
 const provideSync = <A, E>(effect: Effect.Effect<A, E, TinybirdProjectSync>): Promise<A> =>
-	Effect.runPromise(effect.pipe(Effect.provide(TinybirdProjectSync.layer)))
+	Effect.runPromise(Effect.provide(effect, TinybirdProjectSync.layer))
 
 export const cleanupStaleTinybirdDeployments = (params: TinybirdProjectSyncParams): Promise<void> =>
 	provideSync(TinybirdProjectSync.cleanupStaleDeployments(params))

@@ -262,8 +262,8 @@ const slicePointsFromBuckets = (
 
 // --- Service -------------------------------------------------------------
 
-interface DeferredAwaiter {
-	readonly await: Effect.Effect<BucketCacheOutcome, unknown>
+interface DeferredAwaiter<E = unknown> {
+	readonly await: Effect.Effect<BucketCacheOutcome, E>
 }
 
 export interface BucketCacheServiceShape {
@@ -290,7 +290,7 @@ export class BucketCacheService extends Context.Service<BucketCacheService, Buck
 			// Heterogeneous in-flight map. Each entry stores a pre-typed awaiter so
 			// callers never need to cast Deferred<any, any>. The error channel is
 			// `unknown` here; callers re-narrow it when awaiting.
-			const inFlight = new Map<string, DeferredAwaiter>()
+			const inFlight = new Map<string, DeferredAwaiter<any>>()
 
 			const fingerprintRange = (ranges: ReadonlyArray<TimeRange>): string => {
 				const sorted = [...ranges].sort((a, b) =>
@@ -299,187 +299,171 @@ export class BucketCacheService extends Context.Service<BucketCacheService, Buck
 				return sorted.map((r) => `${r.startMs}-${r.endMs}`).join(",")
 			}
 
-			const getOrComputeBuckets = <E, R>(
+			const getOrComputeBuckets = Effect.fn("BucketCacheService.getOrComputeBuckets")(function* <E, R>(
 				request: BucketCacheRequest,
 				computeRange: (range: TimeRange) => Effect.Effect<ReadonlyArray<TimeseriesPoint>, E, R>,
-			): Effect.Effect<BucketCacheOutcome, E, R> =>
-				Effect.gen(function* () {
-					const bucketMs = request.bucketSeconds * 1000
-					const fluxBoundaryMs = (yield* Clock.currentTimeMillis) - fluxSeconds * 1000
+			) {
+				const bucketMs = request.bucketSeconds * 1000
+				const fluxBoundaryMs = (yield* Clock.currentTimeMillis) - fluxSeconds * 1000
 
-					const fingerprint = yield* Effect.promise(() =>
-						generateFingerprint(request.orgId, request.query, request.bucketSeconds),
+				const fingerprint = yield* Effect.promise(() =>
+					generateFingerprint(request.orgId, request.query, request.bucketSeconds),
+				)
+				const cacheKey = `v${CACHE_VERSION}:${request.orgId}:${fingerprint}`
+
+				yield* Effect.annotateCurrentSpan("cache.fingerprint", fingerprint.slice(0, 12))
+				yield* Effect.annotateCurrentSpan("orgId", request.orgId)
+				yield* Effect.annotateCurrentSpan("cache.bucketSeconds", request.bucketSeconds)
+				yield* Effect.annotateCurrentSpan("cache.rangeMs", request.endMs - request.startMs)
+
+				// Cache read is best-effort: a read failure is logged and treated as
+				// a miss rather than failing the user's query.
+				const cached = yield* edgeCache
+					.rawGet<BucketedCacheData>(BUCKET_CACHE_NAMESPACE, cacheKey)
+					.pipe(
+						Effect.tapError((error) =>
+							Effect.logWarning("Bucket cache read failed").pipe(
+								Effect.annotateLogs({
+									fingerprint: fingerprint.slice(0, 12),
+									orgId: request.orgId,
+									error: error.cause,
+								}),
+							),
+						),
+						Effect.orElseSucceed(() => Option.none<BucketedCacheData>()),
 					)
-					const cacheKey = `v${CACHE_VERSION}:${request.orgId}:${fingerprint}`
 
-					yield* Effect.annotateCurrentSpan("cache.fingerprint", fingerprint.slice(0, 12))
+				const existingBuckets = Option.match(cached, {
+					onNone: () => EMPTY_BUCKETS,
+					onSome: (data) =>
+						data.version === CACHE_VERSION && data.bucketSeconds === request.bucketSeconds
+							? data.buckets
+							: EMPTY_BUCKETS,
+				})
 
-					// Cache read is best-effort: a read failure is logged and treated as
-					// a miss rather than failing the user's query.
-					const cached = yield* edgeCache
-						.rawGet<BucketedCacheData>(BUCKET_CACHE_NAMESPACE, cacheKey)
-						.pipe(
+				const missing = findMissingRanges(
+					existingBuckets,
+					request.startMs,
+					request.endMs,
+					bucketMs,
+					fluxBoundaryMs,
+				)
+
+				yield* Effect.log(
+					`[bucket-cache] fp=${fingerprint.slice(0, 8)} bucketSeconds=${request.bucketSeconds} cachedBuckets=${existingBuckets.length} missing=${missing.length}`,
+				)
+
+				if (missing.length === 0) {
+					return {
+						points: slicePointsFromBuckets(existingBuckets, request.startMs, request.endMs),
+						bucketsHit: existingBuckets.length,
+						bucketsMissed: 0,
+						missingRangeCount: 0,
+					}
+				}
+
+				// In-flight dedup keyed by fingerprint + the set of missing ranges.
+				const composite = `${fingerprint}|${fingerprintRange(missing.map((m) => m.range))}`
+				const existingAwaiter = inFlight.get(composite)
+				if (existingAwaiter) {
+					yield* Effect.annotateCurrentSpan("cache.dedup.waited", true)
+					return (yield* existingAwaiter.await) as BucketCacheOutcome
+				}
+
+				const deferred = yield* Deferred.make<BucketCacheOutcome, E>()
+				inFlight.set(composite, {
+					await: Deferred.await(deferred),
+				})
+
+				const fillMissingRanges = Effect.gen(function* () {
+					const freshByRange = yield* Effect.forEach(missing, (m) => computeRange(m.range), {
+						concurrency: "unbounded",
+					})
+
+					const rangeResults = Arr.zip(missing, freshByRange)
+
+					const freshCachableBuckets = Arr.flatMap(rangeResults, ([m, rangePoints]) =>
+						m.cachable ? Array.from(pointsToBuckets(rangePoints, bucketMs, fluxBoundaryMs)) : [],
+					)
+
+					const merged = mergeAndDeduplicateBuckets(existingBuckets, freshCachableBuckets)
+
+					if (freshCachableBuckets.length > 0) {
+						const payload: BucketedCacheData = {
+							version: CACHE_VERSION,
+							fingerprint,
+							bucketSeconds: request.bucketSeconds,
+							buckets: merged,
+						}
+						// Cache write is best-effort: a write failure is logged but does
+						// not fail the user's query.
+						yield* edgeCache.rawPut(BUCKET_CACHE_NAMESPACE, cacheKey, payload, ttlSeconds).pipe(
 							Effect.tapError((error) =>
-								Effect.logWarning("Bucket cache read failed").pipe(
+								Effect.logWarning("Bucket cache write failed").pipe(
 									Effect.annotateLogs({
 										fingerprint: fingerprint.slice(0, 12),
 										orgId: request.orgId,
+										bucketCount: merged.length,
 										error: error.cause,
 									}),
 								),
 							),
-							Effect.orElseSucceed(() => Option.none<BucketedCacheData>()),
+							Effect.ignore,
 						)
-
-					const existingBuckets = Option.match(cached, {
-						onNone: () => EMPTY_BUCKETS,
-						onSome: (data) =>
-							data.version === CACHE_VERSION && data.bucketSeconds === request.bucketSeconds
-								? data.buckets
-								: EMPTY_BUCKETS,
-					})
-
-					const missing = findMissingRanges(
-						existingBuckets,
-						request.startMs,
-						request.endMs,
-						bucketMs,
-						fluxBoundaryMs,
-					)
-
-					yield* Effect.log(
-						`[bucket-cache] fp=${fingerprint.slice(0, 8)} bucketSeconds=${request.bucketSeconds} cachedBuckets=${existingBuckets.length} missing=${missing.length}`,
-					)
-
-					if (missing.length === 0) {
-						return {
-							points: slicePointsFromBuckets(existingBuckets, request.startMs, request.endMs),
-							bucketsHit: existingBuckets.length,
-							bucketsMissed: 0,
-							missingRangeCount: 0,
-						}
 					}
 
-					// In-flight dedup keyed by fingerprint + the set of missing ranges.
-					const composite = `${fingerprint}|${fingerprintRange(missing.map((m) => m.range))}`
-					const existingAwaiter = inFlight.get(composite)
-					if (existingAwaiter) {
-						yield* Effect.annotateCurrentSpan("cache.dedup.waited", true)
-						return yield* existingAwaiter.await as Effect.Effect<BucketCacheOutcome, E>
+					const liveTailPoints = Arr.flatMap(rangeResults, ([m, rangePoints]) =>
+						m.cachable
+							? []
+							: rangePoints.filter((point) => {
+									const ms = parseWarehouseDateTime(point.bucket)
+									return !Number.isNaN(ms) && ms >= request.startMs && ms < request.endMs
+								}),
+					)
+
+					const freshCachedPoints = slicePointsFromBuckets(merged, request.startMs, request.endMs)
+
+					const seen = new Set<string>()
+					const combined: TimeseriesPoint[] = []
+					for (const point of freshCachedPoints) {
+						if (seen.has(point.bucket)) continue
+						seen.add(point.bucket)
+						combined.push(point)
 					}
+					for (const point of liveTailPoints) {
+						if (seen.has(point.bucket)) continue
+						seen.add(point.bucket)
+						combined.push(point)
+					}
+					combined.sort((a, b) => (a.bucket < b.bucket ? -1 : a.bucket > b.bucket ? 1 : 0))
 
-					const deferred = yield* Deferred.make<BucketCacheOutcome, E>()
-					inFlight.set(composite, {
-						await: Deferred.await(deferred) as Effect.Effect<BucketCacheOutcome, unknown>,
-					})
-
-					const fillMissingRanges = Effect.gen(function* () {
-						const freshByRange = yield* Effect.forEach(missing, (m) => computeRange(m.range), {
-							concurrency: "unbounded",
-						})
-
-						const rangeResults = Arr.zip(missing, freshByRange)
-
-						const freshCachableBuckets = Arr.flatMap(rangeResults, ([m, rangePoints]) =>
-							m.cachable
-								? Array.from(pointsToBuckets(rangePoints, bucketMs, fluxBoundaryMs))
-								: [],
-						)
-
-						const merged = mergeAndDeduplicateBuckets(existingBuckets, freshCachableBuckets)
-
-						if (freshCachableBuckets.length > 0) {
-							const payload: BucketedCacheData = {
-								version: CACHE_VERSION,
-								fingerprint,
-								bucketSeconds: request.bucketSeconds,
-								buckets: merged,
-							}
-							// Cache write is best-effort: a write failure is logged but does
-							// not fail the user's query.
-							yield* edgeCache
-								.rawPut(BUCKET_CACHE_NAMESPACE, cacheKey, payload, ttlSeconds)
-								.pipe(
-									Effect.tapError((error) =>
-										Effect.logWarning("Bucket cache write failed").pipe(
-											Effect.annotateLogs({
-												fingerprint: fingerprint.slice(0, 12),
-												orgId: request.orgId,
-												bucketCount: merged.length,
-												error: error.cause,
-											}),
-										),
-									),
-									Effect.ignore,
-								)
-						}
-
-						const liveTailPoints = Arr.flatMap(rangeResults, ([m, rangePoints]) =>
-							m.cachable
-								? []
-								: rangePoints.filter((point) => {
-										const ms = parseWarehouseDateTime(point.bucket)
-										return (
-											!Number.isNaN(ms) && ms >= request.startMs && ms < request.endMs
-										)
-									}),
-						)
-
-						const freshCachedPoints = slicePointsFromBuckets(
-							merged,
-							request.startMs,
-							request.endMs,
-						)
-
-						const seen = new Set<string>()
-						const combined: TimeseriesPoint[] = []
-						for (const point of freshCachedPoints) {
-							if (seen.has(point.bucket)) continue
-							seen.add(point.bucket)
-							combined.push(point)
-						}
-						for (const point of liveTailPoints) {
-							if (seen.has(point.bucket)) continue
-							seen.add(point.bucket)
-							combined.push(point)
-						}
-						combined.sort((a, b) => (a.bucket < b.bucket ? -1 : a.bucket > b.bucket ? 1 : 0))
-
-						return {
-							points: combined,
-							bucketsHit: existingBuckets.length,
-							bucketsMissed: freshCachableBuckets.length,
-							missingRangeCount: missing.length,
-						} satisfies BucketCacheOutcome
-					}).pipe(
-						Effect.withSpan("BucketCacheService.fillMissingRanges", {
-							attributes: {
-								"cache.missingRangeCount": missing.length,
-								"cache.existingBucketCount": existingBuckets.length,
-							},
-						}),
-					)
-
-					const outcome = yield* fillMissingRanges.pipe(
-						Effect.tap((value) => Deferred.succeed(deferred, value)),
-						Effect.tapError((error) => Deferred.fail(deferred, error)),
-						Effect.onInterrupt(() => Deferred.interrupt(deferred)),
-						Effect.ensuring(
-							Effect.sync(() => {
-								inFlight.delete(composite)
-							}),
-						),
-					)
-					return outcome
+					return {
+						points: combined,
+						bucketsHit: existingBuckets.length,
+						bucketsMissed: freshCachableBuckets.length,
+						missingRangeCount: missing.length,
+					} satisfies BucketCacheOutcome
 				}).pipe(
-					Effect.withSpan("BucketCacheService.getOrComputeBuckets", {
+					Effect.withSpan("BucketCacheService.fillMissingRanges", {
 						attributes: {
-							orgId: request.orgId,
-							"cache.bucketSeconds": request.bucketSeconds,
-							"cache.rangeMs": request.endMs - request.startMs,
+							"cache.missingRangeCount": missing.length,
+							"cache.existingBucketCount": existingBuckets.length,
 						},
 					}),
 				)
+
+				const outcome = yield* fillMissingRanges.pipe(
+					Effect.tap((value) => Deferred.succeed(deferred, value)),
+					Effect.tapError((error) => Deferred.fail(deferred, error)),
+					Effect.onInterrupt(() => Deferred.interrupt(deferred)),
+					Effect.ensuring(
+						Effect.sync(() => {
+							inFlight.delete(composite)
+						}),
+					),
+				)
+				return outcome
+			})
 
 			return {
 				enabled,

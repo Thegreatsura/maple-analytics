@@ -10,7 +10,7 @@ import * as Effect from "effect/Effect"
 import * as Stream from "effect/Stream"
 import { WorkerEnvironment } from "./worker-environment.ts"
 
-export class R2Error extends Data.TaggedError("R2Error")<{
+export class R2Error extends Data.TaggedError("@maple/effect-cloudflare/R2Error")<{
 	message: string
 	cause: unknown
 }> {}

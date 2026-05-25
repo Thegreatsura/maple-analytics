@@ -82,7 +82,9 @@ export const CoreServicesLive = Layer.mergeAll(
 
 export const DemoServiceLive = DemoService.layer.pipe(Layer.provideMerge(CoreServicesLive))
 
-export const WarehouseQueryServiceLive = WarehouseQueryService.layer.pipe(Layer.provideMerge(CoreServicesLive))
+export const WarehouseQueryServiceLive = WarehouseQueryService.layer.pipe(
+	Layer.provideMerge(CoreServicesLive),
+)
 
 export const BucketCacheServiceLive = BucketCacheService.layer.pipe(
 	Layer.provideMerge(EdgeCacheService.layer),
@@ -103,7 +105,9 @@ export const NotificationDispatcherLive = NotificationDispatcher.layer.pipe(
 )
 
 export const ErrorsServiceLive = ErrorsService.layer.pipe(
-	Layer.provideMerge(Layer.mergeAll(CoreServicesLive, WarehouseQueryServiceLive, NotificationDispatcherLive)),
+	Layer.provideMerge(
+		Layer.mergeAll(CoreServicesLive, WarehouseQueryServiceLive, NotificationDispatcherLive),
+	),
 )
 
 export const EmailServiceLive = EmailService.layer.pipe(Layer.provide(Env.layer))
@@ -171,9 +175,9 @@ export const ApiAuthLive = ApiAuthorizationLayer.pipe(
 	Layer.provideMerge(Env.layer),
 )
 
-// The OTLP tracer/logger is built per-request in worker.ts and injected via
-// `handler(request, services)`. The shared layer only installs the
-// `TracerDisabledWhen` filter, which is a ServiceMap.Reference read by
+// The OTLP tracer/logger is constructed once at worker module scope and
+// provided to the same runtime as the routes. This shared layer only installs
+// the `TracerDisabledWhen` filter, which is a ServiceMap.Reference read by
 // HttpMiddleware regardless of which Tracer is active.
 export const ApiObservabilityLive = Layer.succeed(
 	HttpMiddleware.TracerDisabledWhen,

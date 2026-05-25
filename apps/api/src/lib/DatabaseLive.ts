@@ -6,7 +6,7 @@ export type DatabaseTransaction = Parameters<Parameters<DatabaseClient["transact
 
 export type AnyDatabaseClient = MapleLibsqlClient | MapleD1Client
 
-export class DatabaseError extends Schema.TaggedErrorClass<DatabaseError>()("DatabaseError", {
+export class DatabaseError extends Schema.TaggedErrorClass<DatabaseError>()("@maple/api/lib/DatabaseError", {
 	message: Schema.String,
 	cause: Schema.Unknown,
 }) {}

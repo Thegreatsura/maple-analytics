@@ -1,6 +1,6 @@
 import { Data, Effect } from "effect"
 
-export class UrlValidationError extends Data.TaggedError("UrlValidationError")<{
+export class UrlValidationError extends Data.TaggedError("@maple/api/lib/UrlValidationError")<{
 	readonly message: string
 	readonly url?: string
 }> {}

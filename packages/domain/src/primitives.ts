@@ -114,12 +114,11 @@ export const AuthMode = Schema.Literals(["clerk", "self_hosted"]).annotate({
 })
 export type AuthMode = Schema.Schema.Type<typeof AuthMode>
 
-export const IsoDateTimeString = Schema.String.pipe(
-	Schema.check(
-		Schema.makeFilter((value: string) => Number.isFinite(Date.parse(value)), {
-			description: "Expected an ISO date-time string",
-		}),
-	),
+export const IsoDateTimeString = Schema.String.check(
+	Schema.makeFilter((value: string) => Number.isFinite(Date.parse(value)), {
+		description: "Expected an ISO date-time string",
+	}),
+).pipe(
 	Schema.brand("@maple/IsoDateTimeString"),
 	Schema.annotate({
 		identifier: "@maple/IsoDateTimeString",
@@ -128,8 +127,11 @@ export const IsoDateTimeString = Schema.String.pipe(
 )
 export type IsoDateTimeString = Schema.Schema.Type<typeof IsoDateTimeString>
 
-export const ScrapeIntervalSeconds = Schema.Number.pipe(
-	Schema.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(5), Schema.isLessThanOrEqualTo(300)),
+export const ScrapeIntervalSeconds = Schema.Number.check(
+	Schema.isInt(),
+	Schema.isGreaterThanOrEqualTo(5),
+	Schema.isLessThanOrEqualTo(300),
+).pipe(
 	Schema.brand("@maple/ScrapeIntervalSeconds"),
 	Schema.annotate({
 		identifier: "@maple/ScrapeIntervalSeconds",

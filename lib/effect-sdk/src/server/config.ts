@@ -37,14 +37,13 @@ export const serviceVersion = Config.option(
 /**
  * Resolve deployment environment from platform-specific env vars.
  *
- * Priority: MAPLE_ENVIRONMENT > RAILWAY_ENVIRONMENT > VERCEL_ENV > NODE_ENV
+ * Priority: MAPLE_ENVIRONMENT > RAILWAY_ENVIRONMENT_NAME > DEPLOYMENT_ENV
+ *         > "development"
  */
-export const environment = Config.option(
-	Config.string("MAPLE_ENVIRONMENT").pipe(
-		Config.orElse(() => Config.string("RAILWAY_ENVIRONMENT")),
-		Config.orElse(() => Config.string("VERCEL_ENV")),
-		Config.orElse(() => Config.string("NODE_ENV")),
-	),
+export const environment = Config.string("MAPLE_ENVIRONMENT").pipe(
+	Config.orElse(() => Config.string("RAILWAY_ENVIRONMENT_NAME")),
+	Config.orElse(() => Config.string("DEPLOYMENT_ENV")),
+	Config.withDefault("development"),
 )
 
 /** OTel-standard service name override. */

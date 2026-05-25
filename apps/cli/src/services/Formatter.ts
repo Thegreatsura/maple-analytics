@@ -23,10 +23,14 @@ export const printTable = (opts: { headers: string[]; rows: string[][]; title?: 
 		yield* Console.log(`  ${widths.map((w) => "─".repeat(w)).join("  ")}`)
 
 		// Rows
-		for (const row of rows) {
-			const line = row.map((cell, i) => (cell ?? "").padEnd(widths[i]!)).join("  ")
-			yield* Console.log(`  ${line}`)
-		}
+		yield* Effect.forEach(
+			rows,
+			(row) => {
+				const line = row.map((cell, i) => (cell ?? "").padEnd(widths[i]!)).join("  ")
+				return Console.log(`  ${line}`)
+			},
+			{ concurrency: 1, discard: true },
+		)
 
 		if (summary) {
 			yield* Console.log(`\n  ${summary}`)

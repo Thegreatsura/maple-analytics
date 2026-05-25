@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import type { QuerySpec } from "@maple/query-engine"
 import { __testables } from "@/api/warehouse/query-builder-timeseries"
@@ -141,16 +141,16 @@ describe("query-builder timeseries strategy", () => {
 		expect(fallback.bucketSeconds).toBe(3600)
 	})
 
-	it("continues fallback execution after an error and recomputes window buckets", async () => {
-		const spec: QuerySpec = {
-			kind: "timeseries",
-			source: "traces",
-			metric: "count",
-		}
+	it.effect("continues fallback execution after an error and recomputes window buckets", () =>
+		Effect.gen(function* () {
+			const spec: QuerySpec = {
+				kind: "timeseries",
+				source: "traces",
+				metric: "count",
+			}
 
-		const seenBucketSeconds: number[] = []
-		const result = await Effect.runPromise(
-			__testables.executeTimeseriesQueryWithFallbackUsing(
+			const seenBucketSeconds: number[] = []
+			const result = yield* __testables.executeTimeseriesQueryWithFallbackUsing(
 				"2026-01-02 00:00:00",
 				"2026-01-02 01:00:00",
 				spec,
@@ -186,20 +186,20 @@ describe("query-builder timeseries strategy", () => {
 							},
 						]
 					}),
-			),
-		)
+			)
 
-		expect(seenBucketSeconds).toEqual([300, 3600, 14400])
-		expect(result.fallbackUsed).toBe(true)
-		expect(result.attempts).toHaveLength(3)
-		expect(result.attempts[1].error).toContain("too expensive")
-		expect(result.points).toEqual([
-			{
-				bucket: "2026-01-01T00:00:00.000Z",
-				series: { total: 5 },
-			},
-		])
-	})
+			expect(seenBucketSeconds).toEqual([300, 3600, 14400])
+			expect(result.fallbackUsed).toBe(true)
+			expect(result.attempts).toHaveLength(3)
+			expect(result.attempts[1].error).toContain("too expensive")
+			expect(result.points).toEqual([
+				{
+					bucket: "2026-01-01T00:00:00.000Z",
+					series: { total: 5 },
+				},
+			])
+		}),
+	)
 
 	it("uses the shared coarse auto bucket ladder", () => {
 		expect(__testables.computeAutoBucketSeconds("2026-01-01 00:00:00", "2026-01-01 00:30:00")).toBe(300)

@@ -31,14 +31,14 @@ const makeLibsqlDatabase = Effect.gen(function* () {
 		authToken: dbConfig.authToken,
 	})
 
-	return {
+	return Database.of({
 		client,
 		execute: <T>(fn: (db: DatabaseClient) => Promise<T>) =>
 			Effect.tryPromise({
 				try: () => fn(client),
 				catch: toDatabaseError,
 			}),
-	} satisfies DatabaseShape
+	} satisfies DatabaseShape)
 })
 
 export const DatabaseLibsqlLive = Layer.effect(Database, makeLibsqlDatabase)

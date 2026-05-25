@@ -35,14 +35,14 @@ const makeD1Database = Effect.gen(function* () {
 		Effect.orDie,
 	)
 
-	return {
+	return Database.of({
 		client,
 		execute: <T>(fn: (db: DatabaseClient) => Promise<T>) =>
 			Effect.tryPromise({
 				try: () => fn(client),
 				catch: toDatabaseError,
 			}),
-	} satisfies DatabaseShape
+	} satisfies DatabaseShape)
 })
 
 export const DatabaseD1Live = Layer.effect(Database, makeD1Database)

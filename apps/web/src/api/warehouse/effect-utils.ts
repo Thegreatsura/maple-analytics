@@ -13,7 +13,7 @@ import { mapleApiClientLayer } from "@/lib/registry"
 export const WarehouseDateTimeString = TinybirdDateTime
 
 export class WarehouseDecodeError extends Schema.TaggedErrorClass<WarehouseDecodeError>()(
-	"WarehouseDecodeError",
+	"@maple/web/api/warehouse/WarehouseDecodeError",
 	{
 		operation: Schema.String,
 		message: Schema.String,
@@ -21,14 +21,17 @@ export class WarehouseDecodeError extends Schema.TaggedErrorClass<WarehouseDecod
 	},
 ) {}
 
-export class WarehouseQueryError extends Schema.TaggedErrorClass<WarehouseQueryError>()("WarehouseQueryError", {
-	operation: Schema.String,
-	message: Schema.String,
-	cause: Schema.optional(Schema.Unknown),
-}) {}
+export class WarehouseQueryError extends Schema.TaggedErrorClass<WarehouseQueryError>()(
+	"@maple/web/api/warehouse/WarehouseQueryError",
+	{
+		operation: Schema.String,
+		message: Schema.String,
+		cause: Schema.optional(Schema.Unknown),
+	},
+) {}
 
 export class WarehouseTransformError extends Schema.TaggedErrorClass<WarehouseTransformError>()(
-	"WarehouseTransformError",
+	"@maple/web/api/warehouse/WarehouseTransformError",
 	{
 		operation: Schema.String,
 		message: Schema.String,
@@ -37,7 +40,7 @@ export class WarehouseTransformError extends Schema.TaggedErrorClass<WarehouseTr
 ) {}
 
 export class WarehouseInvalidInputError extends Schema.TaggedErrorClass<WarehouseInvalidInputError>()(
-	"WarehouseInvalidInputError",
+	"@maple/web/api/warehouse/WarehouseInvalidInputError",
 	{
 		operation: Schema.String,
 		message: Schema.String,
@@ -89,7 +92,7 @@ export function decodeInput<S extends Schema.Top & { readonly DecodingServices: 
 
 export function runWarehouseQuery<A>(
 	operation: string,
-	execute: () => Effect.Effect<A, unknown, MapleApiAtomClient>,
+	execute: () => Effect.Effect<A, WarehouseApiError | BackendError, MapleApiAtomClient>,
 ): Effect.Effect<A, WarehouseApiError | BackendError> {
 	return Effect.suspend(execute).pipe(
 		Effect.withSpan(operation),

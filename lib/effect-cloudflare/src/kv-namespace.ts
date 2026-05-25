@@ -14,7 +14,7 @@ import * as Data from "effect/Data"
 import * as Effect from "effect/Effect"
 import { WorkerEnvironment } from "./worker-environment.ts"
 
-export class KVNamespaceError extends Data.TaggedError("KVNamespaceError")<{
+export class KVNamespaceError extends Data.TaggedError("@maple/effect-cloudflare/KVNamespaceError")<{
 	message: string
 	cause: unknown
 }> {}

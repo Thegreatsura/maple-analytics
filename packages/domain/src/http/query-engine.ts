@@ -1,5 +1,6 @@
 import { HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 import { Schema } from "effect"
+import { SpanId, TraceId } from "../primitives"
 import { QueryEngineExecuteRequest, QueryEngineExecuteResponse, TinybirdDateTime } from "../query-engine"
 import { Authorization } from "./current-tenant"
 import { WarehouseQueryError, WarehouseQuotaExceededError } from "./warehouse"
@@ -9,8 +10,8 @@ import { WarehouseQueryError, WarehouseQuotaExceededError } from "./warehouse"
 // ---------------------------------------------------------------------------
 
 export class SpanHierarchyRequest extends Schema.Class<SpanHierarchyRequest>("SpanHierarchyRequest")({
-	traceId: Schema.String,
-	spanId: Schema.optional(Schema.String),
+	traceId: TraceId,
+	spanId: Schema.optional(SpanId),
 	startTime: Schema.optional(TinybirdDateTime),
 	endTime: Schema.optional(TinybirdDateTime),
 }) {}
@@ -18,8 +19,8 @@ export class SpanHierarchyRequest extends Schema.Class<SpanHierarchyRequest>("Sp
 export class SpanHierarchyResponse extends Schema.Class<SpanHierarchyResponse>("SpanHierarchyResponse")({
 	data: Schema.Array(
 		Schema.Struct({
-			traceId: Schema.String,
-			spanId: Schema.String,
+			traceId: TraceId,
+			spanId: SpanId,
 			parentSpanId: Schema.String,
 			spanName: Schema.String,
 			serviceName: Schema.String,
@@ -35,8 +36,8 @@ export class SpanHierarchyResponse extends Schema.Class<SpanHierarchyResponse>("
 }) {}
 
 export class SpanDetailRequest extends Schema.Class<SpanDetailRequest>("SpanDetailRequest")({
-	traceId: Schema.String,
-	spanId: Schema.String,
+	traceId: TraceId,
+	spanId: SpanId,
 	startTime: Schema.optional(TinybirdDateTime),
 	endTime: Schema.optional(TinybirdDateTime),
 }) {}
@@ -44,8 +45,8 @@ export class SpanDetailRequest extends Schema.Class<SpanDetailRequest>("SpanDeta
 export class SpanDetailResponse extends Schema.Class<SpanDetailResponse>("SpanDetailResponse")({
 	data: Schema.NullOr(
 		Schema.Struct({
-			traceId: Schema.String,
-			spanId: Schema.String,
+			traceId: TraceId,
+			spanId: SpanId,
 			spanAttributes: Schema.String,
 			resourceAttributes: Schema.String,
 		}),
@@ -136,7 +137,7 @@ export class ErrorDetailTracesResponse extends Schema.Class<ErrorDetailTracesRes
 )({
 	data: Schema.Array(
 		Schema.Struct({
-			traceId: Schema.String,
+			traceId: TraceId,
 			startTime: Schema.String,
 			durationMicros: Schema.Number,
 			spanCount: Schema.Number,
@@ -282,11 +283,13 @@ export class ServiceExternalEdgesResponse extends Schema.Class<ServiceExternalEd
 
 const ServicePlatformLiteral = Schema.Literals(["kubernetes", "cloudflare", "lambda", "web", "unknown"])
 
-export class ServicePlatformsRequest extends Schema.Class<ServicePlatformsRequest>("ServicePlatformsRequest")({
-	startTime: TinybirdDateTime,
-	endTime: TinybirdDateTime,
-	deploymentEnv: Schema.optional(Schema.String),
-}) {}
+export class ServicePlatformsRequest extends Schema.Class<ServicePlatformsRequest>("ServicePlatformsRequest")(
+	{
+		startTime: TinybirdDateTime,
+		endTime: TinybirdDateTime,
+		deploymentEnv: Schema.optional(Schema.String),
+	},
+) {}
 
 export class ServicePlatformsResponse extends Schema.Class<ServicePlatformsResponse>(
 	"ServicePlatformsResponse",
@@ -1125,15 +1128,11 @@ export class QueryEngineApiGroup extends HttpApiGroup.make("queryEngine")
 		}),
 	)
 	.add(
-		HttpApiEndpoint.post(
-			"serviceDependenciesForService",
-			"/service-dependencies-for-service",
-			{
-				payload: ServiceDependenciesForServiceRequest,
-				success: ServiceDependenciesResponse,
-				error: queryEngineEndpointErrors,
-			},
-		),
+		HttpApiEndpoint.post("serviceDependenciesForService", "/service-dependencies-for-service", {
+			payload: ServiceDependenciesForServiceRequest,
+			success: ServiceDependenciesResponse,
+			error: queryEngineEndpointErrors,
+		}),
 	)
 	.add(
 		HttpApiEndpoint.post("serviceDbEdges", "/service-db-edges", {

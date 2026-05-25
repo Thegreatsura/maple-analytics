@@ -45,8 +45,10 @@ import {
 	WorkloadDetailSummaryResponse,
 	WorkloadInfraTimeseriesResponse,
 	WorkloadFacetsResponse,
+	TraceId,
+	SpanId,
 } from "@maple/domain/http"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { QueryEngineService } from "../services/QueryEngineService"
 import { RawSqlChartService } from "../services/RawSqlChartService"
 import { WarehouseQueryService, type WarehouseSqlError } from "../lib/WarehouseQueryService"
@@ -61,6 +63,9 @@ const mapExecError = <A, R>(
 	effect: Effect.Effect<A, WarehouseSqlError, R>,
 	_context: string,
 ): Effect.Effect<A, WarehouseQueryError | WarehouseQuotaExceededError, R> => effect
+
+const decodeTraceId = Schema.decodeSync(TraceId)
+const decodeSpanId = Schema.decodeSync(SpanId)
 
 // Build a ±1h partition-pruning window around a ClickHouse datetime string
 // (`YYYY-MM-DD HH:mm:ss[.ffffff]`). Sub-second precision is irrelevant for the
@@ -110,7 +115,11 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 							"spanHierarchy query failed",
 						),
 					)
-					const typedRows = compiled.castRows(rows)
+					const typedRows = compiled.castRows(rows).map((row) => ({
+						...row,
+						traceId: decodeTraceId(row.traceId),
+						spanId: decodeSpanId(row.spanId),
+					}))
 					return new SpanHierarchyResponse({ data: typedRows })
 				}),
 			)
@@ -140,7 +149,11 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 							"spanDetail query failed",
 						),
 					)
-					const typedRows = compiled.castRows(rows)
+					const typedRows = compiled.castRows(rows).map((row) => ({
+						...row,
+						traceId: decodeTraceId(row.traceId),
+						spanId: decodeSpanId(row.spanId),
+					}))
 					return new SpanDetailResponse({ data: typedRows[0] ?? null })
 				}),
 			)
@@ -264,7 +277,7 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 					const typedRows = compiled.castRows(rows)
 					return new ErrorDetailTracesResponse({
 						data: typedRows.map((row) => ({
-							traceId: row.traceId,
+								traceId: decodeTraceId(row.traceId),
 							startTime: String(row.startTime),
 							durationMicros: Number(row.durationMicros),
 							spanCount: Number(row.spanCount),

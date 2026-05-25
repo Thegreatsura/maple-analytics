@@ -147,7 +147,7 @@ export class IntegrationsApiGroup extends HttpApiGroup.make("integrations")
 	.add(
 		HttpApiEndpoint.get("hazelChannels", "/hazel/organizations/:organizationId/channels", {
 			params: {
-				organizationId: Schema.String.pipe(Schema.check(Schema.isMinLength(1), Schema.isTrimmed())),
+				organizationId: Schema.String.check(Schema.isMinLength(1), Schema.isTrimmed()),
 			},
 			success: HazelChannelsListResponse,
 			error: [

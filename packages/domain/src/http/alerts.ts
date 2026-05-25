@@ -13,9 +13,6 @@ import { Authorization } from "./current-tenant"
 import { QueryBuilderQueryDraftSchema } from "./query-engine"
 import { WarehouseQueryError, WarehouseQuotaExceededError } from "./warehouse"
 
-
-
-
 export const AlertDestinationType = Schema.Literals([
 	"slack",
 	"pagerduty",
@@ -50,9 +47,7 @@ export const AlertSignalType = Schema.Literals([
 })
 export type AlertSignalType = Schema.Schema.Type<typeof AlertSignalType>
 
-export const AlertGroupByDimension = Schema.String.pipe(
-	Schema.check(Schema.isMinLength(1), Schema.isTrimmed()),
-).annotate({
+export const AlertGroupByDimension = Schema.String.check(Schema.isMinLength(1), Schema.isTrimmed()).annotate({
 	identifier: "@maple/AlertGroupByDimension",
 	title: "Alert Group By Dimension",
 })
@@ -62,7 +57,7 @@ export const AlertGroupBy = Schema.Array(AlertGroupByDimension)
 	.pipe(Schema.check(Schema.isMinLength(1)))
 	.annotate({
 		identifier: "@maple/AlertGroupBy",
-    title: "Alert Group By",
+		title: "Alert Group By",
 	})
 export type AlertGroupBy = Schema.Schema.Type<typeof AlertGroupBy>
 
@@ -458,8 +453,7 @@ export class AlertDeliveryEventDocument extends Schema.Class<AlertDeliveryEventD
 	providerReference: Schema.NullOr(Schema.String),
 	responseCode: Schema.NullOr(Schema.Number),
 	errorMessage: Schema.NullOr(Schema.String),
-}) { }
-
+}) {}
 
 export class AlertDeliveryEventsListResponse extends Schema.Class<AlertDeliveryEventsListResponse>(
 	"AlertDeliveryEventsListResponse",

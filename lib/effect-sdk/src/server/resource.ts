@@ -75,8 +75,7 @@ export interface ResolvedResource {
 export const resolveResource = (config: ResourceConfigInput): Effect.Effect<ResolvedResource> =>
 	Effect.gen(function* () {
 		const envEndpoint = yield* EnvConfig.endpoint
-		const endpoint =
-			config.endpoint ?? Option.getOrUndefined(envEndpoint) ?? DEFAULT_MAPLE_ENDPOINT
+		const endpoint = config.endpoint ?? Option.getOrUndefined(envEndpoint) ?? DEFAULT_MAPLE_ENDPOINT
 
 		const envIngestKey = yield* EnvConfig.ingestKey
 		const ingestKey = config.ingestKey
@@ -87,7 +86,7 @@ export const resolveResource = (config: ResourceConfigInput): Effect.Effect<Reso
 		const serviceVersion = config.serviceVersion ?? Option.getOrUndefined(envServiceVersion)
 
 		const envEnvironment = yield* EnvConfig.environment
-		const environment = config.environment ?? Option.getOrUndefined(envEnvironment)
+		const environment = config.environment ?? envEnvironment
 
 		const envOtelServiceName = yield* EnvConfig.otelServiceName
 		const serviceName = config.serviceName ?? Option.getOrUndefined(envOtelServiceName) ?? "unknown"
@@ -158,12 +157,11 @@ export const resolveResourceFromEnv = (
 	const environment =
 		config.environment ??
 		stringOrUndefined(env.MAPLE_ENVIRONMENT) ??
-		stringOrUndefined(env.RAILWAY_ENVIRONMENT) ??
-		stringOrUndefined(env.VERCEL_ENV) ??
-		stringOrUndefined(env.NODE_ENV)
+		stringOrUndefined(env.RAILWAY_ENVIRONMENT_NAME) ??
+		stringOrUndefined(env.DEPLOYMENT_ENV) ??
+		"development"
 
-	const serviceName =
-		config.serviceName ?? stringOrUndefined(env.OTEL_SERVICE_NAME) ?? "unknown"
+	const serviceName = config.serviceName ?? stringOrUndefined(env.OTEL_SERVICE_NAME) ?? "unknown"
 
 	const rawResourceAttributes = stringOrUndefined(env.OTEL_RESOURCE_ATTRIBUTES)
 	const envResourceAttributes = rawResourceAttributes

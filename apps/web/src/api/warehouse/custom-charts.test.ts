@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, assert, describe, it } from "@effect/vitest"
 import { Effect } from "effect"
+import { vi } from "vitest"
 
 const executeQueryEngineMock = vi.fn()
 
@@ -23,23 +24,23 @@ describe("querySpanMetricsCalls", () => {
 		)
 	})
 
-	it("queries the monotonic SpanMetrics `calls` counter as a per-bucket increase, not raw sum", async () => {
-		await Effect.runPromise(
-			getOverviewTimeSeries({
+	it.effect("queries the monotonic SpanMetrics `calls` counter as a per-bucket increase, not raw sum", () =>
+		Effect.gen(function* () {
+			yield* getOverviewTimeSeries({
 				data: {
 					startTime: "2026-02-01 00:00:00",
 					endTime: "2026-02-01 01:00:00",
 				},
-			}),
-		)
+			})
 
-		const spanMetricsCalls = executeQueryEngineMock.mock.calls.filter(
-			(call) => call[0] === "queryEngine.spanMetricsCalls",
-		)
+			const spanMetricsCalls = executeQueryEngineMock.mock.calls.filter(
+				(call) => call[0] === "queryEngine.spanMetricsCalls",
+			)
 
-		expect(spanMetricsCalls.length).toBeGreaterThan(0)
-		for (const [, request] of spanMetricsCalls) {
-			expect(request.query.metric).toBe("increase")
-		}
-	})
+			assert.isAbove(spanMetricsCalls.length, 0)
+			for (const [, request] of spanMetricsCalls) {
+				assert.strictEqual(request.query.metric, "increase")
+			}
+		}),
+	)
 })
