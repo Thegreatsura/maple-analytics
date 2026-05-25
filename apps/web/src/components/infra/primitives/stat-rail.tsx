@@ -43,6 +43,8 @@ interface StatRailItemProps {
 	value: string
 	tone?: Tone
 	delta?: React.ReactNode
+	/** Top-right slot, e.g. a link out. Takes precedence over `delta`. */
+	action?: React.ReactNode
 	spark?: ReadonlyArray<number>
 	subline?: React.ReactNode
 	delay?: number
@@ -53,6 +55,7 @@ export function StatRailItem({
 	value,
 	tone = "neutral",
 	delta,
+	action,
 	spark,
 	subline,
 	delay,
@@ -64,11 +67,12 @@ export function StatRailItem({
 		>
 			<div className="flex items-baseline justify-between gap-3">
 				<span className="text-[11px] font-medium text-muted-foreground">{eyebrow}</span>
-				{delta ? (
-					<span className="font-mono text-[10px] tabular-nums text-muted-foreground/80">
-						{delta}
-					</span>
-				) : null}
+				{action ??
+					(delta ? (
+						<span className="font-mono text-[10px] tabular-nums text-muted-foreground/80">
+							{delta}
+						</span>
+					) : null)}
 			</div>
 			<div className="mt-2 flex items-end justify-between gap-3">
 				<div

@@ -1,9 +1,11 @@
 import React from "react"
-import { Result } from "@/lib/effect-atom"
+import { Result, useAtomValue } from "@/lib/effect-atom"
 import { Link, useNavigate } from "@tanstack/react-router"
 
 import { useEffectiveTimeRange } from "@/hooks/use-effective-time-range"
 import { useRefreshableAtomValue } from "@/hooks/use-refreshable-atom-value"
+import { listIncidentsAtom } from "@/lib/services/atoms/alerts-atoms"
+import { deriveServiceHealth, incidentMatchesService } from "@/components/dashboard/service-health"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@maple/ui/components/ui/table"
 import { Badge } from "@maple/ui/components/ui/badge"
 import { Skeleton } from "@maple/ui/components/ui/skeleton"
@@ -219,12 +221,25 @@ export function ServicesTable({ filters }: ServicesTableProps) {
 		}),
 	)
 
+	const healthFilter = filters?.health
+	const incidentsResult = useAtomValue(listIncidentsAtom)
+	const openIncidents = Result.builder(incidentsResult)
+		.onSuccess((response) => response.incidents.filter((incident) => incident.status === "open"))
+		.orElse(() => [])
+
 	return Result.builder(Result.all([overviewResult, timeSeriesResult]))
 		.onInitial(() => <LoadingState />)
 		.onError((error) => <QueryErrorState error={error} />)
 		.onSuccess(([overviewResponse, timeSeriesResponse], combinedResult) => {
-			const services = overviewResponse.data
 			const timeSeriesMap = timeSeriesResponse.data
+			const services = healthFilter
+				? overviewResponse.data.filter((service) => {
+						const hasOpenIncident = openIncidents.some((incident) =>
+							incidentMatchesService(incident, service.serviceName),
+						)
+						return deriveServiceHealth(service, hasOpenIncident) === healthFilter
+					})
+				: overviewResponse.data
 
 			return (
 				<div className={`space-y-4 transition-opacity ${combinedResult.waiting ? "opacity-60" : ""}`}>
@@ -412,7 +427,9 @@ export function ServicesTable({ filters }: ServicesTableProps) {
 						</Table>
 					</div>
 
-					<div className="text-sm text-muted-foreground">Showing {services.length} services</div>
+					<div className="text-sm text-muted-foreground">
+						Showing {services.length} {healthFilter ?? ""} {services.length === 1 ? "service" : "services"}
+					</div>
 				</div>
 			)
 		})

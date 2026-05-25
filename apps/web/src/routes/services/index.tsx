@@ -14,6 +14,7 @@ import { useEffectiveTimeRange } from "@/hooks/use-effective-time-range"
 const servicesSearchSchema = Schema.Struct({
 	environments: OptionalStringArrayParam,
 	commitShas: OptionalStringArrayParam,
+	health: Schema.optional(Schema.Literals(["healthy", "degraded", "unhealthy"])),
 	startTime: Schema.optional(Schema.String),
 	endTime: Schema.optional(Schema.String),
 	timePreset: Schema.optional(Schema.String),
