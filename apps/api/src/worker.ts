@@ -5,9 +5,7 @@ import { HttpMiddleware, HttpRouter } from "effect/unstable/http"
 import * as Etag from "effect/unstable/http/Etag"
 import * as HttpPlatform from "effect/unstable/http/HttpPlatform"
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse"
-import { AllRoutes, ApiAuthLive, ApiObservabilityLive, MainLive } from "./app"
 import { persistSession, preloadSession, type SessionsBinding } from "./mcp/lib/session-store"
-import { DatabaseD1Live } from "./lib/DatabaseD1Live"
 
 const WorkerFileSystemLive = FileSystem.layerNoop({})
 
@@ -54,8 +52,18 @@ const telemetry = MapleCloudflareSDK.make({
 // `telemetry.layer`.
 const passThroughMiddleware: HttpMiddleware.HttpMiddleware = (httpApp) => httpApp
 
-const buildHandler = () =>
-	HttpRouter.toWebHandler(
+// The route graph (`./app`) and the D1 layer are imported DYNAMICALLY, not at
+// module scope. The static import graph reachable from `./app` eagerly builds
+// hundreds of Effect Schema ASTs (`@maple/domain` + 47 MCP tool schemas) at
+// module-evaluation time. Cloudflare runs only the top-level module scope
+// during upload validation, so pulling that work in statically blew the fixed
+// ~1s startup CPU budget (error 10021). Deferring it behind `import()` keeps
+// the top level near-empty; the cost moves to the first request, which runs
+// under the far larger per-request CPU budget.
+const buildHandler = async () => {
+	const { AllRoutes, ApiAuthLive, ApiObservabilityLive, MainLive } = await import("./app")
+	const { DatabaseD1Live } = await import("./lib/DatabaseD1Live")
+	return HttpRouter.toWebHandler(
 		AllRoutes.pipe(
 			Layer.provideMerge(MainLive),
 			Layer.provideMerge(ApiAuthLive),
@@ -68,14 +76,15 @@ const buildHandler = () =>
 		),
 		{ middleware: passThroughMiddleware, disableLogger: true },
 	)
+}
 
 // Single isolate-wide handler — `toWebHandler` builds its own ManagedRuntime
-// once and keeps it for the lifetime of the isolate. Built eagerly at module
-// load so a layer construction failure surfaces as a startup error in
-// `wrangler tail` instead of silently hanging the first request and bricking
-// the isolate (Cloudflare 1101).
-const cachedHandler = buildHandler()
-const getHandler = () => cachedHandler
+// lazily on first invocation and keeps it for the lifetime of the isolate.
+// Memoized via the build promise so concurrent first requests share one build;
+// a construction failure surfaces as a 504 in `handle` rather than bricking the
+// isolate.
+let handlerPromise: ReturnType<typeof buildHandler> | undefined
+const getHandler = () => (handlerPromise ??= buildHandler())
 
 const isMcpPost = (request: Request): boolean => {
 	if (request.method !== "POST") return false
@@ -154,7 +163,7 @@ const handle = async (
 
 	if (kv && reqSid) await preloadSession(kv, reqSid)
 
-	const { handler } = getHandler()
+	const { handler } = await getHandler()
 	try {
 		const response = await handler(forwardRequest, Context.empty() as never)
 		if (kv && isMcp) {

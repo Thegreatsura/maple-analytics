@@ -59,7 +59,12 @@ export const McpGetFallback = HttpRouter.use((router) =>
 	router.add("GET", "/mcp", HttpServerResponse.empty({ status: 405 })),
 )
 
-export const DocsRoute = HttpApiScalar.layer(MapleApi, {
+// `layerCdn` loads Scalar's browser bundle from jsDelivr at runtime instead of
+// inlining its ~MB `standalone.min.js` string into the worker bundle — keeps the
+// script out of the deployed bundle (guards the 3 MB worker size limit, error
+// 10027). The `/docs` page now depends on jsDelivr being reachable from the
+// client browser.
+export const DocsRoute = HttpApiScalar.layerCdn(MapleApi, {
 	path: "/docs",
 })
 
