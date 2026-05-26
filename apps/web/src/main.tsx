@@ -14,7 +14,7 @@ import {
 import { router, type RouterAuthContext } from "./router"
 import { appRegistry } from "./lib/registry"
 import { clearChunkReloadGuard, shouldAttemptChunkReload } from "./lib/chunk-reload"
-import { MapleBrowser } from "@maple/browser"
+import { MapleBrowser } from "@maple-dev/browser"
 import { ingestUrl } from "./lib/services/common/ingest-url"
 import "./styles.css"
 
@@ -97,6 +97,20 @@ function useAutumnFetchAuth() {
 			window.fetch = original
 		}
 	}, [])
+}
+
+/**
+ * Tag the self-recorded replay session with the signed-in Clerk user id once
+ * Clerk reports one. `MapleBrowser.init` runs at module load (before Clerk),
+ * so the session starts anonymous; `identify` is a no-op when replay isn't
+ * active. Syncs to an external system (the SDK), like the other auth bridges.
+ */
+function MapleIdentify() {
+	const { isSignedIn, userId } = useAuth()
+	useEffect(() => {
+		if (isSignedIn && userId) MapleBrowser.identify(userId)
+	}, [isSignedIn, userId])
+	return null
 }
 
 function AutumnProviderWithClerk({ children }: { children: React.ReactNode }) {
@@ -229,6 +243,7 @@ const app = isClerkAuthEnabled ? (
 		afterSignOutUrl={clerkSignInUrl}
 	>
 		<ClerkAuthBridge />
+		<MapleIdentify />
 		<AutumnErrorBoundary>
 			<AutumnProviderWithClerk>
 				<ClerkInnerApp />

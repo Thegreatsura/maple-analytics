@@ -17,7 +17,7 @@ export function getObservedTraceIds(): string[] {
 
 // Global key external tracers look up to feed trace ids into the session.
 // Kept in sync by hand with `lib/effect-sdk/src/client/layer.ts`, which redeclares
-// the same literal + shape to avoid depending on `@maple/browser`.
+// the same literal + shape to avoid depending on `@maple-dev/browser`.
 const SESSION_SINK_KEY = "__MAPLE_BROWSER_SESSION__"
 
 interface MapleBrowserSessionSink {
@@ -28,7 +28,7 @@ interface MapleBrowserSessionSink {
 /**
  * Publish the session sink on `globalThis` so other tracers in the page (e.g. the
  * Effect client SDK) can attach their trace ids to this replay session without a
- * direct dependency on `@maple/browser`. Reads are lazy/per-span on the consumer
+ * direct dependency on `@maple-dev/browser`. Reads are lazy/per-span on the consumer
  * side, so init ordering between the SDKs does not matter.
  */
 export function publishSessionSink(sessionId: string): void {

@@ -1,4 +1,4 @@
-# @maple/browser
+# @maple-dev/browser
 
 Browser SDK for [Maple](https://maple.dev) — OpenTelemetry tracing **and** rrweb
 session replay in a single package. Every span and every replay event is tagged
@@ -8,13 +8,13 @@ produced it (and vice versa) with no clock-skew guessing.
 ## Install
 
 ```bash
-npm install @maple/browser
+npm install @maple-dev/browser
 ```
 
 ## Usage
 
 ```ts
-import { MapleBrowser } from "@maple/browser"
+import { MapleBrowser } from "@maple-dev/browser"
 
 MapleBrowser.init({
   ingestKey: "maple_pk_...",     // public ingest key

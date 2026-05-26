@@ -13,6 +13,9 @@ export interface MapleBrowserHandle {
 }
 
 let active: MapleBrowserHandle | undefined
+// Same object the lifecycle closures capture, so `identify()` mutations are seen
+// by the ended-metadata row that `finalize()` posts.
+let activeConfig: ResolvedConfig | undefined
 
 /**
  * Initialize Maple browser telemetry: OTel tracing + (sampled) rrweb session
@@ -27,6 +30,7 @@ export function init(rawConfig: MapleBrowserConfig): MapleBrowserHandle {
 	}
 
 	const config = resolveConfig(rawConfig)
+	activeConfig = config
 	// One bounded session per activity window: reused across reloads (so traces
 	// and replay chunks correlate), rotated once idle. `startedAt` comes from the
 	// record so `duration_ms` reflects the whole session, not just this page load.
@@ -61,10 +65,28 @@ export function init(rawConfig: MapleBrowserConfig): MapleBrowserHandle {
 			events?.stop()
 			await shutdownTracing?.()
 			active = undefined
+			activeConfig = undefined
 		},
 	}
 	active = handle
 	return handle
+}
+
+/**
+ * Attach (or replace) the user id on the active session. Idempotent and safe to
+ * call on every render. The session's authoritative row is the `Version=2`
+ * "ended" row posted on unload, which reads `config.userId` at that moment — so
+ * an id set here before the session ends is what the session is tagged with.
+ * We deliberately do not re-post the active row (the SDK already writes a fresh
+ * `Version=1` row on every reload; a second write here would collide under
+ * `argMax(field, Version)`).
+ */
+export function identify(userId: string): void {
+	if (typeof window === "undefined") return
+	if (!activeConfig) return
+	if (!userId) return
+	if (activeConfig.userId === userId) return
+	activeConfig.userId = userId
 }
 
 function installLifecycleHandlers(

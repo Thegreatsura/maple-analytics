@@ -4,7 +4,7 @@
 // DSL-based queries over the session_replays (metadata) and
 // session_replay_events (rrweb event payloads) datasources.
 //
-// `session_replays` is a ReplacingMergeTree(Version): the @maple/browser SDK
+// `session_replays` is a ReplacingMergeTree(Version): the @maple-dev/browser SDK
 // writes a partial row at session start (Version=1) and a complete row at
 // session end (Version=2). Reads can see both rows before a background merge
 // collapses them, so every query that surfaces a session GROUPs BY SessionId

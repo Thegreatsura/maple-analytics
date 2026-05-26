@@ -46,7 +46,8 @@ export interface ResolvedConfig {
 	readonly endpoint: string
 	readonly serviceVersion: string | undefined
 	readonly environment: string | undefined
-	readonly userId: string | undefined
+	/** Mutable: `MapleBrowser.identify()` can attach/replace the user id after init. */
+	userId: string | undefined
 	readonly tracingEnabled: boolean
 	readonly tracingInstrumentFetch: boolean
 	readonly replayEnabled: boolean

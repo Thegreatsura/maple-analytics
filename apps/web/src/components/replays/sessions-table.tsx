@@ -80,7 +80,7 @@ export function SessionsTable({ sessions }: { sessions: ReadonlyArray<SessionRow
 				<p className="mt-1.5 max-w-md text-sm text-muted-foreground">
 					Install{" "}
 					<code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.8em]">
-						@maple/browser
+						@maple-dev/browser
 					</code>{" "}
 					and call{" "}
 					<code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.8em]">

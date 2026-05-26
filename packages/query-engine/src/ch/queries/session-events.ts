@@ -3,7 +3,7 @@
 //
 // DSL-based queries over the session_events datasource — the distilled,
 // structured event stream (navigation/click/input/console/network/error)
-// captured client-side by the @maple/browser SDK. Powers the in-session search
+// captured client-side by the @maple-dev/browser SDK. Powers the in-session search
 // + transcript surfaced to humans (replay panels) and agents (MCP tools).
 //
 // Plain MergeTree, immutable append; no ReplacingMergeTree dedup needed.

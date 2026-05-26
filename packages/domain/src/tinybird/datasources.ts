@@ -1178,7 +1178,7 @@ export type LogsAggregatesHourlyRow = InferRow<typeof logsAggregatesHourly>
  * Session replay session metadata — one row per browser session.
  *
  * Ingested directly via `POST /v1/sessionReplays/meta` (NDJSON) from the
- * `@maple/browser` SDK, not via a materialized view. The SDK writes a partial
+ * `@maple-dev/browser` SDK, not via a materialized view. The SDK writes a partial
  * row at session start (`Version=1`, `Status='active'`) and a complete row on
  * page hide / unload (`Version=2`, `Status='ended'`, final `EndTime`/`DurationMs`).
  * ReplacingMergeTree keyed by Version keeps the latest, so consumers should
@@ -1197,7 +1197,7 @@ export type LogsAggregatesHourlyRow = InferRow<typeof logsAggregatesHourly>
  */
 export const sessionReplays = defineDatasource("session_replays", {
 	description:
-		"Per-session browser replay metadata (one row per session). Ingested directly from the @maple/browser SDK via POST /v1/sessionReplays/meta. Event payloads live inline in session_replay_events; this holds only queryable metadata. ReplacingMergeTree(Version) for start/end upsert.",
+		"Per-session browser replay metadata (one row per session). Ingested directly from the @maple-dev/browser SDK via POST /v1/sessionReplays/meta. Event payloads live inline in session_replay_events; this holds only queryable metadata. ReplacingMergeTree(Version) for start/end upsert.",
 	schema: {
 		OrgId: column(t.string().lowCardinality(), { jsonPath: "$.org_id" }),
 		SessionId: column(t.string(), { jsonPath: "$.session_id" }),
@@ -1280,7 +1280,7 @@ export type SessionReplayEventsRow = InferRow<typeof sessionReplayEvents>
 /**
  * Distilled session events — structured semantic events (navigation, clicks,
  * console logs, network requests, errors) captured client-side by the
- * `@maple/browser` SDK and ingested via `POST /v1/sessionEvents` (NDJSON).
+ * `@maple-dev/browser` SDK and ingested via `POST /v1/sessionEvents` (NDJSON).
  *
  * This is the small, queryable layer that powers in-session search, the
  * console/network/error panels, and the agent transcript — distinct from the

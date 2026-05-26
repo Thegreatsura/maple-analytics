@@ -1,4 +1,4 @@
-import { init, type MapleBrowserHandle } from "./init"
+import { identify, init, type MapleBrowserHandle } from "./init"
 
 export type { MapleBrowserConfig } from "./config"
 export type { MapleBrowserHandle } from "./init"
@@ -9,7 +9,7 @@ export type { MapleBrowserHandle } from "./init"
  *
  * @example
  * ```ts
- * import { MapleBrowser } from "@maple/browser"
+ * import { MapleBrowser } from "@maple-dev/browser"
  *
  * MapleBrowser.init({
  *   ingestKey: "maple_pk_...",
@@ -19,4 +19,6 @@ export type { MapleBrowserHandle } from "./init"
  */
 export const MapleBrowser: {
 	init: (config: import("./config").MapleBrowserConfig) => MapleBrowserHandle
-} = { init }
+	/** Attach (or replace) the user id on the active session. Safe to call repeatedly. */
+	identify: (userId: string) => void
+} = { init, identify }

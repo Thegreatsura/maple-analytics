@@ -4,7 +4,7 @@ import { FetchHttpClient } from "effect/unstable/http"
 import { Otlp } from "effect/unstable/observability"
 
 /**
- * Key the `@maple/browser` SDK publishes its replay session sink under. Looked up
+ * Key the `@maple-dev/browser` SDK publishes its replay session sink under. Looked up
  * lazily per span so init ordering between the SDKs does not matter; absent on
  * non-replay pages and during SSR, where the decorator below no-ops.
  */
@@ -19,7 +19,7 @@ interface SessionSink {
  * Decorate the OTLP tracer so every span it creates reports its trace id to the
  * active browser replay session (when one exists) and carries `session.id`. This
  * is what links a replay session to the Effect HTTP traces it produced — instead
- * of the redundant auto-instrumented fetch spans `@maple/browser` would otherwise
+ * of the redundant auto-instrumented fetch spans `@maple-dev/browser` would otherwise
  * collect. `provideMerge` keeps the base layer's logger/metrics while overriding
  * only the Tracer reference. No-ops cleanly when no session sink is published.
  */

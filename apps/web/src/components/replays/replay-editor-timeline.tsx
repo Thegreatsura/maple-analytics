@@ -261,7 +261,7 @@ function TracesTrack({
 				{header(0)}
 				<p className="px-3 py-4 text-xs leading-relaxed text-muted-foreground">
 					No backend traces were linked to this session. Correlation populates automatically when
-					the page is instrumented with <span className="font-mono">@maple/browser</span> tracing.
+					the page is instrumented with <span className="font-mono">@maple-dev/browser</span> tracing.
 				</p>
 			</div>
 		)

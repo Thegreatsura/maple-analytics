@@ -1,13 +1,13 @@
 # Browser SDK
 
-`@maple/browser` instruments a website with OpenTelemetry tracing **and** rrweb session replay in a single package. Every span and every replay event is tagged with the same `session.id`, so a trace can link straight to the replay that produced it — and vice versa — with no clock-skew guessing.
+`@maple-dev/browser` instruments a website with OpenTelemetry tracing **and** rrweb session replay in a single package. Every span and every replay event is tagged with the same `session.id`, so a trace can link straight to the replay that produced it — and vice versa — with no clock-skew guessing.
 
 > Session Replay is currently in **Beta**.
 
 ## Install
 
 ```bash
-npm install @maple/browser
+npm install @maple-dev/browser
 ```
 
 ## Quick start
@@ -15,7 +15,7 @@ npm install @maple/browser
 Call `MapleBrowser.init` once, as early as possible in your app's entrypoint:
 
 ```ts
-import { MapleBrowser } from "@maple/browser"
+import { MapleBrowser } from "@maple-dev/browser"
 
 MapleBrowser.init({
   ingestKey: "maple_pk_...", // public ingest key
@@ -67,7 +67,14 @@ MapleBrowser.init({
 
 ## Identifying users
 
-Pass `userId` so replays and traces are correlated to a known user — it populates the user column in the Maple session list and detail views. If you don't know the user at init time (e.g. before login), it's fine to omit it; the session is recorded as anonymous.
+Pass `userId` so replays and traces are correlated to a known user — it populates the user column in the Maple session list and detail views.
+
+If you don't know the user at init time (e.g. the SDK starts before login resolves), omit it; the session begins anonymous. Once you know who the user is, call `MapleBrowser.identify(userId)` to attach (or replace) the id on the active session. It's safe to call repeatedly and is a no-op when replay isn't active.
+
+```ts
+// after the user signs in
+MapleBrowser.identify(user.id)
+```
 
 ## Privacy & masking
 
@@ -103,7 +110,7 @@ MapleBrowser.init({
 
 ```html
 <script type="module">
-  import { MapleBrowser } from "https://esm.sh/@maple/browser"
+  import { MapleBrowser } from "https://esm.sh/@maple-dev/browser"
 
   MapleBrowser.init({
     ingestKey: "maple_pk_...",
@@ -118,7 +125,7 @@ Initialize at the top of your client entrypoint (e.g. `main.tsx`, or a client-on
 
 ```ts
 // src/maple.ts
-import { MapleBrowser } from "@maple/browser"
+import { MapleBrowser } from "@maple-dev/browser"
 
 MapleBrowser.init({
   ingestKey: import.meta.env.VITE_MAPLE_INGEST_KEY,
