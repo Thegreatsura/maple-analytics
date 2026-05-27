@@ -24,11 +24,14 @@ import { AlertSegmentedSelect } from "@/components/alerts/alert-segmented-select
 import { QueryPanel } from "@/components/dashboard-builder/config/query-panel"
 import { RawSqlEditorPanel } from "@/components/dashboard-builder/config/raw-sql-editor-panel"
 import {
+	BoltIcon,
+	BracketsCurlyIcon,
 	ChartLineIcon,
 	ChevronDownIcon,
 	CirclePercentageIcon,
 	FireIcon,
 	PulseIcon,
+	SlidersIcon,
 } from "@/components/icons"
 import type { AutocompleteValuesContextType } from "@/hooks/use-autocomplete-values"
 import {
@@ -78,10 +81,14 @@ function signalTypeToKind(signalType: AlertSignalType): SignalKind {
 const NUMERIC_INPUT_CLASS =
 	"font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
 
-const SIGNAL_KIND_OPTIONS: ReadonlyArray<{ value: SignalKind; label: string }> = [
-	{ value: "builtin", label: "Built-in" },
-	{ value: "builder_query", label: "Query" },
-	{ value: "raw_query", label: "Raw SQL" },
+const SIGNAL_KIND_OPTIONS: ReadonlyArray<{
+	value: SignalKind
+	label: string
+	icon: ReactNode
+}> = [
+	{ value: "builtin", label: "Built-in", icon: <BoltIcon className="size-3.5" /> },
+	{ value: "builder_query", label: "Query", icon: <SlidersIcon className="size-3.5" /> },
+	{ value: "raw_query", label: "Raw SQL", icon: <BracketsCurlyIcon className="size-3.5" /> },
 ]
 
 /* The "built-in" tier-2 row: 5 small chips with icons. Icons are deliberately

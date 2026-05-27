@@ -13,6 +13,7 @@ import {
 	DialogDescription,
 	DialogFooter,
 	DialogHeader,
+	DialogPanel,
 	DialogTitle,
 } from "@maple/ui/components/ui/dialog"
 import {
@@ -99,7 +100,7 @@ export function CreateApiKeyDialog({ open, onOpenChange, onCreated, kind }: Crea
 								Copy your API key now. You won't be able to see it again.
 							</DialogDescription>
 						</DialogHeader>
-						<div className="space-y-3 px-6">
+						<DialogPanel className="space-y-3">
 							<InputGroup>
 								<InputGroupInput
 									readOnly
@@ -123,7 +124,7 @@ export function CreateApiKeyDialog({ open, onOpenChange, onCreated, kind }: Crea
 							<p className="text-muted-foreground text-xs">
 								Store this key in a secure location. It will not be shown again.
 							</p>
-						</div>
+						</DialogPanel>
 						<DialogFooter>
 							<Button variant="outline" onClick={() => handleClose(false)}>
 								Close
@@ -138,7 +139,7 @@ export function CreateApiKeyDialog({ open, onOpenChange, onCreated, kind }: Crea
 								API keys are used to authenticate with the Maple API and MCP server.
 							</DialogDescription>
 						</DialogHeader>
-						<div className="space-y-3 px-6">
+						<DialogPanel className="space-y-3">
 							<div className="space-y-1.5">
 								<Label htmlFor="api-key-name">Name</Label>
 								<Input
@@ -165,7 +166,7 @@ export function CreateApiKeyDialog({ open, onOpenChange, onCreated, kind }: Crea
 									onChange={(e) => setNewDescription(e.target.value)}
 								/>
 							</div>
-						</div>
+						</DialogPanel>
 						<DialogFooter>
 							<Button variant="outline" onClick={() => handleClose(false)}>
 								Cancel
