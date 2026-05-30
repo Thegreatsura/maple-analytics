@@ -71,7 +71,7 @@ export const login = Command.make("login", {
 			yield* config.write({ apiUrl, token })
 			yield* Console.log(
 				`Logged in to ${apiUrl}. Credentials saved to ~/.maple/config.json (0600). ` +
-					"Commands now default to remote; use --local or `maple start` for local mode.",
+					"Commands auto-detect remote now; pin it with `maple use remote`, or use --local / `maple start` for local mode.",
 			)
 		}),
 	),
@@ -92,19 +92,21 @@ export const whoami = Command.make("whoami", {}).pipe(
 	Command.withDescription("Show the resolved mode (local/remote) and target"),
 	Command.withHandler(
 		Effect.fnUntraced(function* () {
+			const config = yield* MapleConfig
 			const mode = yield* Mode
+			const defaultMode = config.defaultMode ?? "auto"
 			const resolved = yield* mode.resolve.pipe(
 				Effect.map((m) => ({ ok: true as const, m })),
 				Effect.catch((e) => Effect.succeed({ ok: false as const, message: e.message })),
 			)
 			if (!resolved.ok) {
-				yield* printJson({ mode: "none", message: resolved.message })
+				yield* printJson({ mode: "none", defaultMode, message: resolved.message })
 				return
 			}
 			yield* printJson(
 				resolved.m._tag === "local"
-					? { mode: "local", url: resolved.m.baseUrl }
-					: { mode: "remote", apiUrl: resolved.m.apiUrl, orgId: resolved.m.orgId ?? null },
+					? { mode: "local", defaultMode, url: resolved.m.baseUrl }
+					: { mode: "remote", defaultMode, apiUrl: resolved.m.apiUrl, orgId: resolved.m.orgId ?? null },
 			)
 		}),
 	),

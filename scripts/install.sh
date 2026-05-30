@@ -19,10 +19,11 @@
 # symlink works regardless of how the path resolves.
 #
 # Env overrides:
-#   MAPLE_VERSION      release tag to install (default: latest)
-#   MAPLE_INSTALL_DIR  bundle directory      (default: ~/.maple/bin)
-#   MAPLE_BIN_DIR      where `maple` is linked onto PATH (default: first
-#                      writable of /usr/local/bin, ~/.local/bin)
+#   MAPLE_VERSION        release tag to install (default: latest)
+#   MAPLE_INSTALL_DIR    bundle directory      (default: ~/.maple/bin)
+#   MAPLE_BIN_DIR        where `maple` is linked onto PATH (default: first
+#                        writable of /usr/local/bin, ~/.local/bin)
+#   MAPLE_SKIP_CHECKSUM  set to 1 to skip SHA-256 verification (not recommended)
 set -eu
 
 REPO="Makisuo/maple"
@@ -31,6 +32,43 @@ INSTALL_DIR="${MAPLE_INSTALL_DIR:-$HOME/.maple/bin}"
 say() { printf '%s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"; }
+
+# download URL DEST MESSAGE — silent fetch with a TTY-aware spinner.
+# On a terminal: animate a braille spinner that collapses to ✓ (or ✗ + the curl
+# error on failure). Otherwise: print one plain line and fetch quietly. Keeps the
+# noisy curl --progress-bar off the screen while still showing progress.
+download() {
+	_url="$1"
+	_dest="$2"
+	_msg="$3"
+	if [ -t 2 ]; then
+		printf '%s ' "$_msg" >&2
+		curl -fsSL "$_url" -o "$_dest" 2>"$tmp/curl.err" &
+		_pid=$!
+		_i=0
+		_first=1
+		while kill -0 "$_pid" 2>/dev/null; do
+			case "$_i" in
+				0) _f='⠋' ;; 1) _f='⠙' ;; 2) _f='⠹' ;; 3) _f='⠸' ;; 4) _f='⠼' ;;
+				5) _f='⠴' ;; 6) _f='⠦' ;; 7) _f='⠧' ;; 8) _f='⠇' ;; 9) _f='⠏' ;;
+			esac
+			if [ "$_first" = 1 ]; then _first=0; else printf '\b' >&2; fi
+			printf '%s' "$_f" >&2
+			_i=$(((_i + 1) % 10))
+			sleep 0.08
+		done
+		if wait "$_pid"; then
+			printf '\b✓\n' >&2
+		else
+			printf '\b✗\n' >&2
+			[ -s "$tmp/curl.err" ] && cat "$tmp/curl.err" >&2
+			return 1
+		fi
+	else
+		printf '%s\n' "$_msg" >&2
+		curl -fsSL "$_url" -o "$_dest"
+	fi
+}
 
 need curl
 need tar
@@ -76,10 +114,18 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 # --- download + verify --------------------------------------------------------
-curl -fSL --progress-bar "$url" -o "$tmp/bundle.tar.gz" \
+download "$url" "$tmp/bundle.tar.gz" "Downloading Maple ${tag} (${target})…" \
 	|| die "download failed: $url"
 
-if curl -fsSL "${url}.sha256" -o "$tmp/bundle.sha256" 2>/dev/null; then
+# The release workflow always publishes a `.sha256` alongside each bundle, so a
+# missing one means a network/mirror problem or tampering — fail loudly rather
+# than installing an unverified binary. `MAPLE_SKIP_CHECKSUM=1` is the escape
+# hatch for air-gapped mirrors that don't carry the checksum file.
+if [ "${MAPLE_SKIP_CHECKSUM:-0}" = "1" ]; then
+	say "Skipping checksum verification (MAPLE_SKIP_CHECKSUM=1)."
+else
+	curl -fsSL "${url}.sha256" -o "$tmp/bundle.sha256" \
+		|| die "could not fetch checksum (${url}.sha256). Set MAPLE_SKIP_CHECKSUM=1 to bypass."
 	expected="$(awk '{print $1}' "$tmp/bundle.sha256")"
 	if command -v shasum >/dev/null 2>&1; then
 		actual="$(shasum -a 256 "$tmp/bundle.tar.gz" | awk '{print $1}')"
@@ -117,7 +163,7 @@ ln -sf "$INSTALL_DIR/maple" "$link_dir/maple"
 
 say ""
 say "✓ Installed to $INSTALL_DIR (maple + libchdb.so)"
-say "✓ Linked  $link_dir/maple"
+say "✓ Linked $link_dir/maple"
 case ":$PATH:" in
 	*":$link_dir:"*) ;;
 	*) say "" ; say "  $link_dir is not on your PATH yet — add:" ; say "    export PATH=\"$link_dir:\$PATH\"" ;;

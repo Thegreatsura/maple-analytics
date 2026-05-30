@@ -38,6 +38,22 @@ jobs:
 
             - run: bun knip
 
+    shell:
+        name: Shell
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+            # shellcheck is preinstalled on the ubuntu-latest runner image.
+            - name: shellcheck
+              run: shellcheck scripts/install.sh scripts/uninstall.sh scripts/build-local-binary.sh
+
+            # Syntax-check the POSIX installers against the actual /bin/sh they claim.
+            - name: sh -n
+              run: |
+                  sh -n scripts/install.sh
+                  sh -n scripts/uninstall.sh
+
     # Note: the `apps/ingest` Rust crate is built and tested by
     # `.github/workflows/ingest-rust-tests.yml`, which also runs the load
     # benchmark and posts results to the PR.

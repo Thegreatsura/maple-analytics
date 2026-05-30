@@ -8,6 +8,7 @@ import {
 } from "@maple/query-engine/observability"
 import { OrgId } from "@maple/domain/http"
 import { executeLocalQuery } from "@maple/query-engine/local"
+import { debugLog } from "../lib/debug"
 
 // Local mode is single-tenant: the Rust binary writes every row under this
 // OrgId, and every compiled query filters on it. `OrgId` is a non-empty trimmed
@@ -33,30 +34,43 @@ const toObservabilityError = (pipe: string | undefined) => (error: unknown) =>
  * This makes every `@maple/query-engine/observability` function — which only
  * depend on a `WarehouseExecutor` — work unchanged against local mode.
  */
-export const makeLocalWarehouseExecutorShape = (baseUrl: string): WarehouseExecutorShape => ({
-	orgId: LOCAL_ORG_ID,
-	sqlQuery: <T = Record<string, unknown>>(sql: string, _options?: ExecutorQueryOptions) =>
-		Effect.tryPromise({
-			try: () => executeLocalQuery<T>(sql, baseUrl),
-			catch: toObservabilityError(undefined),
-		}),
-	query: <T>(pipe: string, params: Record<string, unknown>, _options?: ExecutorQueryOptions) =>
-		Effect.gen(function* () {
-			const compiled = compilePipeQuery(pipe, { ...params, org_id: LOCAL_ORG_ID })
-			if (!compiled) {
-				return yield* new ObservabilityError({
-					message: `Unsupported pipe in local mode: ${pipe}`,
-					pipe,
+export const makeLocalWarehouseExecutorShape = (baseUrl: string): WarehouseExecutorShape => {
+	// Run SQL against the local server, timing the round-trip and (under --debug)
+	// printing the SQL + elapsed ms to stderr. The `finally` logs even on failure
+	// so a failing query still shows its SQL.
+	const exec = async <T>(sql: string, label: string): Promise<ReadonlyArray<T>> => {
+		const started = performance.now()
+		try {
+			return await executeLocalQuery<T>(sql, baseUrl)
+		} finally {
+			debugLog(`${label} · ${Math.round(performance.now() - started)}ms`, sql)
+		}
+	}
+	return {
+		orgId: LOCAL_ORG_ID,
+		sqlQuery: <T = Record<string, unknown>>(sql: string, _options?: ExecutorQueryOptions) =>
+			Effect.tryPromise({
+				try: () => exec<T>(sql, "sqlQuery"),
+				catch: toObservabilityError(undefined),
+			}),
+		query: <T>(pipe: string, params: Record<string, unknown>, _options?: ExecutorQueryOptions) =>
+			Effect.gen(function* () {
+				const compiled = compilePipeQuery(pipe, { ...params, org_id: LOCAL_ORG_ID })
+				if (!compiled) {
+					return yield* new ObservabilityError({
+						message: `Unsupported pipe in local mode: ${pipe}`,
+						pipe,
+					})
+				}
+				const rows = yield* Effect.tryPromise({
+					try: () => exec<Record<string, unknown>>(compiled.sql, pipe),
+					catch: toObservabilityError(pipe),
 				})
-			}
-			const rows = yield* Effect.tryPromise({
-				try: () => executeLocalQuery<Record<string, unknown>>(compiled.sql, baseUrl),
-				catch: toObservabilityError(pipe),
-			})
-			// Type-erased executor boundary — mirrors WarehouseExecutorLive in apps/api.
-			return { data: compiled.castRows(rows) as unknown as ReadonlyArray<T> }
-		}),
-})
+				// Type-erased executor boundary — mirrors WarehouseExecutorLive in apps/api.
+				return { data: compiled.castRows(rows) as unknown as ReadonlyArray<T> }
+			}),
+	}
+}
 
 /** `WarehouseExecutor` layer backed by the local Maple binary at `baseUrl`. */
 export const makeLocalWarehouseExecutor = (baseUrl: string) =>

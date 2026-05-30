@@ -24,12 +24,29 @@ clears the macOS Gatekeeper quarantine, and symlinks `maple` onto your PATH. The
 
 ```bash
 maple start        # OTLP ingest + embedded ClickHouse + UI on :4318
+maple start -d     # …or detached; logs to ~/.maple/maple.log, stop with `maple stop`
 maple services     # query the running server
 maple traces
 ```
 
+Query commands accept `--format table` for an aligned table instead of JSON, and
+`--debug` to print the compiled SQL + per-query timing to stderr (stdout stays
+clean JSON). Pin the backend with `maple use local|remote` (or `auto` to clear).
+
 Env overrides: `MAPLE_VERSION` (pin a release tag), `MAPLE_INSTALL_DIR` (bundle
-location, default `~/.maple/bin`), `MAPLE_BIN_DIR` (PATH symlink location).
+location, default `~/.maple/bin`), `MAPLE_BIN_DIR` (PATH symlink location),
+`MAPLE_SKIP_CHECKSUM=1` (skip SHA-256 verification — only for air-gapped mirrors
+without the `.sha256`; not recommended).
+
+### Uninstall
+
+```bash
+curl -fsSL https://maple.dev/cli/uninstall | sh
+```
+
+Removes the `maple` symlink and the `~/.maple/bin` bundle. Your data dir
+(`~/.maple/data`) is kept unless you confirm its removal when prompted. Honors
+the same `MAPLE_INSTALL_DIR` / `MAPLE_BIN_DIR` overrides as the installer.
 
 ## Architecture: one Bun binary + libchdb
 

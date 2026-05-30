@@ -1,8 +1,8 @@
 import * as Command from "effect/unstable/cli/Command"
 import { Effect, Option } from "effect"
 import * as f from "../lib/flags"
-import { printJson } from "../lib/output"
-import { resolveRange } from "../core/time"
+import { printResult } from "../lib/output"
+import { resolveRangeChecked } from "../core/time"
 import * as Ops from "../core/operations"
 
 export const logs = Command.make("logs", {
@@ -19,11 +19,7 @@ export const logs = Command.make("logs", {
 	Command.withDescription("Search logs with filtering"),
 	Command.withHandler(
 		Effect.fnUntraced(function* (a) {
-			const range = resolveRange({
-				since: a.since,
-				start: Option.getOrUndefined(a.start),
-				end: Option.getOrUndefined(a.end),
-			})
+			const range = yield* resolveRangeChecked(a)
 			const result = yield* Ops.searchLogs({
 				range,
 				service: Option.getOrUndefined(a.service),
@@ -33,7 +29,7 @@ export const logs = Command.make("logs", {
 				limit: a.limit,
 				offset: a.offset,
 			})
-			yield* printJson(result)
+			yield* printResult(result)
 		}),
 	),
 )
@@ -50,11 +46,7 @@ export const logPatterns = Command.make("log-patterns", {
 	Command.withDescription("Cluster logs into templates to surface the noisiest patterns"),
 	Command.withHandler(
 		Effect.fnUntraced(function* (a) {
-			const range = resolveRange({
-				since: a.since,
-				start: Option.getOrUndefined(a.start),
-				end: Option.getOrUndefined(a.end),
-			})
+			const range = yield* resolveRangeChecked(a)
 			const result = yield* Ops.mineLogPatterns({
 				range,
 				service: Option.getOrUndefined(a.service),
@@ -62,7 +54,7 @@ export const logPatterns = Command.make("log-patterns", {
 				search: Option.getOrUndefined(a.search),
 				limit: a.limit,
 			})
-			yield* printJson(result)
+			yield* printResult(result)
 		}),
 	),
 )

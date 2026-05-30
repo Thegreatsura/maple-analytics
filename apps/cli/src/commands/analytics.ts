@@ -2,8 +2,8 @@ import * as Command from "effect/unstable/cli/Command"
 import * as Flag from "effect/unstable/cli/Flag"
 import { Console, Effect, Option } from "effect"
 import * as f from "../lib/flags"
-import { printJson } from "../lib/output"
-import { resolveRange, type Range } from "../core/time"
+import { printResult } from "../lib/output"
+import { resolveRangeChecked, type Range } from "../core/time"
 import * as Ops from "../core/operations"
 
 const spanName = Flag.optional(
@@ -39,11 +39,7 @@ export const timeseries = Command.make("timeseries", {
 	),
 	Command.withHandler(
 		Effect.fnUntraced(function* (a) {
-			const range = resolveRange({
-				since: a.since,
-				start: Option.getOrUndefined(a.start),
-				end: Option.getOrUndefined(a.end),
-			})
+			const range = yield* resolveRangeChecked(a)
 			const result = yield* Ops.tracesTimeseries({
 				range,
 				service: Option.getOrUndefined(a.service),
@@ -53,7 +49,7 @@ export const timeseries = Command.make("timeseries", {
 				environment: Option.getOrUndefined(a.environment),
 				bucketSeconds: Option.getOrUndefined(a.bucket),
 			})
-			yield* printJson(result)
+			yield* printResult(result)
 		}),
 	),
 )
@@ -75,11 +71,7 @@ export const breakdown = Command.make("breakdown", {
 	Command.withDescription("Top-N trace breakdown by dimension (service, span, status code, http method)"),
 	Command.withHandler(
 		Effect.fnUntraced(function* (a) {
-			const range = resolveRange({
-				since: a.since,
-				start: Option.getOrUndefined(a.start),
-				end: Option.getOrUndefined(a.end),
-			})
+			const range = yield* resolveRangeChecked(a)
 			const result = yield* Ops.tracesBreakdown({
 				range,
 				service: Option.getOrUndefined(a.service),
@@ -89,7 +81,7 @@ export const breakdown = Command.make("breakdown", {
 				environment: Option.getOrUndefined(a.environment),
 				limit: a.limit,
 			})
-			yield* printJson(result)
+			yield* printResult(result)
 		}),
 	),
 )
@@ -144,7 +136,7 @@ export const compare = Command.make("compare", {
 				previous,
 				environment: Option.getOrUndefined(a.environment),
 			})
-			yield* printJson(result)
+			yield* printResult(result)
 		}),
 	),
 )

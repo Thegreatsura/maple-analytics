@@ -65,6 +65,12 @@ export interface MapleConfigShape {
 	readonly write: (next: StoredConfig) => Effect.Effect<void, PlatformError.PlatformError>
 	/** Remove the stored token (used by `maple logout`). */
 	readonly clearToken: () => Effect.Effect<void, PlatformError.PlatformError>
+	/** Pin the default mode (used by `maple use local|remote`). */
+	readonly setDefaultMode: (
+		mode: "local" | "remote",
+	) => Effect.Effect<void, PlatformError.PlatformError>
+	/** Drop the pinned default mode, reverting to auto-detect (`maple use auto`). */
+	readonly clearDefaultMode: () => Effect.Effect<void, PlatformError.PlatformError>
 }
 
 export class MapleConfig extends Context.Service<MapleConfig, MapleConfigShape>()(
@@ -85,6 +91,12 @@ export class MapleConfig extends Context.Service<MapleConfig, MapleConfigShape>(
 				clearToken: () =>
 					writeMerged(fs, (cur) => {
 						const { token: _token, ...rest } = cur
+						return rest
+					}),
+				setDefaultMode: (mode) => writeMerged(fs, (cur) => ({ ...cur, defaultMode: mode })),
+				clearDefaultMode: () =>
+					writeMerged(fs, (cur) => {
+						const { defaultMode: _mode, ...rest } = cur
 						return rest
 					}),
 			} satisfies MapleConfigShape

@@ -27,6 +27,10 @@ OUT_DIR="${OUT_DIR:-$REPO_ROOT/dist}"
 LIBCHDB_VERSION="${LIBCHDB_VERSION:-v26.1.0}"
 UI_EMBED="$REPO_ROOT/apps/cli/src/server/ui-embed.gen.ts"
 
+# Version baked into the binary via `bun build --define`. The release workflow
+# passes the tag; a local build defaults to `git describe` (or "dev").
+MAPLE_BUILD_VERSION="${MAPLE_BUILD_VERSION:-$(git -C "$REPO_ROOT" describe --tags --always 2>/dev/null || echo dev)}"
+
 mkdir -p "$OUT_DIR"
 
 echo "==> Building local-ui SPA"
@@ -37,8 +41,10 @@ restore_stub() { git -C "$REPO_ROOT" checkout -- "$UI_EMBED" 2>/dev/null || true
 trap restore_stub EXIT
 bun run "$REPO_ROOT/scripts/gen-ui-embed.ts"
 
-echo "==> Compiling maple binary (bun build --compile)"
-( cd "$REPO_ROOT" && bun build apps/cli/src/bin.ts --compile --outfile "$OUT_DIR/maple" )
+echo "==> Compiling maple binary (bun build --compile) — version $MAPLE_BUILD_VERSION"
+( cd "$REPO_ROOT" && bun build apps/cli/src/bin.ts --compile \
+	--define "__MAPLE_VERSION__=\"$MAPLE_BUILD_VERSION\"" \
+	--outfile "$OUT_DIR/maple" )
 
 echo "==> Downloading libchdb $LIBCHDB_VERSION for this platform"
 case "$(uname -s)-$(uname -m)" in

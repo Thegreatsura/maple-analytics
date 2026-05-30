@@ -8,6 +8,7 @@ import { attributes } from "./commands/attributes"
 import { metrics, query } from "./commands/data"
 import { timeseries, breakdown, compare } from "./commands/analytics"
 import { login, logout, whoami } from "./commands/auth"
+import { use } from "./commands/config"
 import { start, stop } from "./commands/server"
 
 // One CLI, two backends. Every query command bottoms out at the shared
@@ -29,6 +30,14 @@ export const cli = Command.make("maple").pipe(
 		local: Flag.boolean("local").pipe(
 			Flag.withDescription("Force local mode (requires a running `maple start`)"),
 			Flag.withDefault(false),
+		),
+		debug: Flag.boolean("debug").pipe(
+			Flag.withDescription("Print compiled SQL and per-query timing to stderr"),
+			Flag.withDefault(false),
+		),
+		format: Flag.choice("format", ["json", "table"]).pipe(
+			Flag.withDescription("Output format for query results (default: json)"),
+			Flag.withDefault("json" as const),
 		),
 	}),
 	Command.withSubcommands([
@@ -63,5 +72,6 @@ export const cli = Command.make("maple").pipe(
 		login,
 		logout,
 		whoami,
+		use,
 	]),
 )

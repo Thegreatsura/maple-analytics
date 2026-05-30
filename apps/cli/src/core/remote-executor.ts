@@ -4,6 +4,7 @@ import {
 	ObservabilityError,
 	type ExecutorQueryOptions,
 } from "@maple/query-engine/observability"
+import { debugLog } from "../lib/debug"
 
 const RAW_SQL_REMOTE_MESSAGE =
 	"Raw SQL (`maple query`) is only available in local mode. In remote mode, use the typed commands (services, traces, errors, logs, timeseries, …)."
@@ -33,20 +34,26 @@ export const makeRemoteWarehouseExecutorShape = (
 		query: <T>(pipe: string, params: Record<string, unknown>, _options?: ExecutorQueryOptions) =>
 			Effect.tryPromise({
 				try: async (): Promise<{ data: ReadonlyArray<T> }> => {
-					const res = await fetch(endpoint, {
-						method: "POST",
-						headers: {
-							"content-type": "application/json",
-							authorization: `Bearer ${token}`,
-						},
-						body: JSON.stringify({ pipe, params }),
-					})
-					if (!res.ok) {
-						const text = await res.text().catch(() => "")
-						throw new Error(`HTTP ${res.status}${text ? `: ${text}` : ""}`)
+					const started = performance.now()
+					try {
+						const res = await fetch(endpoint, {
+							method: "POST",
+							headers: {
+								"content-type": "application/json",
+								authorization: `Bearer ${token}`,
+							},
+							body: JSON.stringify({ pipe, params }),
+						})
+						if (!res.ok) {
+							const text = await res.text().catch(() => "")
+							throw new Error(`HTTP ${res.status}${text ? `: ${text}` : ""}`)
+						}
+						const json = (await res.json()) as { data?: ReadonlyArray<T> }
+						return { data: json.data ?? [] }
+					} finally {
+						// Server-side SQL isn't returned; log the pipe + params instead.
+						debugLog(`${pipe} · ${Math.round(performance.now() - started)}ms`, JSON.stringify(params))
 					}
-					const json = (await res.json()) as { data?: ReadonlyArray<T> }
-					return { data: json.data ?? [] }
 				},
 				catch: (error) =>
 					new ObservabilityError({

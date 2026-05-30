@@ -3,8 +3,8 @@ import * as Argument from "effect/unstable/cli/Argument"
 import * as Flag from "effect/unstable/cli/Flag"
 import { Effect, Option } from "effect"
 import * as f from "../lib/flags"
-import { printJson } from "../lib/output"
-import { resolveRange } from "../core/time"
+import { printResult } from "../lib/output"
+import { resolveRangeChecked } from "../core/time"
 import * as Ops from "../core/operations"
 
 const source = Flag.choice("source", ["traces", "metrics", "services"]).pipe(
@@ -30,11 +30,7 @@ const keys = Command.make("keys", {
 	Command.withDescription("Discover available attribute keys"),
 	Command.withHandler(
 		Effect.fnUntraced(function* (a) {
-			const range = resolveRange({
-				since: a.since,
-				start: Option.getOrUndefined(a.start),
-				end: Option.getOrUndefined(a.end),
-			})
+			const range = yield* resolveRangeChecked(a)
 			const result = yield* Ops.attributeKeys({
 				source: a.source,
 				scope: Option.getOrUndefined(a.scope),
@@ -42,7 +38,7 @@ const keys = Command.make("keys", {
 				range,
 				limit: a.limit,
 			})
-			yield* printJson(result)
+			yield* printResult(result)
 		}),
 	),
 )
@@ -60,11 +56,7 @@ const values = Command.make("values", {
 	Command.withDescription("List values for an attribute key"),
 	Command.withHandler(
 		Effect.fnUntraced(function* (a) {
-			const range = resolveRange({
-				since: a.since,
-				start: Option.getOrUndefined(a.start),
-				end: Option.getOrUndefined(a.end),
-			})
+			const range = yield* resolveRangeChecked(a)
 			const result = yield* Ops.attributeValues({
 				key: a.key,
 				source: a.source,
@@ -73,7 +65,7 @@ const values = Command.make("values", {
 				range,
 				limit: a.limit,
 			})
-			yield* printJson(result)
+			yield* printResult(result)
 		}),
 	),
 )

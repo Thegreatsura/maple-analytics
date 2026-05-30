@@ -2,6 +2,7 @@ import { Effect, Option, Schema } from "effect"
 import { FileSystem } from "effect/FileSystem"
 import * as Command from "effect/unstable/cli/Command"
 import * as Flag from "effect/unstable/cli/Flag"
+import { openSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import { startServer } from "../server/serve"
@@ -75,7 +76,89 @@ const dataDirFlag = Flag.optional(
 	Flag.string("data-dir").pipe(Flag.withDescription("Embedded ClickHouse data directory (default: ~/.maple/data)")),
 )
 
-export const start = Command.make("start", { port, dataDir: dataDirFlag }).pipe(
+const backgroundFlag = Flag.boolean("background").pipe(
+	Flag.withAlias("d"),
+	Flag.withDescription("Run the server detached (logs to ~/.maple/maple.log); stop with `maple stop`"),
+	Flag.withDefault(false),
+)
+
+// Log file for `--background` runs, beside the PID file (e.g. ~/.maple/maple.log).
+const logFilePath = (dataDir: string): string => join(dirname(dataDir), "maple.log")
+
+/** Non-fatal `/health` probe used while waiting for a detached server to bind. */
+const probeHealth = (addr: string): Effect.Effect<boolean> =>
+	Effect.tryPromise(async () => {
+		const controller = new AbortController()
+		const timer = setTimeout(() => controller.abort(), 300)
+		try {
+			const res = await fetch(`${addr}/health`, { signal: controller.signal })
+			return res.ok
+		} finally {
+			clearTimeout(timer)
+		}
+	}).pipe(Effect.orElseSucceed(() => false))
+
+/**
+ * Re-exec `maple start` detached, dropping `--background`/`-d` so the child runs
+ * the normal foreground path (writes the PID, owns chDB). Output goes to the log
+ * file; we poll `/health` until it binds, then print a summary and return so the
+ * parent process exits.
+ */
+const startDetached = (port: number, dataDir: string): Effect.Effect<void, ServerError> =>
+	Effect.gen(function* () {
+		const logPath = logFilePath(dataDir)
+		// Rebuild the command explicitly rather than slicing argv: a Bun-compiled
+		// binary injects a virtual `/$bunfs/...` entrypoint at argv[1] that must
+		// not be forwarded. In dev (`bun run src/bin.ts`) argv[1] is the real
+		// script and Bun needs it; in the compiled binary execPath alone suffices.
+		const entry = process.argv[1]
+		const runtimeArgs = entry && !entry.startsWith("/$bunfs") ? [entry] : []
+		const childArgs = [...runtimeArgs, "start", "--port", String(port), "--data-dir", dataDir]
+
+		const child = yield* Effect.try({
+			try: () => {
+				const fd = openSync(logPath, "a")
+				const proc = Bun.spawn([process.execPath, ...childArgs], {
+					stdin: "ignore",
+					stdout: fd,
+					stderr: fd,
+				})
+				proc.unref()
+				return proc
+			},
+			catch: (e) =>
+				new ServerError({
+					message: `failed to spawn background server: ${e instanceof Error ? e.message : String(e)}`,
+				}),
+		})
+
+		const addr = `http://127.0.0.1:${port}`
+		let up = false
+		for (let i = 0; i < 100; i++) {
+			yield* Effect.sleep("100 millis")
+			if (yield* probeHealth(addr)) {
+				up = true
+				break
+			}
+			if (!isProcessAlive(child.pid)) break // child died early — stop waiting
+		}
+		if (!up) {
+			return yield* new ServerError({
+				message: `background server did not come up within 10s — check ${prettyPath(logPath)}`,
+			})
+		}
+
+		yield* Effect.sync(() =>
+			process.stdout.write(
+				`${green("✓")} maple started in background ${dim(`(PID ${child.pid})`)}\n` +
+					`  ${dim("listening")} ${cyan(underline(addr))}\n` +
+					`  ${dim("logs")}      ${prettyPath(logPath)}\n` +
+					`  ${dim("stop")}      ${bold("maple stop")}\n`,
+			),
+		)
+	})
+
+export const start = Command.make("start", { port, dataDir: dataDirFlag, background: backgroundFlag }).pipe(
 	Command.withDescription("Start the local ingest + query server (embedded ClickHouse via chDB)"),
 	Command.withHandler(
 		Effect.fnUntraced(function* (a) {
@@ -93,6 +176,9 @@ export const start = Command.make("start", { port, dataDir: dataDirFlag }).pipe(
 			if (Option.isSome(existingPid)) yield* fs.remove(pidPath, { force: true }).pipe(Effect.ignore) // stale
 
 			yield* fs.makeDirectory(dataDir, { recursive: true })
+
+			// Detached: spawn the same command without --background and exit.
+			if (a.background) return yield* startDetached(a.port, dataDir)
 
 			yield* Effect.sync(() =>
 				process.stderr.write(dim(`◌ opening chDB at ${prettyPath(dataDir)} (bootstrapping schema)…\n`)),

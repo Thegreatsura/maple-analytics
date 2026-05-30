@@ -7,6 +7,7 @@ import { cli } from "./cli"
 import { MapleConfig } from "./core/config"
 import { Mode } from "./core/mode"
 import { WarehouseExecutorFromMode } from "./core/warehouse"
+import { MAPLE_VERSION } from "./version"
 
 // WarehouseExecutorFromMode needs Mode (which needs MapleConfig). provideMerge
 // keeps Mode + MapleConfig in the output context too, so the login/logout/whoami
@@ -18,4 +19,4 @@ const MainLayer = WarehouseExecutorFromMode.pipe(
 	Layer.provideMerge(BunServices.layer),
 )
 
-Command.run(cli, { version: "0.2.0" }).pipe(Effect.provide(MainLayer), BunRuntime.runMain)
+Command.run(cli, { version: MAPLE_VERSION }).pipe(Effect.provide(MainLayer), BunRuntime.runMain)

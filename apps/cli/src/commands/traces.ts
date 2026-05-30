@@ -3,8 +3,8 @@ import * as Argument from "effect/unstable/cli/Argument"
 import * as Flag from "effect/unstable/cli/Flag"
 import { Effect, Option } from "effect"
 import * as f from "../lib/flags"
-import { printJson } from "../lib/output"
-import { resolveRange } from "../core/time"
+import { printResult } from "../lib/output"
+import { resolveRangeChecked } from "../core/time"
 import * as Ops from "../core/operations"
 
 const spanName = Flag.optional(
@@ -36,11 +36,7 @@ export const traces = Command.make("traces", {
 	Command.withDescription("Search traces/spans in local Maple"),
 	Command.withHandler(
 		Effect.fnUntraced(function* (a) {
-			const range = resolveRange({
-				since: a.since,
-				start: Option.getOrUndefined(a.start),
-				end: Option.getOrUndefined(a.end),
-			})
+			const range = yield* resolveRangeChecked(a)
 			const result = yield* Ops.searchTraces({
 				range,
 				service: Option.getOrUndefined(a.service),
@@ -52,7 +48,7 @@ export const traces = Command.make("traces", {
 				limit: a.limit,
 				offset: a.offset,
 			})
-			yield* printJson(result)
+			yield* printResult(result)
 		}),
 	),
 )
@@ -64,7 +60,7 @@ export const trace = Command.make("trace", {
 	Command.withHandler(
 		Effect.fnUntraced(function* (a) {
 			const result = yield* Ops.inspectTrace({ traceId: a.traceId })
-			yield* printJson(result)
+			yield* printResult(result)
 		}),
 	),
 )
@@ -80,18 +76,14 @@ export const slowTraces = Command.make("slow-traces", {
 	Command.withDescription("Find the slowest traces with duration stats"),
 	Command.withHandler(
 		Effect.fnUntraced(function* (a) {
-			const range = resolveRange({
-				since: a.since,
-				start: Option.getOrUndefined(a.start),
-				end: Option.getOrUndefined(a.end),
-			})
+			const range = yield* resolveRangeChecked(a)
 			const result = yield* Ops.findSlowTraces({
 				range,
 				service: Option.getOrUndefined(a.service),
 				environment: Option.getOrUndefined(a.environment),
 				limit: a.limit,
 			})
-			yield* printJson(result)
+			yield* printResult(result)
 		}),
 	),
 )

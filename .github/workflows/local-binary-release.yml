@@ -64,24 +64,6 @@ jobs:
             - name: Install JS dependencies
               run: bun install --frozen-lockfile
 
-            - name: Build local binary bundle
-              # Builds the SPA, inlines it into the binary, compiles apps/cli with
-              # `bun build --compile`, and downloads the matching libchdb beside it.
-              # Output bundle lands in ./dist (maple + libchdb.so).
-              run: scripts/build-local-binary.sh
-
-            - name: Ad-hoc codesign (macOS)
-              # bun-compiled binaries run locally once Gatekeeper quarantine is
-              # cleared; ad-hoc sign both files for good measure. Production
-              # distribution should layer Developer ID signing + notarization on
-              # top (requires APPLE_* secrets not configured here).
-              if: ${{ matrix.os == 'macos' }}
-              run: |
-                  set -euo pipefail
-                  codesign --force --sign - dist/libchdb.so
-                  codesign --force --sign - dist/maple
-                  codesign --verify --verbose dist/maple
-
             - name: Resolve version
               id: version
               run: |
@@ -96,6 +78,27 @@ jobs:
                     version="$(git rev-parse --short HEAD)"
                   fi
                   echo "version=$version" >> "$GITHUB_OUTPUT"
+
+            - name: Build local binary bundle
+              # Builds the SPA, inlines it into the binary, compiles apps/cli with
+              # `bun build --compile`, and downloads the matching libchdb beside it.
+              # Output bundle lands in ./dist (maple + libchdb.so). MAPLE_BUILD_VERSION
+              # bakes the resolved tag into `maple --version`.
+              env:
+                  MAPLE_BUILD_VERSION: ${{ steps.version.outputs.version }}
+              run: scripts/build-local-binary.sh
+
+            - name: Ad-hoc codesign (macOS)
+              # bun-compiled binaries run locally once Gatekeeper quarantine is
+              # cleared; ad-hoc sign both files for good measure. Production
+              # distribution should layer Developer ID signing + notarization on
+              # top (requires APPLE_* secrets not configured here).
+              if: ${{ matrix.os == 'macos' }}
+              run: |
+                  set -euo pipefail
+                  codesign --force --sign - dist/libchdb.so
+                  codesign --force --sign - dist/maple
+                  codesign --verify --verbose dist/maple
 
             - name: Package bundle
               id: package
