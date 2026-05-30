@@ -7,6 +7,9 @@
 import { executeLocalQuery as run } from "@maple/query-engine/local"
 import { localApiBase } from "./constants"
 
-export function executeLocalQuery<T = Record<string, unknown>>(sql: string): Promise<T[]> {
-	return run<T>(sql, localApiBase())
+export function executeLocalQuery<T = Record<string, unknown>>(
+	sql: string,
+	signal?: AbortSignal,
+): Promise<T[]> {
+	return run<T>(sql, localApiBase(), signal)
 }

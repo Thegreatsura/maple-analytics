@@ -13,7 +13,9 @@ import {
 } from "@maple/ui/components/ui/empty"
 import { Button } from "@maple/ui/components/ui/button"
 import { Skeleton } from "@maple/ui/components/ui/skeleton"
-import { CircleWarningIcon } from "@maple/ui/components/icons"
+import { CircleWarningIcon, ConnectionIcon } from "@maple/ui/components/icons"
+import { LOCAL_OTLP_ENDPOINT, localApiBase } from "../lib/constants"
+import { CopyableField } from "./copyable-field"
 
 export function EmptyState({
 	icon,
@@ -61,6 +63,58 @@ export function ErrorState({
 					</Button>
 				</EmptyContent>
 			) : null}
+		</Empty>
+	)
+}
+
+/**
+ * Shown in place of the views when the local `maple` binary is unreachable —
+ * the connection gate in `App` swaps to this instead of leaving an infinite
+ * skeleton. Tells the user how to start the backend; the gate keeps polling, so
+ * it auto-recovers (and "Try again" forces an immediate probe).
+ */
+export function DisconnectedState({ onRetry }: { onRetry: () => void }) {
+	// `?port=` only matters in remote mode (the UI on local.maple.dev reaching
+	// loopback); on same-origin/dev `localApiBase()` is "" and the port is fixed.
+	const isRemote = localApiBase() !== ""
+	return (
+		<Empty className="h-full">
+			<EmptyMedia variant="icon">
+				<ConnectionIcon className="text-muted-foreground" />
+			</EmptyMedia>
+			<EmptyHeader>
+				<EmptyTitle>Can’t reach Maple Local</EmptyTitle>
+				<EmptyDescription>
+					Start your local Maple backend and this view connects automatically.
+				</EmptyDescription>
+			</EmptyHeader>
+			<EmptyContent className="w-full max-w-sm items-stretch gap-3">
+				<CopyableField label="Start Maple" value="maple start" />
+				<CopyableField label="Expecting" value={LOCAL_OTLP_ENDPOINT} />
+				<p className="text-left text-xs text-muted-foreground">
+					Make sure <code className="rounded bg-muted px-1">maple start</code> is running.
+					{isRemote ? (
+						<>
+							{" "}
+							On a different port? Append{" "}
+							<code className="rounded bg-muted px-1">?port=&lt;n&gt;</code> to the URL.
+						</>
+					) : null}
+				</p>
+				<div className="flex items-center justify-between gap-2">
+					<Button variant="outline" size="sm" onClick={onRetry}>
+						Try again
+					</Button>
+					<a
+						href="https://maple.dev/docs"
+						target="_blank"
+						rel="noopener noreferrer"
+						className="text-xs text-muted-foreground underline underline-offset-2 hover:no-underline"
+					>
+						Documentation
+					</a>
+				</div>
+			</EmptyContent>
 		</Empty>
 	)
 }

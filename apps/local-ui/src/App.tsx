@@ -12,6 +12,8 @@ import { SessionDetailView } from "./views/session-detail-view"
 import { navigate, useLocation } from "./lib/router"
 import { ConnectButton } from "./components/connect-button"
 import { IngestStatus } from "./components/ingest-status"
+import { DisconnectedState } from "./components/view-states"
+import { useLocalConnection } from "./hooks/use-local-connection"
 import { highlightJson } from "./lib/highlight"
 
 // Stable references so the AttributesProvider context value keeps its identity
@@ -47,6 +49,11 @@ export function App() {
 	const { path, query } = useLocation()
 	const route = parseRoute(path)
 	const tab = activeTab(route)
+
+	// When the local binary is unreachable, swap the views for a "how to connect"
+	// screen instead of leaving an infinite skeleton. `connecting`/`connected`
+	// fall through to the normal views, so the happy path is unchanged.
+	const connection = useLocalConnection()
 
 	// Carry the current filter context (full query) onto detail pages and back,
 	// so opening an item and returning preserves the list's filters.
@@ -100,7 +107,9 @@ export function App() {
 			</header>
 
 			<main className="min-h-0 flex-1">
-				{route.name === "trace-detail" ? (
+				{connection.status === "disconnected" ? (
+					<DisconnectedState onRetry={connection.retry} />
+				) : route.name === "trace-detail" ? (
 					<TraceDetailView traceId={route.traceId} onBack={() => navigate("/traces", carry())} />
 				) : route.name === "session-detail" ? (
 					<SessionDetailView

@@ -11,15 +11,10 @@ import {
 	PopoverTitle,
 	PopoverTrigger,
 } from "@maple/ui/components/ui/popover"
-import {
-	InputGroup,
-	InputGroupAddon,
-	InputGroupButton,
-	InputGroupInput,
-} from "@maple/ui/components/ui/input-group"
 import { Separator } from "@maple/ui/components/ui/separator"
-import { CheckIcon, ConnectionIcon, CopyIcon } from "@maple/ui/components/icons"
+import { ConnectionIcon } from "@maple/ui/components/icons"
 import { LOCAL_OTLP_ENDPOINT } from "../lib/constants"
+import { CopyableField } from "./copyable-field"
 
 export function ConnectButton() {
 	const [open, setOpen] = useState(false)
@@ -81,38 +76,6 @@ function ConnectPanel() {
 					Documentation
 				</a>
 			</div>
-		</div>
-	)
-}
-
-function CopyableField({ label, value }: { label: string; value: string }) {
-	const [copied, setCopied] = useState(false)
-
-	async function handleCopy() {
-		try {
-			await navigator.clipboard.writeText(value)
-			setCopied(true)
-			setTimeout(() => setCopied(false), 1500)
-		} catch {
-			// Clipboard can be unavailable on insecure origins — fail silently.
-		}
-	}
-
-	return (
-		<div className="space-y-1">
-			{label && <label className="text-xs text-muted-foreground">{label}</label>}
-			<InputGroup>
-				<InputGroupInput
-					readOnly
-					value={value}
-					className="select-all font-mono text-xs tracking-wide"
-				/>
-				<InputGroupAddon align="inline-end">
-					<InputGroupButton onClick={handleCopy} aria-label={`Copy ${(label || "command").toLowerCase()}`}>
-						{copied ? <CheckIcon size={14} className="text-severity-info" /> : <CopyIcon size={14} />}
-					</InputGroupButton>
-				</InputGroupAddon>
-			</InputGroup>
 		</div>
 	)
 }

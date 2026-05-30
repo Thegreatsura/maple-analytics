@@ -10,6 +10,11 @@ import { parseClickHouseDateTime, toClickHouseDateTime } from "../lib/time"
 // it's effectively free.
 const WINDOW_MS = 10 * 60 * 1000
 const POLL_MS = 5_000
+// Abort the probe if the binary accepts the connection but never answers (chDB
+// runs synchronously over FFI, so a stuck query can hang the response). This
+// turns a hang into an error, which the connection gate reads as "disconnected"
+// instead of an indefinite skeleton.
+const PROBE_TIMEOUT_MS = 3_000
 
 export interface IngestPulse {
 	/** Epoch-ms of the most recent span/log in the window, or null if none. */
@@ -39,7 +44,7 @@ export function useLocalIngestPulse() {
 				endTime: toClickHouseDateTime(now + 60 * 1000),
 			})
 			const rows = compiled.castRows(
-				await executeLocalQuery(compiled.sql),
+				await executeLocalQuery(compiled.sql, AbortSignal.timeout(PROBE_TIMEOUT_MS)),
 			) as ReadonlyArray<LocalIngestPulseOutput>
 
 			const active = rows.filter((row) => row.count > 0)

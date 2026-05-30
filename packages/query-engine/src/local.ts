@@ -15,15 +15,21 @@
  * @param baseUrl  Origin of the local binary. Defaults to `""` (a relative
  *                 `/local/query`, for the SPA behind its vite proxy); the CLI
  *                 passes an absolute address like `http://127.0.0.1:4318`.
+ * @param signal   Optional `AbortSignal` to cancel the request — used by the
+ *                 SPA's connection probe (`AbortSignal.timeout(...)`) so a server
+ *                 that accepts the connection but hangs surfaces as an error
+ *                 instead of pending forever. Heavy list queries pass nothing.
  */
 export async function executeLocalQuery<T = Record<string, unknown>>(
 	sql: string,
 	baseUrl = "",
+	signal?: AbortSignal,
 ): Promise<T[]> {
 	const res = await fetch(`${baseUrl}/local/query`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify({ sql }),
+		signal,
 	})
 
 	if (!res.ok) {
