@@ -33,6 +33,13 @@ MAPLE_BUILD_VERSION="${MAPLE_BUILD_VERSION:-$(git -C "$REPO_ROOT" describe --tag
 
 mkdir -p "$OUT_DIR"
 
+# apps/cli imports `@maple-dev/effect-sdk/server`, which is published from its
+# built `dist/` (tsdown) — and `lib/effect-sdk/dist` is gitignored. A fresh
+# checkout / CI only runs `bun install`, so the dist won't exist and
+# `bun build --compile` fails to resolve the import. Build it first.
+echo "==> Building @maple-dev/effect-sdk (telemetry SDK consumed by the CLI)"
+bun --filter @maple-dev/effect-sdk build
+
 echo "==> Building local-ui SPA"
 bun --filter @maple/local-ui build
 
