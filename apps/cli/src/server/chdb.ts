@@ -14,7 +14,7 @@ import { Effect, Schema, type Scope } from "effect"
 import { existsSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
-import { storeHasData } from "./store-version"
+import { markStoreClosed, markStoreOpen, storeHasData } from "./store-version"
 
 /** A chDB failure — locating libchdb, opening the connection, or bootstrapping
  *  the schema. Carries the underlying message verbatim. */
@@ -213,8 +213,21 @@ export class Chdb {
 export const acquireChdb = (options: ChdbOptions): Effect.Effect<Chdb, ChdbError, Scope.Scope> =>
 	Effect.acquireRelease(
 		Effect.try({
-			try: () => Chdb.open(options),
+			try: () => {
+				const db = Chdb.open(options)
+				// Open (connect + bootstrap) succeeded, so the store loaded fine. From
+				// here until a clean close, a crash leaves the store potentially
+				// inconsistent — mark it so the next `maple start` can auto-recover.
+				markStoreOpen(options.dataDir)
+				return db
+			},
 			catch: (error) => new ChdbError({ message: error instanceof Error ? error.message : String(error) }),
 		}),
-		(db) => Effect.sync(() => db.close()),
+		(db) =>
+			Effect.sync(() => {
+				// Clear the sentinel only AFTER a clean close: if close() throws, leave
+				// the marker so the next start auto-resets rather than risking a crash.
+				db.close()
+				markStoreClosed(options.dataDir)
+			}),
 	)

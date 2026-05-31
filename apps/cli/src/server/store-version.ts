@@ -10,7 +10,7 @@
 // The marker lives BESIDE the data dir (same convention as the PID file) so it
 // stays out of ClickHouse's data path and is removed by `maple reset`.
 
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { CHDB_VERSION } from "../version"
 
@@ -29,6 +29,37 @@ export const storeMarkerPath = (dataDir: string): string => join(dirname(dataDir
 /** True once chDB has bootstrapped a store here (it creates `store/`/`metadata/`). */
 export const storeHasData = (dataDir: string): boolean =>
 	existsSync(join(dataDir, "store")) || existsSync(join(dataDir, "metadata"))
+
+// Clean-shutdown sentinel. Present from the moment chDB opens successfully until
+// it closes cleanly; a leftover marker means the previous server died without
+// running its close finalizer. Reopening such a store can crash the C++ runtime
+// natively (uncatchable from JS) when a persisted MV was left inconsistent — so
+// `maple start` checks for it and auto-rebootstraps. This is NOT a concurrency
+// lock (the PID file already guards concurrent opens); it lives beside the data
+// dir like the PID file / version marker, so `maple reset` removes it.
+
+/** Path to the clean-shutdown sentinel for a given data dir (beside it). */
+export const storeOpenMarkerPath = (dataDir: string): string => join(dirname(dataDir), "maple-store-open")
+
+/** Mark the store as open (not yet cleanly closed). Call right after a
+ *  successful chDB open; the PID is written purely for debuggability. */
+export const markStoreOpen = (dataDir: string): void => writeFileSync(storeOpenMarkerPath(dataDir), `${process.pid}\n`)
+
+/** Clear the clean-shutdown sentinel. Call as the last step of a clean close;
+ *  best-effort (a missing marker is fine). */
+export const markStoreClosed = (dataDir: string): void => {
+	try {
+		unlinkSync(storeOpenMarkerPath(dataDir))
+	} catch {
+		// already gone — nothing to clear
+	}
+}
+
+/** True when the store holds data AND was not cleanly closed (the sentinel
+ *  survives). Gated on `storeHasData`: a marker over an empty store means a
+ *  fresh open that never persisted anything — safe to reopen. */
+export const isStoreDirty = (dataDir: string): boolean =>
+	storeHasData(dataDir) && existsSync(storeOpenMarkerPath(dataDir))
 
 /** Read the marker, or `null` when missing/unparseable. */
 export const readMarker = (dataDir: string): StoreMarker | null => {

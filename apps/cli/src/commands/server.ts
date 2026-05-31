@@ -6,7 +6,7 @@ import { openSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 import { startServer } from "../server/serve"
-import { checkStoreCompatible, storeMarkerJson, storeMarkerPath } from "../server/store-version"
+import { checkStoreCompatible, isStoreDirty, storeMarkerJson, storeMarkerPath, storeOpenMarkerPath } from "../server/store-version"
 import { resolveUiAssets } from "../server/ui-assets"
 import { amber, bold, cyan, dim, green, underline } from "../lib/style"
 import { MAPLE_VERSION } from "../version"
@@ -223,6 +223,7 @@ export const start = Command.make("start", {
 			if (a.reset) {
 				yield* fs.remove(dataDir, { recursive: true, force: true }).pipe(Effect.ignore)
 				yield* fs.remove(storeMarkerPath(dataDir), { force: true }).pipe(Effect.ignore)
+				yield* fs.remove(storeOpenMarkerPath(dataDir), { force: true }).pipe(Effect.ignore)
 			}
 
 			yield* fs.makeDirectory(dataDir, { recursive: true })
@@ -238,6 +239,25 @@ export const start = Command.make("start", {
 						`(store: ${compat.found}; build: ${compat.current}) — loading it would crash chDB. ` +
 						`Wipe it with \`${bold("maple reset")}\`, or start fresh via \`${bold("maple start --reset")}\`.`,
 				})
+			}
+
+			// A store left "open" (the previous server died without running its close
+			// finalizer) may be inconsistent — reopening it can crash chDB natively,
+			// which we cannot catch. Auto-wipe and bootstrap fresh instead of walking
+			// into the crash. (`--reset` already wiped above, so the marker is gone.)
+			if (isStoreDirty(dataDir)) {
+				yield* Effect.sync(() =>
+					process.stderr.write(
+						amber(
+							"⚠ the local store was left inconsistent by an unclean shutdown — " +
+								"wiping it and starting fresh (local telemetry data is discarded)\n",
+						),
+					),
+				)
+				yield* fs.remove(dataDir, { recursive: true, force: true }).pipe(Effect.ignore)
+				yield* fs.remove(storeMarkerPath(dataDir), { force: true }).pipe(Effect.ignore)
+				yield* fs.remove(storeOpenMarkerPath(dataDir), { force: true }).pipe(Effect.ignore)
+				yield* fs.makeDirectory(dataDir, { recursive: true })
 			}
 
 			// Detached: spawn the same command without --background and exit.
@@ -367,6 +387,7 @@ export const reset = Command.make("reset", { dataDir: dataDirFlag, yes: yesFlag 
 
 			yield* fs.remove(dataDir, { recursive: true, force: true }).pipe(Effect.ignore)
 			yield* fs.remove(storeMarkerPath(dataDir), { force: true }).pipe(Effect.ignore)
+			yield* fs.remove(storeOpenMarkerPath(dataDir), { force: true }).pipe(Effect.ignore)
 			yield* Effect.sync(() => process.stderr.write(`${green("✓")} reset — removed ${prettyPath(dataDir)}\n`))
 		}),
 	),

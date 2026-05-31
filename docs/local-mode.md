@@ -102,6 +102,25 @@ short-lived query commands (`maple traces`, …) reach it over HTTP via
 synchronous and serialize naturally on the single JS thread, which preserves
 chDB's single-writer requirement.
 
+### Store lifecycle & recovery
+
+The on-disk store at `~/.maple/data` is guarded by two sentinels beside it
+(`apps/cli/src/server/store-version.ts`):
+
+- **`maple-store-version.json`** — the chDB version that bootstrapped the store.
+  A different chDB build can't be trusted to reload another's persisted
+  materialized views (it may crash the C++ runtime natively, which JS can't
+  catch), so `maple start` **refuses up front** when the version differs.
+  Recover with `maple start --reset`.
+- **`maple-store-open`** — a clean-shutdown sentinel (not a concurrency lock; the
+  PID file already guards that). It's written right after chDB opens and removed
+  as the last step of a clean close. If `maple start` finds it still present over
+  a populated store, the previous server died without closing cleanly and the
+  store may be inconsistent — reopening could crash chDB natively. Rather than
+  risk the crash, `maple start` **auto-wipes the store and bootstraps fresh**,
+  printing a warning. Local telemetry data is **not recoverable** after an
+  unclean kill of chDB; re-ingest to repopulate.
+
 ## The `/local/query` contract
 
 Clients POST `{ "sql": "..." }` and get back a bare JSON array of rows.
