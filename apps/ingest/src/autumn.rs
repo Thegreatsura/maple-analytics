@@ -4,7 +4,7 @@ use std::time::Duration;
 use maple_ingest::metrics;
 use moka::future::Cache;
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 use tracing::{error, info, warn};
@@ -262,30 +262,6 @@ struct CheckRequest<'a> {
     feature_id: &'a str,
 }
 
-// Autumn's `/v1/check` response (snake_case on the wire). We only model the
-// fields the gating decision needs and `#[serde(default)]` everything, so any
-// added/renamed field is ignored rather than failing the parse (which would fail
-// us open). `balance` is the `Balance` object, or null when the customer has no
-// balance for the feature.
-#[derive(Deserialize)]
-struct CheckResponse {
-    #[serde(default)]
-    allowed: bool,
-    #[serde(default)]
-    balance: Option<FeatureBalance>,
-}
-
-#[derive(Deserialize)]
-struct FeatureBalance {
-    #[serde(default)]
-    unlimited: bool,
-    #[serde(default, alias = "overageAllowed")]
-    overage_allowed: bool,
-    /// Remaining balance available for use.
-    #[serde(default)]
-    remaining: Option<f64>,
-}
-
 impl AutumnEntitlements {
     pub fn new(client: Client, secret_key: String, api_url: &str, cache_ttl_secs: u64) -> Self {
         let api_url = api_url.trim_end_matches('/').to_string();
@@ -356,14 +332,49 @@ impl AutumnEntitlements {
             }
         };
 
-        match response.json::<CheckResponse>().await {
-            Ok(check) => decide_allowed(&check),
+        // Parse to an untyped Value rather than a fixed struct: Autumn's
+        // `/v1/check` body has shifted shape across versions (the hosted REST
+        // body is flat with a numeric `balance`; the SDK's typed view nests a
+        // `balance` object with `remaining`). A struct that assumes one shape
+        // fails to decode the other and silently fails us open — which is
+        // exactly the bug this replaces. Value parsing only fails on non-JSON.
+        let text = match response.text().await {
+            Ok(text) => text,
             Err(err) => {
                 warn!(
                     org_id,
                     feature_id,
                     error = %err,
-                    "Failed to decode Autumn check response; failing open"
+                    "Failed to read Autumn check response body; failing open"
+                );
+                return true;
+            }
+        };
+
+        let value = match serde_json::from_str::<serde_json::Value>(&text) {
+            Ok(value) => value,
+            Err(err) => {
+                warn!(
+                    org_id,
+                    feature_id,
+                    error = %err,
+                    body = %truncate_for_log(&text),
+                    "Autumn check response is not JSON; failing open"
+                );
+                return true;
+            }
+        };
+
+        match decide_allowed(&value) {
+            Some(decision) => decision,
+            None => {
+                // Valid JSON we didn't recognize. Fail open, but log the body so
+                // the real shape is visible and we can adapt decide_allowed.
+                warn!(
+                    org_id,
+                    feature_id,
+                    body = %truncate_for_log(&text),
+                    "Unrecognized Autumn check response shape; failing open"
                 );
                 true
             }
@@ -371,85 +382,141 @@ impl AutumnEntitlements {
     }
 }
 
-/// Block only when the org genuinely has no headroom for the feature:
-/// - no balance object: defer to Autumn's own `allowed` flag. An org with no
-///   subscription gets `allowed:false` + `balance:null`, so this blocks.
-/// - unlimited or overage-allowed (usage-based `startup` plan): always allow.
-/// - hard-capped (`starter`): block once `remaining <= 0`. We gate on `remaining`
-///   rather than `allowed` because Autumn's default `required_balance` is 1,
-///   which would flip `allowed` to false at <1 GB left (~98%) — premature for a
-///   GB-denominated meter. Fall back to `allowed` if `remaining` is absent.
-fn decide_allowed(check: &CheckResponse) -> bool {
-    match &check.balance {
-        None => check.allowed,
-        Some(balance) => {
-            if balance.unlimited || balance.overage_allowed {
-                true
-            } else {
-                match balance.remaining {
-                    Some(remaining) => remaining > 0.0,
-                    None => check.allowed,
-                }
-            }
-        }
+fn truncate_for_log(body: &str) -> String {
+    const MAX: usize = 512;
+    if body.len() <= MAX {
+        return body.to_string();
     }
+    // Step back to a char boundary so we never slice through a UTF-8 sequence.
+    let mut end = MAX;
+    while end > 0 && !body.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…", &body[..end])
+}
+
+/// Decide whether an org may ingest, from Autumn's `/v1/check` body. Tolerant of
+/// both the flat hosted REST shape (`balance` is a number, `unlimited` /
+/// `overage_allowed` top-level) and the SDK's nested shape (`balance` is an
+/// object carrying `remaining` / `unlimited` / `overage_allowed`).
+///
+/// Returns `None` when the JSON carries none of the fields we understand, so the
+/// caller can log the body and fail open rather than guess.
+///
+/// Block only when the org genuinely has no headroom:
+/// - `unlimited` or `overage_allowed` (usage-based `startup` plan) → allow.
+/// - a numeric remaining balance → allow while `> 0` (hard-capped `starter`
+///   blocks once depleted). We gate on remaining rather than the `allowed` flag
+///   because Autumn's default `required_balance` is 1, which flips `allowed`
+///   false at <1 GB left (~98%) — premature for a GB-denominated meter.
+/// - otherwise → defer to `allowed`. An org with no subscription gets
+///   `allowed:false`, so this blocks.
+fn decide_allowed(value: &serde_json::Value) -> Option<bool> {
+    let as_bool = |v: &serde_json::Value, key: &str| v.get(key).and_then(|x| x.as_bool());
+
+    let mut understood = false;
+    let mut unlimited = as_bool(value, "unlimited").unwrap_or(false);
+    let mut overage = as_bool(value, "overage_allowed").unwrap_or(false);
+    let mut remaining: Option<f64> = None;
+
+    if unlimited || overage || as_bool(value, "allowed").is_some() {
+        understood = true;
+    }
+
+    match value.get("balance") {
+        Some(serde_json::Value::Number(n)) => {
+            understood = true;
+            remaining = n.as_f64();
+        }
+        Some(serde_json::Value::Object(obj)) => {
+            understood = true;
+            if obj.get("unlimited").and_then(|x| x.as_bool()) == Some(true) {
+                unlimited = true;
+            }
+            if obj.get("overage_allowed").and_then(|x| x.as_bool()) == Some(true) {
+                overage = true;
+            }
+            remaining = obj.get("remaining").and_then(|x| x.as_f64());
+        }
+        Some(serde_json::Value::Null) | None => {}
+        Some(_) => {}
+    }
+
+    if !understood {
+        return None;
+    }
+
+    if unlimited || overage {
+        return Some(true);
+    }
+    if let Some(remaining) = remaining {
+        return Some(remaining > 0.0);
+    }
+    // No remaining figure to gate on → defer to Autumn's own decision.
+    Some(as_bool(value, "allowed").unwrap_or(true))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn resp(allowed: bool, balance: Option<FeatureBalance>) -> CheckResponse {
-        CheckResponse { allowed, balance }
+    fn decide(json: &str) -> Option<bool> {
+        let value = serde_json::from_str::<serde_json::Value>(json).expect("valid json");
+        decide_allowed(&value)
     }
 
-    fn obj(unlimited: bool, overage_allowed: bool, remaining: Option<f64>) -> Option<FeatureBalance> {
-        Some(FeatureBalance {
-            unlimited,
-            overage_allowed,
-            remaining,
-        })
+    // --- Flat hosted REST shape: `balance` is a number; unlimited /
+    // overage_allowed are top-level. This is the shape that broke decode before. ---
+
+    #[test]
+    fn flat_hardcap_with_remaining_allows() {
+        assert_eq!(
+            decide(r#"{"allowed": true, "balance": 12.5, "unlimited": false, "overage_allowed": false}"#),
+            Some(true)
+        );
     }
 
     #[test]
-    fn no_balance_defers_to_allowed() {
-        // No subscription: Autumn returns allowed:false + balance:null -> block.
-        assert!(!decide_allowed(&resp(false, None)));
-        assert!(decide_allowed(&resp(true, None)));
+    fn flat_hardcap_depleted_blocks() {
+        // allowed:false at remaining 0 — and even if `allowed` lagged, remaining
+        // gates the decision.
+        assert_eq!(
+            decide(r#"{"allowed": false, "balance": 0, "unlimited": false, "overage_allowed": false}"#),
+            Some(false)
+        );
     }
 
     #[test]
-    fn unlimited_allows() {
-        assert!(decide_allowed(&resp(false, obj(true, false, Some(-5.0)))));
+    fn flat_sub_one_gb_remaining_still_allows() {
+        // Autumn's required_balance:1 makes `allowed:false` here, but 0.5 GB left
+        // is not depleted — we must still allow.
+        assert_eq!(
+            decide(r#"{"allowed": false, "balance": 0.5, "unlimited": false, "overage_allowed": false}"#),
+            Some(true)
+        );
     }
 
     #[test]
-    fn overage_allows() {
-        // Usage-based `startup` plan is never blocked, even when over the
-        // included amount.
-        assert!(decide_allowed(&resp(false, obj(false, true, Some(-5.0)))));
+    fn flat_unlimited_allows() {
+        assert_eq!(
+            decide(r#"{"allowed": true, "balance": 0, "unlimited": true, "overage_allowed": false}"#),
+            Some(true)
+        );
     }
 
     #[test]
-    fn hardcap_with_remaining_allows() {
-        assert!(decide_allowed(&resp(true, obj(false, false, Some(10.0)))));
+    fn flat_overage_allows() {
+        // Usage-based `startup` plan: never blocked even when over included.
+        assert_eq!(
+            decide(r#"{"allowed": true, "balance": -5, "unlimited": false, "overage_allowed": true}"#),
+            Some(true)
+        );
     }
 
-    #[test]
-    fn hardcap_depleted_blocks() {
-        assert!(!decide_allowed(&resp(true, obj(false, false, Some(0.0)))));
-        assert!(!decide_allowed(&resp(true, obj(false, false, Some(-1.0)))));
-    }
+    // --- Nested SDK shape: `balance` is an object carrying `remaining`. ---
 
     #[test]
-    fn hardcap_without_remaining_falls_back_to_allowed() {
-        assert!(decide_allowed(&resp(true, obj(false, false, None))));
-        assert!(!decide_allowed(&resp(false, obj(false, false, None))));
-    }
-
-    #[test]
-    fn deserializes_wire_shape_with_remaining_and_extra_fields() {
-        // Real `/v1/check` body (snake_case, with fields we don't model).
+    fn nested_balance_object_with_remaining_allows() {
         let json = r#"{
             "allowed": true,
             "customer_id": "org_123",
@@ -464,16 +531,40 @@ mod tests {
             },
             "flag": null
         }"#;
-        let check: CheckResponse = serde_json::from_str(json).expect("parses");
-        assert!(decide_allowed(&check));
-        assert_eq!(check.balance.unwrap().remaining, Some(12.5));
+        assert_eq!(decide(json), Some(true));
     }
 
     #[test]
-    fn deserializes_null_balance_no_subscription() {
-        let json = r#"{"allowed": false, "balance": null, "flag": null}"#;
-        let check: CheckResponse = serde_json::from_str(json).expect("parses");
-        assert!(!decide_allowed(&check));
+    fn nested_balance_object_depleted_blocks() {
+        let json = r#"{"allowed": false, "balance": {"remaining": 0, "unlimited": false, "overage_allowed": false}, "flag": null}"#;
+        assert_eq!(decide(json), Some(false));
+    }
+
+    #[test]
+    fn nested_overage_allows() {
+        let json = r#"{"allowed": false, "balance": {"remaining": -5, "unlimited": false, "overage_allowed": true}}"#;
+        assert_eq!(decide(json), Some(true));
+    }
+
+    // --- No balance / no subscription: defer to `allowed`. ---
+
+    #[test]
+    fn null_balance_no_subscription_blocks() {
+        assert_eq!(decide(r#"{"allowed": false, "balance": null, "flag": null}"#), Some(false));
+    }
+
+    #[test]
+    fn allowed_only_no_balance_field() {
+        assert_eq!(decide(r#"{"allowed": true}"#), Some(true));
+        assert_eq!(decide(r#"{"allowed": false}"#), Some(false));
+    }
+
+    // --- Unrecognized shape: None so the caller logs + fails open. ---
+
+    #[test]
+    fn unrecognized_shape_returns_none() {
+        assert_eq!(decide(r#"{"error": "internal", "code": 500}"#), None);
+        assert_eq!(decide(r#"{}"#), None);
     }
 
     #[tokio::test]
