@@ -1956,8 +1956,17 @@ export class QueryEngineService extends Context.Service<QueryEngineService, Quer
 			const executeImpl = makeQueryEngineExecute(warehouse)
 			const evaluateImpl = makeQueryEngineEvaluate(warehouse)
 			const evaluateRawSqlImpl = makeQueryEngineEvaluateRawSql(warehouse)
+			// Off by default. Live measurement showed routing alert evaluation
+			// through the bucket cache is a NET REGRESSION: each eval fans out into
+			// ~3 warehouse queries (the flux tail + alignment gaps become separate
+			// queries run with unbounded concurrency), so it TRIPLED alert-eval
+			// warehouse QPS rather than reducing it — driving eval p50 150ms→~800ms,
+			// p99 into the 30s timeout, and contending the warehouse for dashboards
+			// too. Each eval query is only ~130ms/~1 row, so the blob path is cheaper.
+			// Re-enable only after the fan-out is coalesced into ≤1 query per eval
+			// (min(start)..max(end)) with bounded concurrency.
 			const evalBucketCacheEnabled = yield* Config.boolean("QE_EVAL_BUCKET_CACHE_ENABLED").pipe(
-				Config.withDefault(true),
+				Config.withDefault(false),
 			)
 
 			const recordCacheOutcome = (hit: boolean) =>
