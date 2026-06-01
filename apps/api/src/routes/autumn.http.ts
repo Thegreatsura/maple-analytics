@@ -45,19 +45,46 @@ export const AutumnRouter = HttpRouter.use((router) =>
 					}
 				}
 
-				const result = yield* Effect.tryPromise(() =>
-					autumnHandler({
-						request: { url: req.url, method: req.method, body },
-						customerId: tenant.orgId,
-						customerData,
-						clientOptions: { secretKey },
-					}),
-				)
+				const result = yield* Effect.tryPromise({
+					try: () =>
+						autumnHandler({
+							request: { url: req.url, method: req.method, body },
+							customerId: tenant.orgId,
+							customerData,
+							clientOptions: { secretKey },
+						}),
+					catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+				})
 
 				return yield* HttpServerResponse.json(result.response, {
 					status: result.statusCode,
 				})
-			})
+			}).pipe(
+				// Never fall through to an empty-body 500: the Autumn SDK client
+				// calls `.json()` on the response and throws "Unexpected end of JSON
+				// input" on an empty body. `useCustomer()` fires getOrCreateCustomer
+				// on every page load — including during sign-up before a Clerk org is
+				// active, where resolveTenant raises UnauthorizedError — so always
+				// return a JSON body with a sensible status.
+				Effect.catch((error: unknown) => {
+					const tag =
+						typeof error === "object" && error !== null && "_tag" in error
+							? (error as { _tag?: unknown })._tag
+							: undefined
+					const isUnauthorized = tag === "@maple/http/errors/UnauthorizedError"
+					const message =
+						typeof error === "object" && error !== null && "message" in error
+							? String((error as { message?: unknown }).message)
+							: String(error)
+					const status = isUnauthorized ? 401 : 500
+					return Effect.flatMap(
+						isUnauthorized
+							? Effect.void
+							: Effect.logError("[autumn] handler failed", { route, error: message }),
+						() => HttpServerResponse.json({ error: message }, { status }),
+					)
+				}),
+			)
 
 		const routes = [
 			"getOrCreateCustomer",

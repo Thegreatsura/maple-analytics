@@ -1,89 +1,58 @@
-import { DemoSeedError, DemoSeedResponse, type OrgId, type UserId } from "@maple/domain/http"
+import { DemoSeedError, DemoSeedResponse } from "@maple/domain/http"
 import { Context, Effect, Layer } from "effect"
-import { Env } from "../lib/Env"
-import { OrgIngestKeysService } from "./OrgIngestKeysService"
-import { generateDemoBatches } from "./demo/fixtures"
+import { WarehouseQueryService } from "../lib/WarehouseQueryService"
+import type { TenantContext } from "./AuthService"
+import { generateDemoRows } from "./demo/fixtures"
 
 const DEMO_HOURS_DEFAULT = 6
 const DEMO_RATE_PER_HOUR = 250
+// Rows per warehouse append. Keeps each NDJSON POST body modest (~1.5k rows
+// total for the 6h default) without fanning out into many tiny requests.
+const INGEST_CHUNK = 500
 
-const toSeedError = (message: string) => new DemoSeedError({ message })
+const chunk = <T>(rows: ReadonlyArray<T>, size: number): T[][] => {
+	const out: T[][] = []
+	for (let i = 0; i < rows.length; i += size) out.push(rows.slice(i, i + size))
+	return out
+}
 
 export class DemoService extends Context.Service<DemoService>()("@maple/api/services/DemoService", {
 	make: Effect.gen(function* () {
-		const ingestKeys = yield* OrgIngestKeysService
-		const env = yield* Env
-		const ingestBaseUrl = env.MAPLE_INGEST_PUBLIC_URL.replace(/\/$/, "")
-
-		const postOtlp = (path: string, body: unknown, ingestKey: string) =>
-			Effect.tryPromise({
-				try: async () => {
-					const response = await fetch(`${ingestBaseUrl}${path}`, {
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							Authorization: `Bearer ${ingestKey}`,
-						},
-						body: JSON.stringify(body),
-					})
-					if (!response.ok) {
-						const text = await response.text().catch(() => "")
-						throw new Error(`Ingest gateway ${response.status}: ${text.slice(0, 200)}`)
-					}
-				},
-				catch: (error) =>
-					toSeedError(
-						error instanceof Error ? error.message : "Failed to forward demo data to ingest",
-					),
-			})
+		const warehouse = yield* WarehouseQueryService
 
 		const seed = Effect.fn("DemoService.seed")(function* (
-			orgId: OrgId,
-			userId: UserId,
+			tenant: TenantContext,
 			hours: number = DEMO_HOURS_DEFAULT,
 		) {
-			const keys = yield* ingestKeys
-				.getOrCreate(orgId, userId)
-				.pipe(Effect.mapError((error) => toSeedError(error.message)))
-
 			const safeHours = Math.max(1, Math.min(24, Math.floor(hours)))
-			const { tracesByBatch, logsByBatch } = generateDemoBatches({
+			const { traceRows, logRows } = generateDemoRows({
+				orgId: tenant.orgId,
 				hours: safeHours,
 				ratePerHour: DEMO_RATE_PER_HOUR,
 			})
 
-			yield* Effect.forEach(
-				tracesByBatch,
-				(batch) => postOtlp("/v1/traces", { resourceSpans: batch }, keys.publicKey),
-				{ concurrency: 1, discard: true },
-			)
-			const spansSent = tracesByBatch.reduce(
-				(total, batch) =>
-					total +
-					batch.reduce((acc, rs) => acc + rs.scopeSpans.reduce((s, sc) => s + sc.spans.length, 0), 0),
-				0,
-			)
+			const ingestAll = (datasource: "traces" | "logs", rows: ReadonlyArray<unknown>) =>
+				Effect.forEach(
+					chunk(rows, INGEST_CHUNK),
+					(batch) =>
+						warehouse
+							.ingest(tenant, datasource, batch)
+							.pipe(Effect.mapError((error) => new DemoSeedError({ message: error.message }))),
+					{ concurrency: 1, discard: true },
+				)
 
-			yield* Effect.forEach(
-				logsByBatch,
-				(batch) => postOtlp("/v1/logs", { resourceLogs: batch }, keys.publicKey),
-				{ concurrency: 1, discard: true },
-			)
-			const logsSent = logsByBatch.reduce(
-				(total, batch) =>
-					total +
-					batch.reduce(
-						(acc, rl) => acc + rl.scopeLogs.reduce((s, sc) => s + sc.logRecords.length, 0),
-						0,
-					),
-				0,
-			)
+			// Write straight to the warehouse datasources, bypassing the
+			// billing-enforced ingest gateway (which 402s brand-new orgs that have
+			// no active subscription — the whole point of demo data is to work
+			// before the user has picked a plan).
+			yield* ingestAll("traces", traceRows)
+			yield* ingestAll("logs", logRows)
 
 			return new DemoSeedResponse({
 				seeded: true,
 				skippedReason: null,
-				spansSent,
-				logsSent,
+				spansSent: traceRows.length,
+				logsSent: logRows.length,
 				metricsSent: 0,
 			})
 		})

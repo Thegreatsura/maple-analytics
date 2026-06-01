@@ -86,10 +86,12 @@ export const CoreServicesLive = Layer.mergeAll(
 	IngestAttributeMappingService.layer,
 ).pipe(Layer.provideMerge(InfraLive))
 
-export const DemoServiceLive = DemoService.layer.pipe(Layer.provideMerge(CoreServicesLive))
-
 export const WarehouseQueryServiceLive = WarehouseQueryService.layer.pipe(
 	Layer.provideMerge(CoreServicesLive),
+)
+
+export const DemoServiceLive = DemoService.layer.pipe(
+	Layer.provideMerge(Layer.mergeAll(CoreServicesLive, WarehouseQueryServiceLive)),
 )
 
 export const BucketCacheServiceLive = BucketCacheService.layer.pipe(

@@ -1,9 +1,9 @@
 import { randomBytes } from "node:crypto"
 
 const SERVICES = ["demo-api", "demo-frontend", "demo-worker", "demo-db"] as const
-type DemoService = (typeof SERVICES)[number]
+type DemoServiceName = (typeof SERVICES)[number]
 
-const HTTP_ROUTES: Array<{ method: string; route: string; service: DemoService }> = [
+const HTTP_ROUTES: Array<{ method: string; route: string; service: DemoServiceName }> = [
 	{ method: "GET", route: "/api/users", service: "demo-api" },
 	{ method: "GET", route: "/api/users/:id", service: "demo-api" },
 	{ method: "POST", route: "/api/users", service: "demo-api" },
@@ -31,62 +31,74 @@ const WORKER_JOBS = [
 	"refresh_cache",
 ]
 
-export interface DemoSeedSummary {
-	spansSent: number
-	logsSent: number
-	metricsSent: number
+// ---------------------------------------------------------------------------
+// Demo data is written straight to the `traces` / `logs` datasources via
+// WarehouseQueryService.ingest (bypassing the billing-enforced ingest gateway),
+// so each row must match those datasources' ingestion JSON — the OpenTelemetry
+// Collector Tinybird exporter shape (snake_case keys, jsonPath-mapped). See
+// packages/domain/src/tinybird/datasources.ts.
+//
+// Org scoping is derived from `resource_attributes.maple_org_id`, so every row
+// MUST carry it. `SampleRate` / `IsEntryPoint` are computed by datasource
+// DEFAULT expressions, so they are intentionally omitted here.
+// ---------------------------------------------------------------------------
+
+type Attrs = Record<string, string>
+
+/** One row in the `traces` datasource (collector Tinybird exporter shape). */
+interface TraceRow {
+	start_time: string
+	trace_id: string
+	span_id: string
+	parent_span_id: string
+	trace_state: string
+	span_name: string
+	span_kind: string
+	service_name: string
+	resource_schema_url: string
+	resource_attributes: Attrs
+	scope_schema_url: string
+	scope_name: string
+	scope_version: string
+	scope_attributes: Attrs
+	duration: number
+	status_code: string
+	status_message: string
+	span_attributes: Attrs
+	events_timestamp: string[]
+	events_name: string[]
+	events_attributes: Attrs[]
+	links_trace_id: string[]
+	links_span_id: string[]
+	links_trace_state: string[]
+	links_attributes: Attrs[]
 }
 
-interface OtlpAttribute {
-	key: string
-	value: { stringValue?: string; intValue?: string; boolValue?: boolean; doubleValue?: number }
+/** One row in the `logs` datasource (collector Tinybird exporter shape). */
+interface LogRow {
+	timestamp: string
+	trace_id: string
+	span_id: string
+	flags: number
+	severity_text: string
+	severity_number: number
+	service_name: string
+	body: string
+	resource_schema_url: string
+	resource_attributes: Attrs
+	scope_schema_url: string
+	scope_name: string
+	scope_version: string
+	scope_attributes: Attrs
+	log_attributes: Attrs
 }
 
-interface OtlpSpan {
-	traceId: string
-	spanId: string
-	parentSpanId?: string
-	name: string
-	kind: number
-	startTimeUnixNano: string
-	endTimeUnixNano: string
-	attributes: OtlpAttribute[]
-	status: { code: number; message?: string }
+export interface DemoRows {
+	traceRows: TraceRow[]
+	logRows: LogRow[]
 }
 
-interface OtlpResourceSpans {
-	resource: { attributes: OtlpAttribute[] }
-	scopeSpans: Array<{ scope: { name: string; version?: string }; spans: OtlpSpan[] }>
-}
-
-interface OtlpLogRecord {
-	timeUnixNano: string
-	observedTimeUnixNano: string
-	severityNumber: number
-	severityText: string
-	body: { stringValue: string }
-	attributes: OtlpAttribute[]
-	traceId?: string
-	spanId?: string
-}
-
-interface OtlpResourceLogs {
-	resource: { attributes: OtlpAttribute[] }
-	scopeLogs: Array<{ scope: { name: string }; logRecords: OtlpLogRecord[] }>
-}
-
-const stringAttr = (key: string, value: string): OtlpAttribute => ({
-	key,
-	value: { stringValue: value },
-})
-const intAttr = (key: string, value: number): OtlpAttribute => ({
-	key,
-	value: { intValue: String(value) },
-})
-const boolAttr = (key: string, value: boolean): OtlpAttribute => ({
-	key,
-	value: { boolValue: value },
-})
+const SCOPE_NAME = "@maple/demo-instr"
 
 const traceIdHex = () => randomBytes(16).toString("hex")
 const spanIdHex = () => randomBytes(8).toString("hex")
@@ -112,23 +124,74 @@ function dbLatencyMs(): number {
 	return Math.max(1, gaussian(8, 5))
 }
 
-function buildResourceAttrs(service: DemoService): OtlpAttribute[] {
-	return [
-		stringAttr("service.name", service),
-		stringAttr("service.version", "1.0.0"),
-		stringAttr("deployment.environment", "production"),
-		stringAttr("telemetry.sdk.name", "maple-demo"),
-		stringAttr("telemetry.sdk.language", "nodejs"),
-		boolAttr("maple.demo", true),
-	]
-}
+// ClickHouse DateTime64 wire format: "YYYY-MM-DD HH:MM:SS.mmm" in UTC.
+const fmtTs = (epochMs: number) => new Date(epochMs).toISOString().replace("T", " ").replace("Z", "")
 
-interface GeneratedTrace {
-	resourceSpans: OtlpResourceSpans[]
-	logs: Array<{ service: DemoService; record: OtlpLogRecord }>
-}
+const resourceAttrs = (service: DemoServiceName, orgId: string): Attrs => ({
+	maple_org_id: orgId,
+	"service.name": service,
+	"service.version": "1.0.0",
+	"deployment.environment": "production",
+	"telemetry.sdk.name": "maple-demo",
+	"telemetry.sdk.language": "nodejs",
+	"maple.demo": "true",
+})
 
-function generateHttpTrace(timestamp: Date): GeneratedTrace {
+const makeTraceRow = (
+	over: Partial<TraceRow> & {
+		start_time: string
+		trace_id: string
+		span_id: string
+		span_name: string
+		span_kind: string
+		service_name: string
+		duration: number
+		status_code: string
+		resource_attributes: Attrs
+		span_attributes: Attrs
+	},
+): TraceRow => ({
+	parent_span_id: "",
+	trace_state: "",
+	resource_schema_url: "",
+	scope_schema_url: "",
+	scope_name: SCOPE_NAME,
+	scope_version: "",
+	scope_attributes: {},
+	status_message: "",
+	events_timestamp: [],
+	events_name: [],
+	events_attributes: [],
+	links_trace_id: [],
+	links_span_id: [],
+	links_trace_state: [],
+	links_attributes: [],
+	...over,
+})
+
+const makeLogRow = (
+	over: Partial<LogRow> & {
+		timestamp: string
+		severity_text: string
+		severity_number: number
+		service_name: string
+		body: string
+		resource_attributes: Attrs
+	},
+): LogRow => ({
+	trace_id: "",
+	span_id: "",
+	flags: 0,
+	resource_schema_url: "",
+	scope_schema_url: "",
+	scope_name: SCOPE_NAME,
+	scope_version: "",
+	scope_attributes: {},
+	log_attributes: {},
+	...over,
+})
+
+function generateHttpTrace(timestamp: Date, orgId: string): DemoRows {
 	const route = pick(HTTP_ROUTES)
 	const traceId = traceIdHex()
 	const rootSpanId = spanIdHex()
@@ -137,179 +200,153 @@ function generateHttpTrace(timestamp: Date): GeneratedTrace {
 	const isError = Math.random() < 0.012
 	const totalLatency = latencyMs() + (isError ? 100 : 0)
 	const dbLatency = Math.min(totalLatency * 0.6, dbLatencyMs())
-	const dbStart = timestamp.getTime() + Math.floor((totalLatency - dbLatency) / 2)
+	const startMs = timestamp.getTime()
+	const endMs = startMs + totalLatency
+	const dbStartMs = startMs + Math.floor((totalLatency - dbLatency) / 2)
 
-	const startNs = BigInt(timestamp.getTime()) * 1_000_000n
-	const endNs = startNs + BigInt(Math.round(totalLatency * 1_000_000))
-	const dbStartNs = BigInt(dbStart) * 1_000_000n
-	const dbEndNs = dbStartNs + BigInt(Math.round(dbLatency * 1_000_000))
+	const httpStatus = isError ? (Math.random() < 0.5 ? 500 : 503) : Math.random() < 0.04 ? 404 : 200
 
-	const statusCode = isError ? (Math.random() < 0.5 ? 500 : 503) : Math.random() < 0.04 ? 404 : 200
-
-	const apiSpan: OtlpSpan = {
-		traceId,
-		spanId: rootSpanId,
-		name: `${route.method} ${route.route}`,
-		kind: 2,
-		startTimeUnixNano: startNs.toString(),
-		endTimeUnixNano: endNs.toString(),
-		attributes: [
-			stringAttr("http.method", route.method),
-			stringAttr("http.route", route.route),
-			intAttr("http.status_code", statusCode),
-			stringAttr("http.scheme", "https"),
-			stringAttr("http.host", "api.demo.maple.dev"),
-			stringAttr("net.peer.name", "client"),
-			boolAttr("maple.demo", true),
-		],
-		status: {
-			code: isError ? 2 : 1,
-			...(isError ? { message: "Internal server error" } : {}),
+	const apiRow = makeTraceRow({
+		start_time: fmtTs(startMs),
+		trace_id: traceId,
+		span_id: rootSpanId,
+		span_name: `${route.method} ${route.route}`,
+		span_kind: "Server",
+		service_name: route.service,
+		duration: Math.round(totalLatency * 1_000_000),
+		status_code: isError ? "Error" : "Ok",
+		status_message: isError ? "Internal server error" : "",
+		resource_attributes: resourceAttrs(route.service, orgId),
+		span_attributes: {
+			"http.method": route.method,
+			"http.route": route.route,
+			"http.status_code": String(httpStatus),
+			"http.scheme": "https",
+			"http.host": "api.demo.maple.dev",
+			"net.peer.name": "client",
+			"maple.demo": "true",
 		},
-	}
+		...(isError
+			? {
+					events_timestamp: [fmtTs(endMs)],
+					events_name: ["exception"],
+					events_attributes: [
+						{
+							"exception.type": "ConnectionResetError",
+							"exception.message": `Unhandled error in ${route.method} ${route.route}: connection reset`,
+						},
+					],
+				}
+			: {}),
+	})
 
-	const dbSpan: OtlpSpan = {
-		traceId,
-		spanId: dbSpanId,
-		parentSpanId: rootSpanId,
-		name: "pg.query",
-		kind: 3,
-		startTimeUnixNano: dbStartNs.toString(),
-		endTimeUnixNano: dbEndNs.toString(),
-		attributes: [
-			stringAttr("db.system", "postgresql"),
-			stringAttr("db.statement", pick(DB_QUERIES)),
-			stringAttr("db.name", "demo"),
-			boolAttr("maple.demo", true),
-		],
-		status: { code: 1 },
-	}
+	const dbRow = makeTraceRow({
+		start_time: fmtTs(dbStartMs),
+		trace_id: traceId,
+		span_id: dbSpanId,
+		parent_span_id: rootSpanId,
+		span_name: "pg.query",
+		span_kind: "Client",
+		service_name: "demo-db",
+		duration: Math.round(dbLatency * 1_000_000),
+		status_code: "Ok",
+		resource_attributes: resourceAttrs("demo-db", orgId),
+		span_attributes: {
+			"db.system": "postgresql",
+			"db.statement": pick(DB_QUERIES),
+			"db.name": "demo",
+			"maple.demo": "true",
+		},
+	})
 
-	const apiResource: OtlpResourceSpans = {
-		resource: { attributes: buildResourceAttrs(route.service) },
-		scopeSpans: [{ scope: { name: "@maple/demo-instr" }, spans: [apiSpan] }],
-	}
-
-	const dbResource: OtlpResourceSpans = {
-		resource: { attributes: buildResourceAttrs("demo-db") },
-		scopeSpans: [{ scope: { name: "@maple/demo-instr" }, spans: [dbSpan] }],
-	}
-
-	const logs: GeneratedTrace["logs"] = []
-
+	const logRows: LogRow[] = []
 	if (isError) {
-		logs.push({
-			service: route.service,
-			record: {
-				timeUnixNano: endNs.toString(),
-				observedTimeUnixNano: endNs.toString(),
-				severityNumber: 17,
-				severityText: "ERROR",
-				body: {
-					stringValue: `Unhandled error in ${route.method} ${route.route}: connection reset`,
+		logRows.push(
+			makeLogRow({
+				timestamp: fmtTs(endMs),
+				trace_id: traceId,
+				span_id: rootSpanId,
+				severity_text: "Error",
+				severity_number: 17,
+				service_name: route.service,
+				body: `Unhandled error in ${route.method} ${route.route}: connection reset`,
+				resource_attributes: resourceAttrs(route.service, orgId),
+				log_attributes: {
+					"http.route": route.route,
+					"error.type": "ConnectionResetError",
+					"maple.demo": "true",
 				},
-				attributes: [
-					stringAttr("http.route", route.route),
-					stringAttr("error.type", "ConnectionResetError"),
-					boolAttr("maple.demo", true),
-				],
-				traceId,
-				spanId: rootSpanId,
-			},
-		})
+			}),
+		)
 	}
 
-	return { resourceSpans: [apiResource, dbResource], logs }
+	return { traceRows: [apiRow, dbRow], logRows }
 }
 
-function generateWorkerTrace(timestamp: Date): GeneratedTrace {
+function generateWorkerTrace(timestamp: Date, orgId: string): DemoRows {
 	const job = pick(WORKER_JOBS)
 	const traceId = traceIdHex()
 	const spanId = spanIdHex()
 	const isError = Math.random() < 0.008
 	const total = Math.max(20, gaussian(180, 90)) + (isError ? 50 : 0)
-	const startNs = BigInt(timestamp.getTime()) * 1_000_000n
-	const endNs = startNs + BigInt(Math.round(total * 1_000_000))
+	const startMs = timestamp.getTime()
+	const endMs = startMs + total
 
-	const span: OtlpSpan = {
-		traceId,
-		spanId,
-		name: `worker.${job}`,
-		kind: 1,
-		startTimeUnixNano: startNs.toString(),
-		endTimeUnixNano: endNs.toString(),
-		attributes: [
-			stringAttr("messaging.operation", "process"),
-			stringAttr("messaging.system", "demo-queue"),
-			stringAttr("job.name", job),
-			boolAttr("maple.demo", true),
-		],
-		status: { code: isError ? 2 : 1 },
-	}
+	const row = makeTraceRow({
+		start_time: fmtTs(startMs),
+		trace_id: traceId,
+		span_id: spanId,
+		span_name: `worker.${job}`,
+		span_kind: "Internal",
+		service_name: "demo-worker",
+		duration: Math.round(total * 1_000_000),
+		status_code: isError ? "Error" : "Ok",
+		status_message: isError ? "Job processing failed" : "",
+		resource_attributes: resourceAttrs("demo-worker", orgId),
+		span_attributes: {
+			"messaging.operation": "process",
+			"messaging.system": "demo-queue",
+			"job.name": job,
+			"maple.demo": "true",
+		},
+		...(isError
+			? {
+					events_timestamp: [fmtTs(endMs)],
+					events_name: ["exception"],
+					events_attributes: [
+						{ "exception.type": "JobProcessingError", "exception.message": `worker.${job} failed` },
+					],
+				}
+			: {}),
+	})
 
-	return {
-		resourceSpans: [
-			{
-				resource: { attributes: buildResourceAttrs("demo-worker") },
-				scopeSpans: [{ scope: { name: "@maple/demo-instr" }, spans: [span] }],
-			},
-		],
-		logs: [],
-	}
+	return { traceRows: [row], logRows: [] }
 }
 
-export function generateDemoBatches({ hours, ratePerHour }: { hours: number; ratePerHour: number }) {
+export function generateDemoRows({
+	orgId,
+	hours,
+	ratePerHour,
+}: {
+	orgId: string
+	hours: number
+	ratePerHour: number
+}): DemoRows {
 	const now = Date.now()
-	const tracesByBatch: OtlpResourceSpans[][] = []
-	const logsByBatch: OtlpResourceLogs[][] = []
+	const traceRows: TraceRow[] = []
+	const logRows: LogRow[] = []
 
 	const totalTraces = hours * ratePerHour
-	const batchSize = 50
-	let currentBatch: OtlpResourceSpans[] = []
-	let currentLogs: Map<DemoService, OtlpLogRecord[]> = new Map()
-
 	for (let i = 0; i < totalTraces; i++) {
 		const offsetMs = Math.floor((i / totalTraces) * hours * 3600 * 1000)
 		const ts = new Date(now - hours * 3600 * 1000 + offsetMs)
 
 		const isWorker = Math.random() < 0.25
-		const result = isWorker ? generateWorkerTrace(ts) : generateHttpTrace(ts)
+		const result = isWorker ? generateWorkerTrace(ts, orgId) : generateHttpTrace(ts, orgId)
 
-		currentBatch.push(...result.resourceSpans)
-		for (const { service, record } of result.logs) {
-			const arr = currentLogs.get(service) ?? []
-			arr.push(record)
-			currentLogs.set(service, arr)
-		}
-
-		if (currentBatch.length >= batchSize) {
-			tracesByBatch.push(currentBatch)
-			currentBatch = []
-			if (currentLogs.size > 0) {
-				const resourceLogs: OtlpResourceLogs[] = []
-				for (const [service, records] of currentLogs.entries()) {
-					resourceLogs.push({
-						resource: { attributes: buildResourceAttrs(service) },
-						scopeLogs: [{ scope: { name: "@maple/demo-instr" }, logRecords: records }],
-					})
-				}
-				logsByBatch.push(resourceLogs)
-				currentLogs = new Map()
-			}
-		}
+		traceRows.push(...result.traceRows)
+		logRows.push(...result.logRows)
 	}
 
-	if (currentBatch.length > 0) tracesByBatch.push(currentBatch)
-	if (currentLogs.size > 0) {
-		const resourceLogs: OtlpResourceLogs[] = []
-		for (const [service, records] of currentLogs.entries()) {
-			resourceLogs.push({
-				resource: { attributes: buildResourceAttrs(service) },
-				scopeLogs: [{ scope: { name: "@maple/demo-instr" }, logRecords: records }],
-			})
-		}
-		logsByBatch.push(resourceLogs)
-	}
-
-	return { tracesByBatch, logsByBatch }
+	return { traceRows, logRows }
 }

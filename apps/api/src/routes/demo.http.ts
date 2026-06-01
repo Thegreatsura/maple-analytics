@@ -10,7 +10,7 @@ export const HttpDemoLive = HttpApiBuilder.group(MapleApi, "demo", (handlers) =>
 		return handlers.handle("seed", ({ payload }) =>
 			Effect.gen(function* () {
 				const tenant = yield* CurrentTenant.Context
-				return yield* demo.seed(tenant.orgId, tenant.userId, payload.hours ?? 6)
+				return yield* demo.seed(tenant, payload.hours ?? 6)
 			}),
 		)
 	}),
