@@ -87,6 +87,12 @@ const l = (path: string) => getRelativeLocaleUrl(locale, path);
                     <li><a href="https://x.com/maple_dev" target="_blank" rel="noopener noreferrer" class="text-fg-muted text-xs hover:text-foreground transition-colors">{m.footer_twitter()}</a></li>
                     <li><a href="https://discord.gg/BnXjKuwJqP" target="_blank" rel="noopener noreferrer" class="text-fg-muted text-xs hover:text-foreground transition-colors">{m.footer_discord()}</a></li>
                 </ul>
+
+                <h4 class="text-[10px] text-foreground font-medium uppercase tracking-wider mb-4 mt-6">Learn</h4>
+                <ul class="space-y-2">
+                    <li><a href={l("/observability")} class="text-fg-muted text-xs hover:text-foreground transition-colors">What is observability?</a></li>
+                    <li><a href={l("/best-open-source-observability-tools")} class="text-fg-muted text-xs hover:text-foreground transition-colors">Best open-source tools</a></li>
+                </ul>
             </div>
         </div>
 

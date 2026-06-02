@@ -43,6 +43,11 @@ export default defineConfig({
 					ko: "ko",
 				},
 			},
+			// Stamp a build-time lastmod so the sitemap exposes a freshness signal.
+			serialize(item) {
+				item.lastmod = new Date().toISOString()
+				return item
+			},
 		}),
 	],
 	vite: {
