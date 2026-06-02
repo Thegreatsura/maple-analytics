@@ -1,6 +1,7 @@
 import { Checkbox } from "@maple/ui/components/ui/checkbox"
 import { Input } from "@maple/ui/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@maple/ui/components/ui/select"
+import { Textarea } from "@maple/ui/components/ui/textarea"
 import { cn } from "@maple/ui/utils"
 import { chartRegistry } from "@maple/ui/components/charts/registry"
 import type { ValueUnit, VisualizationType } from "@/components/dashboard-builder/types"
@@ -186,12 +187,11 @@ export function WidgetSettingsBar() {
 			{/* Description */}
 			<div className="space-y-1.5">
 				<p className="text-[11px] uppercase tracking-wide text-muted-foreground">Description</p>
-				<textarea
+				<Textarea
 					value={description}
 					onChange={(event) => onChange({ description: event.target.value })}
 					placeholder="Add a description..."
 					rows={2}
-					className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
 				/>
 			</div>
 
