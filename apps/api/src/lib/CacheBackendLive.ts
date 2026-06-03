@@ -1,5 +1,5 @@
 import { Effect, Layer } from "effect"
-import { WorkersCache } from "@maple/effect-cloudflare"
+import { WorkersCache } from "@maple/effect-cloudflare/workers-cache"
 import { CacheBackend, type EdgeCacheBackend, makeMemoryBackend } from "@maple/query-engine/caching"
 
 // ---------------------------------------------------------------------------

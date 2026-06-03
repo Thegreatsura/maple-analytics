@@ -1,6 +1,6 @@
-import { LogCluster } from './log-cluster';
-import { LruCache } from './lru-cache';
-import { Node } from './node';
+import { LogCluster } from "./log-cluster";
+import { LruCache } from "./lru-cache";
+import { Node } from "./node";
 
 export class Drain {
   logClusterDepth: number;
@@ -23,11 +23,11 @@ export class Drain {
     maxChildren: number = 100,
     maxClusters: number | null = null,
     extraDelimiters: string[] = [],
-    paramStr: string = '<*>',
+    paramStr: string = "<*>",
     parametrizeNumericTokens: boolean = true,
   ) {
     if (depth < 3) {
-      throw new Error('depth argument must be at least 3');
+      throw new Error("depth argument must be at least 3");
     }
 
     this.logClusterDepth = depth;
@@ -99,19 +99,15 @@ export class Drain {
   getContentAsTokens(content: string): string[] {
     let c = content.trim();
     for (const delimiter of this.extraDelimiters) {
-      c = c.split(delimiter).join(' ');
+      c = c.split(delimiter).join(" ");
     }
     if (c.length === 0) return [];
     return c.split(/\s+/);
   }
 
-  getSeqDistance(
-    seq1: string[],
-    seq2: string[],
-    includeParams: boolean,
-  ): [number, number] {
+  getSeqDistance(seq1: string[], seq2: string[], includeParams: boolean): [number, number] {
     if (seq1.length !== seq2.length) {
-      throw new Error('seq1 and seq2 must have equal length');
+      throw new Error("seq1 and seq2 must have equal length");
     }
     if (seq1.length === 0) return [1.0, 0];
 
@@ -137,7 +133,7 @@ export class Drain {
 
   createTemplate(seq1: string[], seq2: string[]): string[] {
     if (seq1.length !== seq2.length) {
-      throw new Error('seq1 and seq2 must have equal length');
+      throw new Error("seq1 and seq2 must have equal length");
     }
     return seq1.map((t1, i) => (t1 === seq2[i] ? seq2[i] : this.paramStr));
   }
@@ -160,10 +156,7 @@ export class Drain {
         tokens,
         includeParams,
       );
-      if (
-        curSim > maxSim ||
-        (curSim === maxSim && paramCount > maxParamCount)
-      ) {
+      if (curSim > maxSim || (curSim === maxSim && paramCount > maxParamCount)) {
         maxSim = curSim;
         maxParamCount = paramCount;
         maxClusterId = cid;
@@ -176,11 +169,7 @@ export class Drain {
     return null;
   }
 
-  private treeSearch(
-    tokens: string[],
-    simTh: number,
-    includeParams: boolean,
-  ): number | null {
+  private treeSearch(tokens: string[], simTh: number, includeParams: boolean): number | null {
     const tokenCount = tokens.length;
     const tokenCountStr = String(tokenCount);
 
@@ -202,9 +191,7 @@ export class Drain {
       if (child) {
         curNode = child;
       } else {
-        const wildcardChild: Node | undefined = curNode.keyToChildNode.get(
-          this.paramStr,
-        );
+        const wildcardChild: Node | undefined = curNode.keyToChildNode.get(this.paramStr);
         if (wildcardChild) {
           curNode = wildcardChild;
         } else {
@@ -217,10 +204,7 @@ export class Drain {
     return this.fastMatch(curNode.clusterIds, tokens, simTh, includeParams);
   }
 
-  private addSeqToPrefixTree(
-    clusterId: number,
-    templateTokens: string[],
-  ): void {
+  private addSeqToPrefixTree(clusterId: number, templateTokens: string[]): void {
     const tokenCount = templateTokens.length;
     const tokenCountStr = String(tokenCount);
 
@@ -238,9 +222,7 @@ export class Drain {
     let currentDepth = 1;
     for (const token of templateTokens) {
       if (currentDepth >= this.maxNodeDepth || currentDepth >= tokenCount) {
-        const newClusterIds = curNode.clusterIds.filter(cid =>
-          this.clusterContains(cid),
-        );
+        const newClusterIds = curNode.clusterIds.filter((cid) => this.clusterContains(cid));
         newClusterIds.push(clusterId);
         curNode.clusterIds = newClusterIds;
         break;
@@ -287,22 +269,17 @@ export class Drain {
       const cluster = new LogCluster(contentTokens, clusterId);
       this.clusterInsert(clusterId, cluster);
       this.addSeqToPrefixTree(clusterId, contentTokens);
-      return [cluster, 'cluster_created'];
+      return [cluster, "cluster_created"];
     }
 
     const existingCluster = this.clusterPeek(matchClusterId)!;
-    const newTemplateTokens = this.createTemplate(
-      contentTokens,
-      existingCluster.logTemplateTokens,
-    );
+    const newTemplateTokens = this.createTemplate(contentTokens, existingCluster.logTemplateTokens);
 
     const updateType =
       newTemplateTokens.length === existingCluster.logTemplateTokens.length &&
-      newTemplateTokens.every(
-        (t, i) => t === existingCluster.logTemplateTokens[i],
-      )
-        ? 'none'
-        : 'cluster_template_changed';
+      newTemplateTokens.every((t, i) => t === existingCluster.logTemplateTokens[i])
+        ? "none"
+        : "cluster_template_changed";
 
     existingCluster.logTemplateTokens = newTemplateTokens;
     existingCluster.size += 1;
@@ -329,11 +306,8 @@ export class Drain {
     return ids;
   }
 
-  match(
-    content: string,
-    fullSearchStrategy: string = 'never',
-  ): LogCluster | null {
-    if (!['always', 'never', 'fallback'].includes(fullSearchStrategy)) {
+  match(content: string, fullSearchStrategy: string = "never"): LogCluster | null {
+    if (!["always", "never", "fallback"].includes(fullSearchStrategy)) {
       throw new Error(`Invalid full_search_strategy: ${fullSearchStrategy}`);
     }
 
@@ -342,17 +316,12 @@ export class Drain {
 
     const fullSearch = (): LogCluster | null => {
       const allIds = this.getClustersIdsForSeqLen(contentTokens.length);
-      const matchedId = this.fastMatch(
-        allIds,
-        contentTokens,
-        requiredSimTh,
-        true,
-      );
+      const matchedId = this.fastMatch(allIds, contentTokens, requiredSimTh, true);
       if (matchedId === null) return null;
       return this.clusterPeek(matchedId) ?? null;
     };
 
-    if (fullSearchStrategy === 'always') {
+    if (fullSearchStrategy === "always") {
       return fullSearch();
     }
 
@@ -361,7 +330,7 @@ export class Drain {
       return this.clusterPeek(matchId) ?? null;
     }
 
-    if (fullSearchStrategy === 'never') {
+    if (fullSearchStrategy === "never") {
       return null;
     }
 
