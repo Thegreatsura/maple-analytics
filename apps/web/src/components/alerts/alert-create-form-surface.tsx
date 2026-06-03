@@ -4,7 +4,6 @@ import { useMemo, useState } from "react"
 import { toast } from "sonner"
 
 import type { AlertDestinationDocument, AlertRuleDocument } from "@maple/domain/http"
-import { Badge } from "@maple/ui/components/ui/badge"
 import { Button } from "@maple/ui/components/ui/button"
 
 import { DetailsSection } from "@/components/alerts/details-section"
@@ -139,9 +138,6 @@ export function AlertCreateFormSurface({
 					<h1 className="font-display text-3xl font-semibold leading-[1.1] tracking-tight truncate">
 						{pageTitle}
 					</h1>
-					<Badge variant="secondary" className="text-xs font-medium">
-						Beta
-					</Badge>
 				</div>
 			}
 		>

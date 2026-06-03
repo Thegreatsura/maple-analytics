@@ -613,9 +613,6 @@ function AlertsPage() {
 					<div>
 						<div className="flex items-center gap-2">
 							<h1 className="text-2xl font-semibold tracking-tight truncate">Alerts</h1>
-							<Badge variant="secondary" className="text-xs font-medium">
-								Beta
-							</Badge>
 						</div>
 						<p className="text-muted-foreground">
 							Monitor your services and get notified when things go wrong.

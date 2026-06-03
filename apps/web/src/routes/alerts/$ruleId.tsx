@@ -252,9 +252,6 @@ function RuleDetailPage() {
 				<div>
 					<div className="flex items-center gap-2 flex-wrap">
 						<h1 className="text-2xl font-semibold tracking-tight truncate">{rule.name}</h1>
-						<Badge variant="secondary" className="text-xs font-medium">
-							Beta
-						</Badge>
 						<AlertSeverityBadge severity={rule.severity} />
 						{isFiring ? (
 							<AlertStatusBadge state="firing" />
