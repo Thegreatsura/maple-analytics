@@ -54,7 +54,9 @@ import {
 	ArrowRightFromLineIcon,
 	ArrowRightIcon,
 	ArrowUpDownIcon,
+	BracketsCurlyIcon,
 	CopyIcon,
+	CubeIcon,
 	type IconComponent,
 	LoaderIcon,
 	PencilIcon,
@@ -84,10 +86,15 @@ const OPERATION_LABELS: Record<IngestMappingOperation, string> = {
 // Copy is additive (keeps the source) → calm blue; Move removes the source key → amber caution.
 const OPERATION_BADGE: Record<
 	IngestMappingOperation,
-	{ icon: IconComponent; variant: "info" | "warning" }
+	{ icon: IconComponent; variant: "info" | "warning"; tone: string }
 > = {
-	copy: { icon: CopyIcon, variant: "info" },
-	move: { icon: ArrowRightFromLineIcon, variant: "warning" },
+	copy: { icon: CopyIcon, variant: "info", tone: "text-info" },
+	move: { icon: ArrowRightFromLineIcon, variant: "warning", tone: "text-warning" },
+}
+
+const SOURCE_CONTEXT_ICON: Record<IngestMappingSourceContext, IconComponent> = {
+	span: BracketsCurlyIcon,
+	resource: CubeIcon,
 }
 
 export function AttributeMappingsSection() {
@@ -219,6 +226,9 @@ export function AttributeMappingsSection() {
 	}
 
 	const mappingCount = Result.isSuccess(listResult) ? mappings.length : null
+
+	const PreviewOpIcon = OPERATION_BADGE[formOperation].icon
+	const showPreview = formSourceKey.trim().length > 0 && formTargetKey.trim().length > 0
 
 	return (
 		<>
@@ -381,6 +391,9 @@ export function AttributeMappingsSection() {
 			<Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
 				<DialogContent>
 					<DialogHeader>
+						<div className="bg-primary/10 text-primary flex size-9 items-center justify-center rounded-lg">
+							<ArrowUpDownIcon size={18} />
+						</div>
 						<DialogTitle>{editing ? "Edit Attribute Mapping" : "Add Attribute Mapping"}</DialogTitle>
 						<DialogDescription>
 							The value at the source key is written to the target span attribute. An existing
@@ -407,11 +420,33 @@ export function AttributeMappingsSection() {
 								}
 							>
 								<SelectTrigger className="w-full">
-									<SelectValue placeholder="Select source context" />
+									<SelectValue placeholder="Select source context">
+										{(value: string | null) => {
+											const ctx =
+												(value as IngestMappingSourceContext | null) ?? formSourceContext
+											const Icon = SOURCE_CONTEXT_ICON[ctx]
+											return (
+												<span className="flex items-center gap-2">
+													<Icon className="text-muted-foreground" />
+													{SOURCE_CONTEXT_LABELS[ctx]}
+												</span>
+											)
+										}}
+									</SelectValue>
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="span">Span attribute</SelectItem>
-									<SelectItem value="resource">Resource attribute</SelectItem>
+									<SelectItem value="span">
+										<span className="flex items-center gap-2">
+											<BracketsCurlyIcon className="text-muted-foreground" />
+											Span attribute
+										</span>
+									</SelectItem>
+									<SelectItem value="resource">
+										<span className="flex items-center gap-2">
+											<CubeIcon className="text-muted-foreground" />
+											Resource attribute
+										</span>
+									</SelectItem>
 								</SelectContent>
 							</Select>
 						</div>
@@ -445,11 +480,38 @@ export function AttributeMappingsSection() {
 								}
 							>
 								<SelectTrigger className="w-full">
-									<SelectValue placeholder="Select operation" />
+									<SelectValue placeholder="Select operation">
+										{(value: string | null) => {
+											const op = (value as IngestMappingOperation | null) ?? formOperation
+											const meta = OPERATION_BADGE[op]
+											const Icon = meta.icon
+											return (
+												<span className="flex items-center gap-2">
+													<Icon className={meta.tone} />
+													{OPERATION_LABELS[op]}
+												</span>
+											)
+										}}
+									</SelectValue>
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="copy">Copy (keep source key)</SelectItem>
-									<SelectItem value="move">Move (remove source key)</SelectItem>
+									<SelectItem value="copy">
+										<span className="flex items-center gap-2">
+											<CopyIcon className="text-info" />
+											<span>
+												Copy <span className="text-muted-foreground">— keep source key</span>
+											</span>
+										</span>
+									</SelectItem>
+									<SelectItem value="move">
+										<span className="flex items-center gap-2">
+											<ArrowRightFromLineIcon className="text-warning" />
+											<span>
+												Move{" "}
+												<span className="text-muted-foreground">— remove source key</span>
+											</span>
+										</span>
+									</SelectItem>
 								</SelectContent>
 							</Select>
 							{formSourceContext === "resource" && formOperation === "move" && (
@@ -459,6 +521,28 @@ export function AttributeMappingsSection() {
 								</p>
 							)}
 						</div>
+
+						{showPreview && (
+							<div className="rounded-md border bg-muted/40 px-3 py-2.5">
+								<div className="text-muted-foreground mb-1.5 text-[10px] font-medium tracking-[0.12em] uppercase">
+									Preview
+								</div>
+								<div className="flex flex-wrap items-center gap-1.5 text-sm">
+									<code className={MONO}>{formSourceKey.trim()}</code>
+									<ArrowRightIcon size={12} className="text-muted-foreground shrink-0" />
+									<code className="text-foreground font-mono text-[0.92em]">
+										{formTargetKey.trim()}
+									</code>
+									<Badge
+										variant={OPERATION_BADGE[formOperation].variant}
+										className="ml-1 gap-1"
+									>
+										<PreviewOpIcon size={11} />
+										{OPERATION_LABELS[formOperation]}
+									</Badge>
+								</div>
+							</div>
+						)}
 					</div>
 					<DialogFooter>
 						<Button variant="outline" onClick={() => setDialogOpen(false)} disabled={isSaving}>
