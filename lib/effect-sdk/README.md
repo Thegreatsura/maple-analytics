@@ -95,6 +95,52 @@ const program = Effect.log("Hello!").pipe(Effect.withSpan("hello"))
 Effect.runPromise(program.pipe(Effect.provide(TracerLive)))
 ```
 
+## Manual flush
+
+`Maple.layer` (server + client) batches in the background and only exports on a timer, on batch overflow, or when its scope closes — there's no way to force an export. That's a problem in two places: a browser tab dropping the last few seconds of spans on unload, and a short-lived process exiting before the timer fires.
+
+`MapleFlush.make()` (available from both `/server` and `/client`) swaps the background exporter for the same buffer-backed tracer/logger the Cloudflare preset uses, and returns an explicit `flush()`:
+
+```typescript
+export interface FlushableTelemetry {
+	readonly layer: Layer.Layer<never>
+	readonly flush: () => Promise<void> // drain buffers → POST now (never rejects)
+	readonly dispose: () => Promise<void> // stop the auto-flush timer/listeners + final flush
+}
+```
+
+Both presets run a background auto-flush every 5s by default (configurable via `autoFlushInterval`, or `false` to flush purely on demand), so it's a safe drop-in for `Maple.layer` with manual flush layered on top.
+
+> **Limitation:** the flushable presets export traces + logs only — no metrics (unlike `Maple.layer`'s `Otlp.layerJson`).
+
+### Server / Node
+
+```typescript
+import { MapleFlush } from "@maple-dev/effect-sdk/server"
+
+const telemetry = MapleFlush.make({ serviceName: "my-app" }) // same env auto-detect as Maple.layer
+
+// ...provide telemetry.layer to your runtime...
+await telemetry.flush() // force an export at a checkpoint
+await telemetry.dispose() // before exit: stop the timer + final flush
+```
+
+### Client / Browser
+
+```typescript
+import { MapleFlush } from "@maple-dev/effect-sdk/client"
+
+const telemetry = MapleFlush.make({
+	serviceName: "my-frontend",
+	endpoint: "https://ingest.maple.dev",
+	ingestKey: "maple_pk_...",
+	// flushOnUnload: true (default) registers pagehide / visibilitychange→hidden handlers
+})
+// telemetry.layer keeps the replay-session trace linking from Maple.layer.
+```
+
+By default the client preset flushes on `pagehide` and `visibilitychange→hidden` so the tail of a session isn't lost when the tab goes away. Flush uses `fetch(url, { keepalive: true })`, **not** `navigator.sendBeacon`: Maple's ingest authenticates via the `Authorization` header (no query-param auth) and sendBeacon can't set headers, so it would 401 whenever an ingest key is set. `keepalive` carries the header and still survives unload for small bodies.
+
 ## Configuration
 
 Both server and client layers accept these options:

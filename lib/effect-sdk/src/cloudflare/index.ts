@@ -25,12 +25,23 @@
 // Errors during flush are swallowed and logged to `console.error`. After a
 // failure the exporter sleeps for 60 seconds (per signal) before retrying so
 // a broken collector doesn't get hammered.
+//
+// The buffer-drain → encode → POST machinery is shared with the server/client
+// flushable presets via `../shared/flush-core.ts`; this module owns only the
+// Cloudflare-specific lazy `env` resolution.
 // ---------------------------------------------------------------------------
 
-import { Layer, Redacted } from "effect"
-import { type ResolvedResource, resolveResourceFromEnv } from "../server/resource.js"
-import { type LogBuffer, type LogRecord, makeLogBuffer } from "./flushable-logger.js"
-import { makeSpanBuffer, type OtlpSpan, type SpanBuffer } from "./flushable-tracer.js"
+import { Layer } from "effect"
+import {
+	buildResolved,
+	fetchTransport,
+	type Resolved,
+	runFlush,
+	type SignalState,
+} from "../shared/flush-core.js"
+import { type LogBuffer, makeLogBuffer } from "../shared/flushable-logger.js"
+import { makeSpanBuffer, type SpanBuffer } from "../shared/flushable-tracer.js"
+import { resolveResourceFromEnv } from "../server/resource.js"
 
 export interface Config {
 	/**
@@ -89,112 +100,13 @@ export interface Telemetry {
 	flush(env: Record<string, unknown>): Promise<void>
 }
 
-const COOLDOWN_MS = 60_000
-
-interface Resolved {
-	readonly tracesUrl: string
-	readonly logsUrl: string
-	readonly resource: OtlpResourceLike
-	readonly scope: { readonly name: string }
-	readonly headers: Record<string, string>
-	readonly noOp: boolean
-}
-
-interface OtlpResourceLike {
-	readonly attributes: ReadonlyArray<{ readonly key: string; readonly value: unknown }>
-	readonly droppedAttributesCount: number
-}
-
 const resolveOnce = (env: Record<string, unknown>, config: Config): Resolved => {
-	const r: ResolvedResource = resolveResourceFromEnv(env, { ...config, sdkType: "cloudflare" })
-	// `r.endpoint` always defined — falls back to DEFAULT_MAPLE_ENDPOINT
-	// (`https://ingest.maple.dev`) when nothing else set. Hosted SDK convention:
-	// users only need to provide an ingest key.
-	const base = r.endpoint!
-	const baseUrl = base.endsWith("/") ? base.slice(0, -1) : base
-	const tracesUrl = `${baseUrl}${config.tracesPath ?? "/v1/traces"}`
-	const logsUrl = `${baseUrl}${config.logsPath ?? "/v1/logs"}`
-	const headers: Record<string, string> = {
-		"content-type": "application/json",
-		"user-agent": "maple-effect-sdk-cloudflare/0.0.0",
-	}
-	if (r.ingestKey) headers.authorization = `Bearer ${Redacted.value(r.ingestKey)}`
-	const otelResource = makeOtlpResource(r.resource)
-	return {
-		tracesUrl,
-		logsUrl,
-		resource: otelResource,
-		scope: { name: r.resource.serviceName },
-		headers,
-		noOp: r.ingestKey === undefined,
-	}
-}
-
-const makeOtlpResource = (resource: {
-	readonly serviceName: string
-	readonly serviceVersion: string | undefined
-	readonly attributes: Record<string, unknown>
-}): OtlpResourceLike => {
-	const attrs: Array<{ readonly key: string; readonly value: unknown }> = []
-	for (const [key, value] of Object.entries(resource.attributes)) {
-		attrs.push({ key, value: anyValue(value) })
-	}
-	attrs.push({ key: "service.name", value: { stringValue: resource.serviceName } })
-	if (resource.serviceVersion) {
-		attrs.push({ key: "service.version", value: { stringValue: resource.serviceVersion } })
-	}
-	return { attributes: attrs, droppedAttributesCount: 0 }
-}
-
-const anyValue = (value: unknown): unknown => {
-	if (Array.isArray(value)) return { arrayValue: { values: value.map(anyValue) } }
-	switch (typeof value) {
-		case "string":
-			return { stringValue: value }
-		case "boolean":
-			return { boolValue: value }
-		case "number":
-			return Number.isInteger(value) ? { intValue: value } : { doubleValue: value }
-		case "bigint":
-			return { intValue: Number(value) }
-		default:
-			return { stringValue: String(value) }
-	}
-}
-
-interface SignalState {
-	disabledUntil: number
-}
-
-const post = async (url: string, headers: Record<string, string>, body: unknown): Promise<void> => {
-	const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) })
-	if (!res.ok) {
-		throw new Error(`OTLP ${res.status} ${res.statusText}`)
-	}
-}
-
-const flushSignal = async (
-	url: string,
-	headers: Record<string, string>,
-	body: () => unknown,
-	state: SignalState,
-	count: number,
-	signal: string,
-): Promise<void> => {
-	if (count === 0) return
-	if (state.disabledUntil && Date.now() < state.disabledUntil) {
-		console.warn(
-			`[MapleCloudflareSDK] ${signal} flush skipped (cooldown ${state.disabledUntil - Date.now()}ms remaining)`,
-		)
-		return
-	}
-	state.disabledUntil = 0
-	try {
-		await post(url, headers, body())
-	} catch (err) {
-		state.disabledUntil = Date.now() + COOLDOWN_MS
-		console.error(`[MapleCloudflareSDK] ${signal} flush failed; cooldown 60s:`, err)
-	}
+	const r = resolveResourceFromEnv(env, { ...config, sdkType: "cloudflare" })
+	return buildResolved(r, {
+		tracesPath: config.tracesPath,
+		logsPath: config.logsPath,
+		userAgent: "maple-effect-sdk-cloudflare/0.0.0",
+	})
 }
 
 export const make = (config: Config = {}): Telemetry => {
@@ -218,57 +130,27 @@ export const make = (config: Config = {}): Telemetry => {
 			resolved = resolveOnce(env, config)
 		}
 
-		const r = resolved
-
-		if (r.noOp) {
-			// Drain so the in-isolate buffers don't grow unbounded across
-			// requests, but never POST.
-			spans.drain()
-			logs.drain()
-			if (!noOpLogged) {
-				noOpLogged = true
-				console.info(
-					"[MapleCloudflareSDK] no MAPLE_INGEST_KEY configured — telemetry disabled (set MAPLE_INGEST_KEY to enable)",
-				)
-			}
-			return
-		}
-
-		const spanBatch = spans.drain()
-		const logBatch = logs.drain()
-
-		if (spanBatch.length === 0 && logBatch.length === 0) return
-
-		await Promise.all([
-			flushSignal(
-				r.tracesUrl,
-				r.headers,
-				() => makeTracesBody(spanBatch, r),
-				tracesState,
-				spanBatch.length,
-				"traces",
-			),
-			flushSignal(
-				r.logsUrl,
-				r.headers,
-				() => makeLogsBody(logBatch, r),
-				logsState,
-				logBatch.length,
-				"logs",
-			),
-		])
+		await runFlush({
+			resolved,
+			spans,
+			logs,
+			tracesState,
+			logsState,
+			transport: fetchTransport,
+			logPrefix: "[MapleCloudflareSDK]",
+			onNoOp: () => {
+				if (!noOpLogged) {
+					noOpLogged = true
+					console.info(
+						"[MapleCloudflareSDK] no MAPLE_INGEST_KEY configured — telemetry disabled (set MAPLE_INGEST_KEY to enable)",
+					)
+				}
+			},
+		})
 	}
 
 	return { layer, flush }
 }
-
-const makeTracesBody = (spans: ReadonlyArray<OtlpSpan>, r: Resolved) => ({
-	resourceSpans: [{ resource: r.resource, scopeSpans: [{ scope: r.scope, spans }] }],
-})
-
-const makeLogsBody = (logs: ReadonlyArray<LogRecord>, r: Resolved) => ({
-	resourceLogs: [{ resource: r.resource, scopeLogs: [{ scope: r.scope, logRecords: logs }] }],
-})
 
 // ---------------------------------------------------------------------------
 // Convenience namespace export so call sites read as

@@ -1,3 +1,5 @@
 export * as Maple from "./layer.js"
 export type { MapleConfig } from "./layer.js"
+export * as MapleFlush from "./flushable.js"
+export type { FlushableTelemetry, MapleFlushableConfig } from "./flushable.js"
 export { derivePlatformAttributes, getAutoPlatformAttributes, type PlatformInputs } from "./platform.js"

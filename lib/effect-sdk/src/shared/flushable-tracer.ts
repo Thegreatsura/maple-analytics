@@ -1,10 +1,10 @@
 // ---------------------------------------------------------------------------
-// Buffer-backed OTLP tracer (Cloudflare Workers)
+// Buffer-backed OTLP tracer (platform-agnostic)
 //
 // Pure Tracer that pushes OTLP-shaped spans into a caller-owned buffer. URL,
-// resource, and headers are NOT baked in here — the caller (`MapleCloudflareSDK`)
-// resolves them lazily from the worker `env` at first flush, so the layer
-// itself can be constructed at module scope without env.
+// resource, and headers are NOT baked in here — the caller (the Cloudflare,
+// server, or client flushable preset) resolves them and POSTs the drained
+// buffer on `flush`, so the layer itself can be constructed without I/O.
 // ---------------------------------------------------------------------------
 import { Cause, type Context, Layer, type Option, Predicate, Tracer } from "effect"
 import * as ErrorReporter from "effect/ErrorReporter"
