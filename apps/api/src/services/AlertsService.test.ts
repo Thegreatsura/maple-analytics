@@ -1362,6 +1362,71 @@ describe("AlertsService", () => {
 		expect(failure).toBeInstanceOf(AlertForbiddenError)
 	})
 
+	itEffect("dedupes destinationIds on create and update, preserving selection order", () => {
+		const { url } = createTempDbUrl()
+
+		return Effect.gen(function* () {
+			const alerts = yield* AlertsService
+			const orgId = asOrgId("org_dedupe_destinations")
+			const userId = asUserId("user_dedupe_destinations")
+
+			const primary = yield* createWebhookDestination(alerts, orgId, userId)
+			const secondary = yield* alerts.createDestination(orgId, userId, adminRoles, {
+				type: "webhook",
+				name: "Secondary webhook",
+				enabled: true,
+				url: "https://example.com/secondary",
+				signingSecret: "webhook-secret-2",
+			})
+
+			const baseRule = {
+				name: "Duplicate destination rule",
+				severity: "warning",
+				enabled: true,
+				serviceNames: ["checkout"],
+				signalType: "error_rate",
+				comparator: "gt",
+				threshold: 5,
+				windowMinutes: 5,
+				minimumSampleCount: 10,
+				consecutiveBreachesRequired: 2,
+				consecutiveHealthyRequired: 2,
+				renotifyIntervalMinutes: 30,
+			} as const
+
+			// Create with the same id repeated, interleaved with a distinct id — the
+			// duplicates collapse but the first-seen order survives.
+			const created = yield* alerts.createRule(
+				orgId,
+				userId,
+				adminRoles,
+				new AlertRuleUpsertRequest({
+					...baseRule,
+					destinationIds: [primary.id, secondary.id, primary.id],
+				}),
+			)
+			expect(created.destinationIds).toEqual([primary.id, secondary.id])
+
+			// Updating with duplicates is deduped on the write path too.
+			const updated = yield* alerts.updateRule(
+				orgId,
+				userId,
+				adminRoles,
+				created.id,
+				new AlertRuleUpsertRequest({
+					...baseRule,
+					destinationIds: [secondary.id, secondary.id],
+				}),
+			)
+			expect(updated.destinationIds).toEqual([secondary.id])
+
+			// The persisted row read back is deduped, not just the returned document.
+			const rules = yield* alerts.listRules(orgId)
+			expect(rules.rules).toHaveLength(1)
+			expect(rules.rules[0]?.destinationIds).toEqual([secondary.id])
+		}).pipe(Effect.provide(makeLayer(url, makeWarehouseStub({ tracesAggregateRows: emptyWarehouseRows }))))
+	})
+
 	itEffect("opens per-service incidents for multi-service rules", () => {
 		const { url } = createTempDbUrl()
 		const state = {

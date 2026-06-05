@@ -432,7 +432,10 @@ export function buildRuleRequest(form: RuleFormState): AlertRuleUpsertRequest {
 		queryBuilderDraft: signalType === "builder_query" ? buildQueryDraftFromForm(form) : null,
 		rawQuerySql: signalType === "raw_query" ? form.rawQuerySql.trim() || null : null,
 		rawQueryReducer: signalType === "raw_query" ? form.rawQueryReducer : null,
-		destinationIds: [...form.destinationIds],
+		// Dedupe so the same destination is never persisted twice (e.g. when editing a
+		// rule that already had duplicates). The server is authoritative (normalizeRule),
+		// but keeping the request clean avoids a needless write-then-normalize round trip.
+		destinationIds: [...new Set(form.destinationIds)],
 		notificationTemplate,
 	})
 }

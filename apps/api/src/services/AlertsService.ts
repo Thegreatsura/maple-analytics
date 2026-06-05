@@ -1127,7 +1127,10 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
 				? request.excludeServiceNames.map((s) => s.trim()).filter((s) => s.length > 0)
 				: []
 			const metricName = normalizeOptionalString(request.metricName)
-			const destinationIds = request.destinationIds
+			// Dedupe while preserving selection order — a destination listed twice still
+			// notifies once, so we persist each id at most once. This is the authoritative
+			// fix; the editor also dedupes on submit for UX (see buildRuleRequest).
+			const destinationIds = [...new Set(request.destinationIds)]
 
 			const details: string[] = []
 			if (name.length === 0) details.push("name is required")
