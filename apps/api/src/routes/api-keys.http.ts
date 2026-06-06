@@ -33,6 +33,16 @@ export const HttpApiKeysLive = HttpApiBuilder.group(MapleApi, "apiKeys", (handle
 					})
 				}),
 			)
+			.handle("roll", ({ params }) =>
+				Effect.gen(function* () {
+					const tenant = yield* CurrentTenant.Context
+					yield* requireAdmin(tenant.roles, forbidden("Only org admins can roll API keys"))
+					const createdByEmail = yield* auth.getUserEmail(tenant.userId)
+					return yield* apiKeysService.roll(tenant.orgId, tenant.userId, params.keyId, {
+						createdByEmail,
+					})
+				}),
+			)
 			.handle("revoke", ({ params }) =>
 				Effect.gen(function* () {
 					const tenant = yield* CurrentTenant.Context

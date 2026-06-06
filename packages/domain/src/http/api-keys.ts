@@ -88,6 +88,15 @@ export class ApiKeysApiGroup extends HttpApiGroup.make("apiKeys")
 		}),
 	)
 	.add(
+		HttpApiEndpoint.post("roll", "/:keyId/roll", {
+			params: {
+				keyId: ApiKeyId,
+			},
+			success: ApiKeyCreatedResponse,
+			error: [ApiKeyForbiddenError, ApiKeyNotFoundError, ApiKeyPersistenceError],
+		}),
+	)
+	.add(
 		HttpApiEndpoint.delete("revoke", "/:keyId/revoke", {
 			params: {
 				keyId: ApiKeyId,

@@ -29,6 +29,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@m
 import { Skeleton } from "@maple/ui/components/ui/skeleton"
 import {
 	AlertWarningIcon,
+	ArrowPathIcon,
 	CopyIcon,
 	DotsVerticalIcon,
 	KeyIcon,
@@ -38,6 +39,7 @@ import {
 } from "@/components/icons"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import { CreateApiKeyDialog } from "./create-api-key-dialog"
+import { RollApiKeyDialog } from "./roll-api-key-dialog"
 
 type ApiKey = ApiKeyResponse
 
@@ -76,6 +78,8 @@ export function ApiKeysSection() {
 	const [revokeOpen, setRevokeOpen] = useState(false)
 	const [revokingKeyId, setRevokingKeyId] = useState<ApiKeyId | null>(null)
 	const [isRevoking, setIsRevoking] = useState(false)
+	const [rollOpen, setRollOpen] = useState(false)
+	const [rollingKey, setRollingKey] = useState<ApiKeyResponse | null>(null)
 
 	const listQueryAtom = MapleApiAtomClient.query("apiKeys", "list", {})
 	const listResult = useAtomValue(listQueryAtom)
@@ -92,6 +96,11 @@ export function ApiKeysSection() {
 	function openRevokeDialog(keyId: ApiKeyId) {
 		setRevokingKeyId(keyId)
 		setRevokeOpen(true)
+	}
+
+	function openRollDialog(key: ApiKey) {
+		setRollingKey(key)
+		setRollOpen(true)
 	}
 
 	async function handleRevoke() {
@@ -182,6 +191,7 @@ export function ApiKeysSection() {
 										<ApiKeyListItem
 											key={key.id}
 											apiKey={key}
+											onRoll={() => openRollDialog(key)}
 											onRevoke={() => openRevokeDialog(key.id)}
 										/>
 									))}
@@ -214,6 +224,13 @@ export function ApiKeysSection() {
 				onCreated={() => refreshKeys()}
 			/>
 
+			<RollApiKeyDialog
+				open={rollOpen}
+				onOpenChange={setRollOpen}
+				apiKey={rollingKey}
+				onRolled={() => refreshKeys()}
+			/>
+
 			<AlertDialog open={revokeOpen} onOpenChange={setRevokeOpen}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
@@ -238,7 +255,15 @@ export function ApiKeysSection() {
 	)
 }
 
-function ApiKeyListItem({ apiKey, onRevoke }: { apiKey: ApiKey; onRevoke?: () => void }) {
+function ApiKeyListItem({
+	apiKey,
+	onRoll,
+	onRevoke,
+}: {
+	apiKey: ApiKey
+	onRoll?: () => void
+	onRevoke?: () => void
+}) {
 	const isMcp = apiKey.kind === "mcp"
 	const Icon = isMcp ? SquareTerminalIcon : KeyIcon
 	const relativeLastUsed = formatRelative(apiKey.lastUsedAt)
@@ -350,6 +375,12 @@ function ApiKeyListItem({ apiKey, onRevoke }: { apiKey: ApiKey; onRevoke?: () =>
 								<CopyIcon size={14} />
 								Copy key prefix
 							</DropdownMenuItem>
+							{onRoll && (
+								<DropdownMenuItem onClick={onRoll}>
+									<ArrowPathIcon size={14} />
+									Roll key
+								</DropdownMenuItem>
+							)}
 							<DropdownMenuItem variant="destructive" onClick={onRevoke}>
 								<TrashIcon size={14} />
 								Revoke key

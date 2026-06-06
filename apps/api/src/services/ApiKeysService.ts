@@ -149,6 +149,69 @@ export class ApiKeysService extends Context.Service<ApiKeysService>()("@maple/ap
 			})
 		})
 
+		const roll = Effect.fn("ApiKeysService.roll")(function* (
+			orgId: OrgId,
+			userId: UserId,
+			keyId: ApiKeyId,
+			params: {
+				createdByEmail?: string | null
+			},
+		) {
+			const existing = yield* requireById(orgId, keyId)
+			if (existing.revoked) {
+				return yield* Effect.fail(
+					new ApiKeyNotFoundError({ keyId, message: "API key is already revoked" }),
+				)
+			}
+
+			const id = decodeApiKeyIdSync(randomUUID())
+			const rawKey = generateApiKey()
+			const keyHash = hashApiKey(rawKey, hmacKey)
+			const keyPrefix = rawKey.slice(0, 12) + "..."
+			const now = yield* Clock.currentTimeMillis
+			const createdByEmail = params.createdByEmail ?? null
+
+			yield* database
+				.execute((db) =>
+					db.batch([
+						db.insert(apiKeys).values({
+							id,
+							orgId,
+							name: existing.name,
+							description: existing.description ?? null,
+							keyHash,
+							keyPrefix,
+							kind: existing.kind,
+							expiresAt: null,
+							createdAt: now,
+							createdBy: userId,
+							createdByEmail,
+						}),
+						db
+							.update(apiKeys)
+							.set({ revoked: true, revokedAt: now })
+							.where(eq(apiKeys.id, keyId)),
+					]),
+				)
+				.pipe(Effect.mapError(toPersistenceError))
+
+			return new ApiKeyCreatedResponse({
+				id,
+				name: existing.name,
+				description: existing.description ?? null,
+				keyPrefix,
+				kind: existing.kind,
+				revoked: false,
+				revokedAt: null,
+				lastUsedAt: null,
+				expiresAt: null,
+				createdAt: now,
+				createdBy: userId,
+				createdByEmail,
+				secret: rawKey,
+			})
+		})
+
 		const revoke = Effect.fn("ApiKeysService.revoke")(function* (orgId: OrgId, keyId: ApiKeyId) {
 			const now = yield* Clock.currentTimeMillis
 			const row = yield* requireById(orgId, keyId)
@@ -212,6 +275,7 @@ export class ApiKeysService extends Context.Service<ApiKeysService>()("@maple/ap
 		return {
 			list,
 			create,
+			roll,
 			revoke,
 			resolveByKey,
 			resolveByBearer,

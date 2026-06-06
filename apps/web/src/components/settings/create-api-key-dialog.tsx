@@ -16,14 +16,8 @@ import {
 	DialogPanel,
 	DialogTitle,
 } from "@maple/ui/components/ui/dialog"
-import {
-	InputGroup,
-	InputGroupAddon,
-	InputGroupButton,
-	InputGroupInput,
-} from "@maple/ui/components/ui/input-group"
-import { CheckIcon, CopyIcon } from "@/components/icons"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
+import { ApiKeySecretReveal } from "./api-key-secret-reveal"
 
 interface CreateApiKeyDialogProps {
 	open: boolean
@@ -37,7 +31,6 @@ export function CreateApiKeyDialog({ open, onOpenChange, onCreated, kind }: Crea
 	const [newDescription, setNewDescription] = useState("")
 	const [isCreating, setIsCreating] = useState(false)
 	const [newSecret, setNewSecret] = useState<string | null>(null)
-	const [secretCopied, setSecretCopied] = useState(false)
 
 	const listQueryAtom = MapleApiAtomClient.query("apiKeys", "list", {})
 	const refreshKeys = useAtomRefresh(listQueryAtom)
@@ -74,19 +67,6 @@ export function CreateApiKeyDialog({ open, onOpenChange, onCreated, kind }: Crea
 		setNewName("")
 		setNewDescription("")
 		setNewSecret(null)
-		setSecretCopied(false)
-	}
-
-	async function handleCopySecret() {
-		if (!newSecret) return
-		try {
-			await navigator.clipboard.writeText(newSecret)
-			setSecretCopied(true)
-			toast.success("API key copied to clipboard")
-			setTimeout(() => setSecretCopied(false), 2000)
-		} catch {
-			toast.error("Failed to copy API key")
-		}
 	}
 
 	return (
@@ -100,30 +80,8 @@ export function CreateApiKeyDialog({ open, onOpenChange, onCreated, kind }: Crea
 								Copy your API key now. You won't be able to see it again.
 							</DialogDescription>
 						</DialogHeader>
-						<DialogPanel className="space-y-3">
-							<InputGroup>
-								<InputGroupInput
-									readOnly
-									value={newSecret}
-									className="font-mono text-xs tracking-wide select-all"
-								/>
-								<InputGroupAddon align="inline-end">
-									<InputGroupButton
-										onClick={handleCopySecret}
-										aria-label="Copy API key"
-										title={secretCopied ? "Copied!" : "Copy"}
-									>
-										{secretCopied ? (
-											<CheckIcon size={14} className="text-severity-info" />
-										) : (
-											<CopyIcon size={14} />
-										)}
-									</InputGroupButton>
-								</InputGroupAddon>
-							</InputGroup>
-							<p className="text-muted-foreground text-xs">
-								Store this key in a secure location. It will not be shown again.
-							</p>
+						<DialogPanel>
+							<ApiKeySecretReveal secret={newSecret} />
 						</DialogPanel>
 						<DialogFooter>
 							<Button variant="outline" onClick={() => handleClose(false)}>
