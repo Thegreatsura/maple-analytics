@@ -1,7 +1,14 @@
 import { Clock, Effect, Schema } from "effect"
 import { QueryEngineExecuteRequest, type AttributeFilter } from "@maple/query-engine"
 import { TraceId, SpanId } from "@maple/domain"
-import { SpanHierarchyRequest, SpanDetailRequest } from "@maple/domain/http"
+import {
+	DeploymentEnvironment,
+	ServiceName,
+	ServiceNamespace,
+	SpanDetailRequest,
+	SpanHierarchyRequest,
+	SpanName,
+} from "@maple/domain/http"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import {
 	WarehouseDateTimeString,
@@ -33,17 +40,17 @@ const ListTracesInputSchema = Schema.Struct({
 		Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(1000)),
 	),
 	offset: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-	service: Schema.optional(Schema.String),
+	service: Schema.optional(ServiceName),
 	startTime: Schema.optional(WarehouseDateTimeString),
 	endTime: Schema.optional(WarehouseDateTimeString),
-	spanName: Schema.optional(Schema.String),
+	spanName: Schema.optional(SpanName),
 	hasError: Schema.optional(Schema.Boolean),
 	minDurationMs: Schema.optional(Schema.Number),
 	maxDurationMs: Schema.optional(Schema.Number),
 	httpMethod: Schema.optional(Schema.String),
 	httpStatusCode: Schema.optional(Schema.String),
-	deploymentEnv: Schema.optional(Schema.String),
-	namespace: Schema.optional(Schema.String),
+	deploymentEnv: Schema.optional(DeploymentEnvironment),
+	namespace: Schema.optional(ServiceNamespace),
 	attributeFilters: Schema.optional(Schema.Array(AttributeFilterInput)),
 	resourceAttributeFilters: Schema.optional(Schema.Array(AttributeFilterInput)),
 	rootOnly: Schema.optional(Schema.Boolean),
@@ -51,15 +58,16 @@ const ListTracesInputSchema = Schema.Struct({
 	spanNameMatchMode: ContainsMatchMode,
 	deploymentEnvMatchMode: ContainsMatchMode,
 	namespaceMatchMode: ContainsMatchMode,
-	excludedServices: Schema.optional(Schema.Array(Schema.String)),
-	excludedSpanNames: Schema.optional(Schema.Array(Schema.String)),
-	excludedDeploymentEnvs: Schema.optional(Schema.Array(Schema.String)),
-	excludedNamespaces: Schema.optional(Schema.Array(Schema.String)),
+	excludedServices: Schema.optional(Schema.Array(ServiceName)),
+	excludedSpanNames: Schema.optional(Schema.Array(SpanName)),
+	excludedDeploymentEnvs: Schema.optional(Schema.Array(DeploymentEnvironment)),
+	excludedNamespaces: Schema.optional(Schema.Array(ServiceNamespace)),
 	excludedHttpMethods: Schema.optional(Schema.Array(Schema.String)),
 	excludedHttpStatusCodes: Schema.optional(Schema.Array(Schema.String)),
 })
 
-export type ListTracesInput = Schema.Schema.Type<typeof ListTracesInputSchema>
+export type ListTracesInput = (typeof ListTracesInputSchema)["Encoded"]
+type ListTracesDecoded = (typeof ListTracesInputSchema)["Type"]
 
 const DEFAULT_LIMIT = 100
 const DEFAULT_OFFSET = 0
@@ -106,7 +114,7 @@ export interface TracesResponse {
 	}
 }
 
-function buildAttributeFilters(input: ListTracesInput): AttributeFilter[] {
+function buildAttributeFilters(input: ListTracesDecoded): AttributeFilter[] {
 	const filters: AttributeFilter[] = []
 
 	if (input.httpMethod) {
@@ -135,7 +143,7 @@ function buildAttributeFilters(input: ListTracesInput): AttributeFilter[] {
 	return filters
 }
 
-function buildResourceAttributeFilters(input: ListTracesInput): AttributeFilter[] {
+function buildResourceAttributeFilters(input: ListTracesDecoded): AttributeFilter[] {
 	const filters: AttributeFilter[] = []
 
 	if (input.resourceAttributeFilters) {
@@ -564,15 +572,15 @@ export interface TracesDurationStatsResponse {
 const GetTracesFacetsInputSchema = Schema.Struct({
 	startTime: Schema.optional(WarehouseDateTimeString),
 	endTime: Schema.optional(WarehouseDateTimeString),
-	service: Schema.optional(Schema.String),
-	spanName: Schema.optional(Schema.String),
+	service: Schema.optional(ServiceName),
+	spanName: Schema.optional(SpanName),
 	hasError: Schema.optional(Schema.Boolean),
 	minDurationMs: Schema.optional(Schema.Number),
 	maxDurationMs: Schema.optional(Schema.Number),
 	httpMethod: Schema.optional(Schema.String),
 	httpStatusCode: Schema.optional(Schema.String),
-	deploymentEnv: Schema.optional(Schema.String),
-	namespace: Schema.optional(Schema.String),
+	deploymentEnv: Schema.optional(DeploymentEnvironment),
+	namespace: Schema.optional(ServiceNamespace),
 	attributeFilters: Schema.optional(Schema.Array(AttributeFilterInput)),
 	resourceAttributeFilters: Schema.optional(Schema.Array(AttributeFilterInput)),
 	serviceMatchMode: ContainsMatchMode,
@@ -581,11 +589,12 @@ const GetTracesFacetsInputSchema = Schema.Struct({
 	namespaceMatchMode: ContainsMatchMode,
 })
 
-export type GetTracesFacetsInput = Schema.Schema.Type<typeof GetTracesFacetsInputSchema>
+export type GetTracesFacetsInput = (typeof GetTracesFacetsInputSchema)["Encoded"]
+type GetTracesFacetsDecoded = (typeof GetTracesFacetsInputSchema)["Type"]
 
-function buildTracesFiltersFromInput(input: GetTracesFacetsInput) {
-	const attributeFilters = buildAttributeFilters(input as ListTracesInput)
-	const resourceAttributeFilters = buildResourceAttributeFilters(input as ListTracesInput)
+function buildTracesFiltersFromInput(input: GetTracesFacetsDecoded) {
+	const attributeFilters = buildAttributeFilters(input as ListTracesDecoded)
+	const resourceAttributeFilters = buildResourceAttributeFilters(input as ListTracesDecoded)
 	const matchModes: Record<string, string> = {}
 	if (input.serviceMatchMode === "contains") matchModes.serviceName = "contains"
 	if (input.spanNameMatchMode === "contains") matchModes.spanName = "contains"

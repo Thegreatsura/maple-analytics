@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { ServiceWorkloadsRequest } from "@maple/domain/http"
+import { ServiceName, ServiceWorkloadsRequest } from "@maple/domain/http"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import { WarehouseDateTimeString, decodeInput, runWarehouseQuery } from "@/api/warehouse/effect-utils"
 
@@ -23,10 +23,10 @@ export interface ServiceWorkloadsResult {
 const GetServiceWorkloadsInputSchema = Schema.Struct({
 	startTime: WarehouseDateTimeString,
 	endTime: WarehouseDateTimeString,
-	services: Schema.Array(Schema.String),
+	services: Schema.Array(ServiceName),
 })
 
-export type GetServiceWorkloadsInput = Schema.Schema.Type<typeof GetServiceWorkloadsInputSchema>
+export type GetServiceWorkloadsInput = (typeof GetServiceWorkloadsInputSchema)["Encoded"]
 
 export const getServiceWorkloads = Effect.fn("QueryEngine.getServiceWorkloads")(function* ({
 	data,

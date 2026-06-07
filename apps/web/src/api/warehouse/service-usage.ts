@@ -1,5 +1,5 @@
 import { Clock, Effect, Schema } from "effect"
-import { ServiceUsageRequest } from "@maple/domain/http"
+import { ServiceName, ServiceUsageRequest } from "@maple/domain/http"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import { WarehouseDateTimeString, decodeInput, runWarehouseQuery } from "@/api/warehouse/effect-utils"
 
@@ -19,12 +19,12 @@ export interface ServiceUsageResponse {
 }
 
 const GetServiceUsageInput = Schema.Struct({
-	service: Schema.optional(Schema.String),
+	service: Schema.optional(ServiceName),
 	startTime: Schema.optional(WarehouseDateTimeString),
 	endTime: Schema.optional(WarehouseDateTimeString),
 })
 
-export type GetServiceUsageInput = Schema.Schema.Type<typeof GetServiceUsageInput>
+export type GetServiceUsageInput = (typeof GetServiceUsageInput)["Encoded"]
 
 const defaultTimeRange = (nowMillis: number) => {
 	const fmt = (ms: number) => new Date(ms).toISOString().replace("T", " ").slice(0, 19)

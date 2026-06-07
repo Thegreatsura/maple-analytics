@@ -1,5 +1,5 @@
 import { Clock, Effect, Schema } from "effect"
-import { ServiceExternalEdgesRequest } from "@maple/domain/http"
+import { DeploymentEnvironment, ServiceExternalEdgesRequest, ServiceName } from "@maple/domain/http"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import { summarizeSampling } from "@/lib/sampling"
 import { WarehouseDateTimeString, decodeInput, runWarehouseQuery } from "@/api/warehouse/effect-utils"
@@ -26,13 +26,13 @@ export interface ServiceExternalEdgesResponse {
 }
 
 const GetServiceExternalEdgesInputSchema = Schema.Struct({
-	serviceName: Schema.String,
+	serviceName: ServiceName,
 	startTime: Schema.optional(WarehouseDateTimeString),
 	endTime: Schema.optional(WarehouseDateTimeString),
-	deploymentEnv: Schema.optional(Schema.String),
+	deploymentEnv: Schema.optional(DeploymentEnvironment),
 })
 
-export type GetServiceExternalEdgesInput = Schema.Schema.Type<typeof GetServiceExternalEdgesInputSchema>
+export type GetServiceExternalEdgesInput = (typeof GetServiceExternalEdgesInputSchema)["Encoded"]
 
 const defaultTimeRange = (nowMillis: number) => {
 	const fmt = (ms: number) => new Date(ms).toISOString().replace("T", " ").slice(0, 19)

@@ -6,7 +6,9 @@ import {
 	AlertRuleUpsertRequest,
 	DiscordAlertDestinationConfig,
 	HazelAlertDestinationConfig,
+	HazelChannelId,
 	HazelOAuthAlertDestinationConfig,
+	HazelOrganizationId,
 	PagerDutyAlertDestinationConfig,
 	SlackAlertDestinationConfig,
 	WebhookAlertDestinationConfig,
@@ -26,9 +28,12 @@ import {
 	type QueryBuilderQueryDraftPayload,
 } from "@maple/domain/http"
 import type { QueryEngineAlertReducer } from "@maple/query-engine"
-import { Cause, Exit, Option } from "effect"
+import { Cause, Exit, Option, Schema } from "effect"
 import { buildTimeseriesQuerySpec, createQueryDraft } from "@/lib/query-builder/model"
 import { formatErrorRate, formatLatency, formatNumber } from "@/lib/format"
+
+const asHazelOrganizationId = Schema.decodeUnknownSync(HazelOrganizationId)
+const asHazelChannelId = Schema.decodeUnknownSync(HazelChannelId)
 
 export type RuleFormState = {
 	name: string
@@ -663,12 +668,12 @@ export function buildDestinationCreatePayload(form: DestinationFormState): Alert
 				type: "hazel-oauth",
 				name: form.name.trim(),
 				enabled: form.enabled,
-				hazelOrganizationId: form.hazelOrganizationId.trim(),
+				hazelOrganizationId: asHazelOrganizationId(form.hazelOrganizationId.trim()),
 				hazelOrganizationName: form.hazelOrganizationName.trim(),
 				...(logoUrl !== null && logoUrl.trim().length > 0
 					? { hazelOrganizationLogoUrl: logoUrl.trim() }
 					: {}),
-				hazelChannelId: form.hazelChannelId.trim(),
+				hazelChannelId: asHazelChannelId(form.hazelChannelId.trim()),
 				hazelChannelName: form.hazelChannelName.trim(),
 			})
 		}
@@ -720,13 +725,17 @@ export function buildDestinationUpdatePayload(form: DestinationFormState): Alert
 				type: "hazel-oauth",
 				name: form.name.trim() || undefined,
 				enabled: form.enabled,
-				hazelOrganizationId: form.hazelOrganizationId.trim() || undefined,
+				hazelOrganizationId: form.hazelOrganizationId.trim()
+					? asHazelOrganizationId(form.hazelOrganizationId.trim())
+					: undefined,
 				hazelOrganizationName: form.hazelOrganizationName.trim() || undefined,
 				hazelOrganizationLogoUrl:
 					form.hazelOrganizationLogoUrl === null
 						? null
 						: form.hazelOrganizationLogoUrl.trim() || undefined,
-				hazelChannelId: form.hazelChannelId.trim() || undefined,
+				hazelChannelId: form.hazelChannelId.trim()
+					? asHazelChannelId(form.hazelChannelId.trim())
+					: undefined,
 				hazelChannelName: form.hazelChannelName.trim() || undefined,
 			}
 		case "discord":

@@ -253,7 +253,7 @@ export class ErrorNotificationPolicyDocument extends Schema.Class<ErrorNotificat
 	minOccurrenceCount: Schema.Number,
 	severity: AlertSeverity,
 	updatedAt: IsoDateTimeString,
-	updatedBy: Schema.String,
+	updatedBy: UserId,
 }) {}
 
 export class ErrorNotificationPolicyUpsertRequest extends Schema.Class<ErrorNotificationPolicyUpsertRequest>(

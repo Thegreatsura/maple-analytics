@@ -826,8 +826,8 @@ const rowToRuleDocument = (
 				: null,
 		createdAt: decodeIsoDateTimeStringSync(new Date(row.createdAt).toISOString()),
 		updatedAt: decodeIsoDateTimeStringSync(new Date(row.updatedAt).toISOString()),
-		createdBy: row.createdBy,
-		updatedBy: row.updatedBy,
+		createdBy: decodeUserIdSync(row.createdBy),
+		updatedBy: decodeUserIdSync(row.updatedBy),
 	})
 }
 

@@ -1,16 +1,22 @@
 import { Schema } from "effect"
 
-const MapleId = (identifier: string, title: string) =>
+const MapleId = <const Id extends string>(identifier: Id, title: string) =>
 	Schema.String.check(Schema.isMinLength(1), Schema.isTrimmed()).pipe(
 		Schema.brand(identifier),
 		Schema.annotate({ identifier, title }),
 	)
 
-const MapleUuidId = (identifier: string, title: string) =>
+const MapleUuidId = <const Id extends string>(identifier: Id, title: string) =>
 	Schema.String.check(Schema.isUUID()).pipe(
 		Schema.brand(identifier),
 		Schema.annotate({ identifier, title }),
 	)
+
+// Telemetry dimension primitives are intentionally permissive (no minLength/trim):
+// real OpenTelemetry data legitimately carries empty service namespaces, deployment
+// environments, etc., so a strict check would make response decoding throw on live data.
+const MapleTelemetry = <const Id extends string>(identifier: Id, title: string) =>
+	Schema.String.pipe(Schema.brand(identifier), Schema.annotate({ identifier, title }))
 
 export const TraceId = MapleId("@maple/TraceId", "Trace ID")
 export type TraceId = Schema.Schema.Type<typeof TraceId>
@@ -175,3 +181,81 @@ export type TinybirdProjectRevision = Schema.Schema.Type<typeof TinybirdProjectR
 
 export const TinybirdHost = MapleId("@maple/TinybirdHost", "Tinybird Host")
 export type TinybirdHost = Schema.Schema.Type<typeof TinybirdHost>
+
+// ---------------------------------------------------------------------------
+// Telemetry dimension primitives
+// ---------------------------------------------------------------------------
+
+export const ServiceName = MapleTelemetry("@maple/ServiceName", "Service Name")
+export type ServiceName = Schema.Schema.Type<typeof ServiceName>
+
+export const DeploymentEnvironment = MapleTelemetry("@maple/DeploymentEnvironment", "Deployment Environment")
+export type DeploymentEnvironment = Schema.Schema.Type<typeof DeploymentEnvironment>
+
+export const ServiceNamespace = MapleTelemetry("@maple/ServiceNamespace", "Service Namespace")
+export type ServiceNamespace = Schema.Schema.Type<typeof ServiceNamespace>
+
+export const SpanName = MapleTelemetry("@maple/SpanName", "Span Name")
+export type SpanName = Schema.Schema.Type<typeof SpanName>
+
+export const CommitSha = MapleTelemetry("@maple/CommitSha", "Commit SHA")
+export type CommitSha = Schema.Schema.Type<typeof CommitSha>
+
+export const FingerprintHash = MapleTelemetry("@maple/FingerprintHash", "Fingerprint Hash")
+export type FingerprintHash = Schema.Schema.Type<typeof FingerprintHash>
+
+export const MetricName = MapleTelemetry("@maple/MetricName", "Metric Name")
+export type MetricName = Schema.Schema.Type<typeof MetricName>
+
+// ---------------------------------------------------------------------------
+// OpenTelemetry enums (closed value sets → modeled as literal unions)
+// ---------------------------------------------------------------------------
+
+// Title Case per the repo's span status convention; verified distinct values in the
+// warehouse are exactly Ok / Error / Unset.
+export const StatusCode = Schema.Literals(["Ok", "Error", "Unset"]).annotate({
+	identifier: "@maple/StatusCode",
+	title: "Span Status Code",
+})
+export type StatusCode = Schema.Schema.Type<typeof StatusCode>
+
+export const SpanKind = Schema.Literals(["Internal", "Server", "Client", "Producer", "Consumer"]).annotate({
+	identifier: "@maple/SpanKind",
+	title: "Span Kind",
+})
+export type SpanKind = Schema.Schema.Type<typeof SpanKind>
+
+export const HttpMethod = Schema.Literals([
+	"GET",
+	"POST",
+	"PUT",
+	"PATCH",
+	"DELETE",
+	"HEAD",
+	"OPTIONS",
+	"TRACE",
+	"CONNECT",
+]).annotate({
+	identifier: "@maple/HttpMethod",
+	title: "HTTP Method",
+})
+export type HttpMethod = Schema.Schema.Type<typeof HttpMethod>
+
+// ---------------------------------------------------------------------------
+// External / audit / dashboard reference IDs
+// ---------------------------------------------------------------------------
+
+export const ExternalUserId = MapleId("@maple/ExternalUserId", "External User ID")
+export type ExternalUserId = Schema.Schema.Type<typeof ExternalUserId>
+
+export const HazelOrganizationId = MapleId("@maple/HazelOrganizationId", "Hazel Organization ID")
+export type HazelOrganizationId = Schema.Schema.Type<typeof HazelOrganizationId>
+
+export const HazelChannelId = MapleId("@maple/HazelChannelId", "Hazel Channel ID")
+export type HazelChannelId = Schema.Schema.Type<typeof HazelChannelId>
+
+export const WidgetId = MapleId("@maple/WidgetId", "Widget ID")
+export type WidgetId = Schema.Schema.Type<typeof WidgetId>
+
+export const ChartId = MapleId("@maple/ChartId", "Chart ID")
+export type ChartId = Schema.Schema.Type<typeof ChartId>

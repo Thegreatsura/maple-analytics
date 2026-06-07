@@ -2,6 +2,7 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstab
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import {
 	CurrentTenant,
+	ExternalUserId,
 	HazelChannelsListResponse,
 	HazelDisconnectResponse,
 	HazelIntegrationStatus,
@@ -10,10 +11,14 @@ import {
 	IntegrationsForbiddenError,
 	MapleApi,
 	RoleName,
+	UserId,
 } from "@maple/domain/http"
-import { Effect, Option } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { HazelOAuthService } from "../services/HazelOAuthService"
 import { requireAdmin as requireAdminRole } from "../lib/auth"
+
+const asExternalUserId = Schema.decodeUnknownSync(ExternalUserId)
+const asUserId = Schema.decodeUnknownSync(UserId)
 
 const HAZEL_CALLBACK_PATH = "/api/integrations/hazel/callback"
 
@@ -63,9 +68,9 @@ export const HttpIntegrationsLive = HttpApiBuilder.group(MapleApi, "integrations
 					}
 					return new HazelIntegrationStatus({
 						connected: true,
-						externalUserId: status.externalUserId,
+						externalUserId: asExternalUserId(status.externalUserId),
 						externalUserEmail: status.externalUserEmail,
-						connectedByUserId: status.connectedByUserId,
+						connectedByUserId: asUserId(status.connectedByUserId),
 						scope: status.scope,
 					})
 				}),

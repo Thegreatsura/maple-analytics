@@ -1432,7 +1432,7 @@ export class ErrorsService extends Context.Service<ErrorsService, ErrorsServiceS
 				minOccurrenceCount: row.minOccurrenceCount,
 				severity: row.severity as AlertSeverity,
 				updatedAt: isoFromEpoch(row.updatedAt),
-				updatedBy: row.updatedBy,
+				updatedBy: decodeUserIdSync(row.updatedBy),
 			})
 
 		const loadPolicyRow = Effect.fn("ErrorsService.loadPolicyRow")(function* (orgId: OrgId) {

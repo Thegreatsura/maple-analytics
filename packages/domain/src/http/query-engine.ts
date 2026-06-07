@@ -1,6 +1,16 @@
 import { HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 import { Schema } from "effect"
-import { SpanId, TraceId } from "../primitives"
+import {
+	CommitSha,
+	DeploymentEnvironment,
+	FingerprintHash,
+	ServiceName,
+	ServiceNamespace,
+	SpanId,
+	SpanName,
+	StatusCode,
+	TraceId,
+} from "../primitives"
 import { QueryEngineExecuteRequest, QueryEngineExecuteResponse, TinybirdDateTime } from "../query-engine"
 import { Authorization } from "./current-tenant"
 import { warehouseHttpErrors } from "./warehouse"
@@ -22,12 +32,12 @@ export class SpanHierarchyResponse extends Schema.Class<SpanHierarchyResponse>("
 			traceId: TraceId,
 			spanId: SpanId,
 			parentSpanId: Schema.String,
-			spanName: Schema.String,
-			serviceName: Schema.String,
+			spanName: SpanName,
+			serviceName: ServiceName,
 			spanKind: Schema.String,
 			durationMs: Schema.Number,
 			startTime: Schema.String,
-			statusCode: Schema.String,
+			statusCode: StatusCode,
 			statusMessage: Schema.String,
 			spanAttributes: Schema.String,
 			resourceAttributes: Schema.String,
@@ -53,22 +63,26 @@ export class SpanDetailResponse extends Schema.Class<SpanDetailResponse>("SpanDe
 	),
 }) {}
 
-const OptionalStringArray = Schema.optional(Schema.Array(Schema.String))
+const OptionalServiceNames = Schema.optional(Schema.Array(ServiceName))
+const OptionalDeploymentEnvs = Schema.optional(Schema.Array(DeploymentEnvironment))
+const OptionalServiceNamespaces = Schema.optional(Schema.Array(ServiceNamespace))
+const OptionalCommitShas = Schema.optional(Schema.Array(CommitSha))
+const OptionalFingerprintHashes = Schema.optional(Schema.Array(FingerprintHash))
 
 export class ErrorsByTypeRequest extends Schema.Class<ErrorsByTypeRequest>("ErrorsByTypeRequest")({
 	startTime: TinybirdDateTime,
 	endTime: TinybirdDateTime,
 	rootOnly: Schema.optional(Schema.Boolean),
-	services: OptionalStringArray,
-	deploymentEnvs: OptionalStringArray,
-	fingerprintHashes: OptionalStringArray,
+	services: OptionalServiceNames,
+	deploymentEnvs: OptionalDeploymentEnvs,
+	fingerprintHashes: OptionalFingerprintHashes,
 	limit: Schema.optional(Schema.Number),
 }) {}
 
 export class ErrorsByTypeResponse extends Schema.Class<ErrorsByTypeResponse>("ErrorsByTypeResponse")({
 	data: Schema.Array(
 		Schema.Struct({
-			fingerprintHash: Schema.String,
+			fingerprintHash: FingerprintHash,
 			errorLabel: Schema.String,
 			sampleMessage: Schema.String,
 			count: Schema.Number,
@@ -83,8 +97,8 @@ export class ErrorsTimeseriesRequest extends Schema.Class<ErrorsTimeseriesReques
 	{
 		startTime: TinybirdDateTime,
 		endTime: TinybirdDateTime,
-		fingerprintHash: Schema.String,
-		services: OptionalStringArray,
+		fingerprintHash: FingerprintHash,
+		services: OptionalServiceNames,
 		bucketSeconds: Schema.optional(Schema.Number),
 	},
 ) {}
@@ -104,9 +118,9 @@ export class ErrorsSummaryRequest extends Schema.Class<ErrorsSummaryRequest>("Er
 	startTime: TinybirdDateTime,
 	endTime: TinybirdDateTime,
 	rootOnly: Schema.optional(Schema.Boolean),
-	services: OptionalStringArray,
-	deploymentEnvs: OptionalStringArray,
-	fingerprintHashes: OptionalStringArray,
+	services: OptionalServiceNames,
+	deploymentEnvs: OptionalDeploymentEnvs,
+	fingerprintHashes: OptionalFingerprintHashes,
 }) {}
 
 export class ErrorsSummaryResponse extends Schema.Class<ErrorsSummaryResponse>("ErrorsSummaryResponse")({
@@ -126,9 +140,9 @@ export class ErrorDetailTracesRequest extends Schema.Class<ErrorDetailTracesRequ
 )({
 	startTime: TinybirdDateTime,
 	endTime: TinybirdDateTime,
-	fingerprintHash: Schema.String,
+	fingerprintHash: FingerprintHash,
 	rootOnly: Schema.optional(Schema.Boolean),
-	services: OptionalStringArray,
+	services: OptionalServiceNames,
 	limit: Schema.optional(Schema.Number),
 }) {}
 
@@ -141,7 +155,7 @@ export class ErrorDetailTracesResponse extends Schema.Class<ErrorDetailTracesRes
 			startTime: Schema.String,
 			durationMicros: Schema.Number,
 			spanCount: Schema.Number,
-			services: Schema.Array(Schema.String),
+			services: Schema.Array(ServiceName),
 			rootSpanName: Schema.String,
 			errorMessage: Schema.String,
 		}),
@@ -160,7 +174,7 @@ export class ErrorRateByServiceResponse extends Schema.Class<ErrorRateByServiceR
 )({
 	data: Schema.Array(
 		Schema.Struct({
-			serviceName: Schema.String,
+			serviceName: ServiceName,
 			totalLogs: Schema.Number,
 			errorLogs: Schema.Number,
 			errorRate: Schema.Number,
@@ -171,9 +185,9 @@ export class ErrorRateByServiceResponse extends Schema.Class<ErrorRateByServiceR
 export class ServiceOverviewRequest extends Schema.Class<ServiceOverviewRequest>("ServiceOverviewRequest")({
 	startTime: TinybirdDateTime,
 	endTime: TinybirdDateTime,
-	environments: OptionalStringArray,
-	namespaces: OptionalStringArray,
-	commitShas: OptionalStringArray,
+	environments: OptionalDeploymentEnvs,
+	namespaces: OptionalServiceNamespaces,
+	commitShas: OptionalCommitShas,
 }) {}
 
 export class ServiceOverviewResponse extends Schema.Class<ServiceOverviewResponse>("ServiceOverviewResponse")(
@@ -185,7 +199,7 @@ export class ServiceOverviewResponse extends Schema.Class<ServiceOverviewRespons
 export class ServiceApdexRequest extends Schema.Class<ServiceApdexRequest>("ServiceApdexRequest")({
 	startTime: TinybirdDateTime,
 	endTime: TinybirdDateTime,
-	serviceName: Schema.String,
+	serviceName: ServiceName,
 	apdexThresholdMs: Schema.optional(Schema.Number),
 	bucketSeconds: Schema.optional(Schema.Number),
 }) {}
@@ -205,7 +219,7 @@ export class ServiceApdexResponse extends Schema.Class<ServiceApdexResponse>("Se
 export class ServiceReleasesRequest extends Schema.Class<ServiceReleasesRequest>("ServiceReleasesRequest")({
 	startTime: TinybirdDateTime,
 	endTime: TinybirdDateTime,
-	serviceName: Schema.String,
+	serviceName: ServiceName,
 	bucketSeconds: Schema.optional(Schema.Number),
 }) {}
 
@@ -214,7 +228,7 @@ export class ServiceReleasesResponse extends Schema.Class<ServiceReleasesRespons
 		data: Schema.Array(
 			Schema.Struct({
 				bucket: Schema.String,
-				commitSha: Schema.String,
+				commitSha: CommitSha,
 				count: Schema.Number,
 			}),
 		),
@@ -226,7 +240,7 @@ export class ServiceDependenciesRequest extends Schema.Class<ServiceDependencies
 )({
 	startTime: TinybirdDateTime,
 	endTime: TinybirdDateTime,
-	deploymentEnv: Schema.optional(Schema.String),
+	deploymentEnv: Schema.optional(DeploymentEnvironment),
 }) {}
 
 export class ServiceDependenciesResponse extends Schema.Class<ServiceDependenciesResponse>(
@@ -238,7 +252,7 @@ export class ServiceDependenciesResponse extends Schema.Class<ServiceDependencie
 export class ServiceDbEdgesRequest extends Schema.Class<ServiceDbEdgesRequest>("ServiceDbEdgesRequest")({
 	startTime: TinybirdDateTime,
 	endTime: TinybirdDateTime,
-	deploymentEnv: Schema.optional(Schema.String),
+	deploymentEnv: Schema.optional(DeploymentEnvironment),
 }) {}
 
 export class ServiceDbEdgesResponse extends Schema.Class<ServiceDbEdgesResponse>("ServiceDbEdgesResponse")({
@@ -250,8 +264,8 @@ export class ServiceExternalEdgesRequest extends Schema.Class<ServiceExternalEdg
 )({
 	startTime: TinybirdDateTime,
 	endTime: TinybirdDateTime,
-	serviceName: Schema.String,
-	deploymentEnv: Schema.optional(Schema.String),
+	serviceName: ServiceName,
+	deploymentEnv: Schema.optional(DeploymentEnvironment),
 }) {}
 
 // Service-scoped variants for the service-detail page's Dependencies tab.
@@ -261,19 +275,19 @@ export class ServiceExternalEdgesRequest extends Schema.Class<ServiceExternalEdg
 export class ServiceDependenciesForServiceRequest extends Schema.Class<ServiceDependenciesForServiceRequest>(
 	"ServiceDependenciesForServiceRequest",
 )({
-	serviceName: Schema.String,
+	serviceName: ServiceName,
 	startTime: TinybirdDateTime,
 	endTime: TinybirdDateTime,
-	deploymentEnv: Schema.optional(Schema.String),
+	deploymentEnv: Schema.optional(DeploymentEnvironment),
 }) {}
 
 export class ServiceDbEdgesForServiceRequest extends Schema.Class<ServiceDbEdgesForServiceRequest>(
 	"ServiceDbEdgesForServiceRequest",
 )({
-	serviceName: Schema.String,
+	serviceName: ServiceName,
 	startTime: TinybirdDateTime,
 	endTime: TinybirdDateTime,
-	deploymentEnv: Schema.optional(Schema.String),
+	deploymentEnv: Schema.optional(DeploymentEnvironment),
 }) {}
 
 export class ServiceDbQuerySummaryRequest extends Schema.Class<ServiceDbQuerySummaryRequest>(
@@ -282,8 +296,8 @@ export class ServiceDbQuerySummaryRequest extends Schema.Class<ServiceDbQuerySum
 	dbSystem: Schema.String,
 	startTime: TinybirdDateTime,
 	endTime: TinybirdDateTime,
-	sourceService: Schema.optional(Schema.String),
-	deploymentEnv: Schema.optional(Schema.String),
+	sourceService: Schema.optional(ServiceName),
+	deploymentEnv: Schema.optional(DeploymentEnvironment),
 	bucketSeconds: Schema.optional(Schema.Number),
 	topN: Schema.optional(Schema.Number),
 }) {}
@@ -347,7 +361,7 @@ export class ServicePlatformsRequest extends Schema.Class<ServicePlatformsReques
 	{
 		startTime: TinybirdDateTime,
 		endTime: TinybirdDateTime,
-		deploymentEnv: Schema.optional(Schema.String),
+		deploymentEnv: Schema.optional(DeploymentEnvironment),
 	},
 ) {}
 
@@ -356,7 +370,7 @@ export class ServicePlatformsResponse extends Schema.Class<ServicePlatformsRespo
 )({
 	data: Schema.Array(
 		Schema.Struct({
-			serviceName: Schema.String,
+			serviceName: ServiceName,
 			platform: ServicePlatformLiteral,
 			k8sCluster: Schema.String,
 			cloudPlatform: Schema.String,
@@ -374,7 +388,7 @@ export class ServiceWorkloadsRequest extends Schema.Class<ServiceWorkloadsReques
 	{
 		startTime: TinybirdDateTime,
 		endTime: TinybirdDateTime,
-		services: Schema.Array(Schema.String),
+		services: Schema.Array(ServiceName),
 	},
 ) {}
 
@@ -383,7 +397,7 @@ export class ServiceWorkloadsResponse extends Schema.Class<ServiceWorkloadsRespo
 )({
 	data: Schema.Array(
 		Schema.Struct({
-			serviceName: Schema.String,
+			serviceName: ServiceName,
 			workloadKind: ServiceWorkloadKindLiteral,
 			workloadName: Schema.String,
 			namespace: Schema.String,
@@ -398,7 +412,7 @@ export class ServiceWorkloadsResponse extends Schema.Class<ServiceWorkloadsRespo
 export class ServiceUsageRequest extends Schema.Class<ServiceUsageRequest>("ServiceUsageRequest")({
 	startTime: TinybirdDateTime,
 	endTime: TinybirdDateTime,
-	service: Schema.optional(Schema.String),
+	service: Schema.optional(ServiceName),
 }) {}
 
 export class ServiceUsageResponse extends Schema.Class<ServiceUsageResponse>("ServiceUsageResponse")({
@@ -408,16 +422,16 @@ export class ServiceUsageResponse extends Schema.Class<ServiceUsageResponse>("Se
 export class ListLogsRequest extends Schema.Class<ListLogsRequest>("ListLogsRequest")({
 	startTime: TinybirdDateTime,
 	endTime: TinybirdDateTime,
-	service: Schema.optional(Schema.String),
+	service: Schema.optional(ServiceName),
 	severity: Schema.optional(Schema.String),
 	minSeverity: Schema.optional(Schema.Number),
 	traceId: Schema.optional(Schema.String),
 	spanId: Schema.optional(Schema.String),
 	cursor: Schema.optional(Schema.String),
 	search: Schema.optional(Schema.String),
-	deploymentEnv: Schema.optional(Schema.String),
+	deploymentEnv: Schema.optional(DeploymentEnvironment),
 	deploymentEnvMatchMode: Schema.optional(Schema.Literal("contains")),
-	namespace: Schema.optional(Schema.String),
+	namespace: Schema.optional(ServiceNamespace),
 	namespaceMatchMode: Schema.optional(Schema.Literal("contains")),
 	limit: Schema.optional(Schema.Number),
 }) {}
@@ -432,7 +446,7 @@ export class ListLogsResponse extends Schema.Class<ListLogsResponse>("ListLogsRe
 // than `TinybirdDateTime` (which only matches second-level precision).
 export class GetLogRequest extends Schema.Class<GetLogRequest>("GetLogRequest")({
 	timestamp: Schema.String,
-	serviceName: Schema.String,
+	serviceName: ServiceName,
 	traceId: Schema.optional(Schema.String),
 	spanId: Schema.optional(Schema.String),
 }) {}
@@ -445,7 +459,7 @@ export class GetLogResponse extends Schema.Class<GetLogResponse>("GetLogResponse
 export class ListMetricsRequest extends Schema.Class<ListMetricsRequest>("ListMetricsRequest")({
 	startTime: TinybirdDateTime,
 	endTime: TinybirdDateTime,
-	service: Schema.optional(Schema.String),
+	service: Schema.optional(ServiceName),
 	metricType: Schema.optional(Schema.String),
 	search: Schema.optional(Schema.String),
 	limit: Schema.optional(Schema.Number),
@@ -459,7 +473,7 @@ export class ListMetricsResponse extends Schema.Class<ListMetricsResponse>("List
 export class MetricsSummaryRequest extends Schema.Class<MetricsSummaryRequest>("MetricsSummaryRequest")({
 	startTime: TinybirdDateTime,
 	endTime: TinybirdDateTime,
-	service: Schema.optional(Schema.String),
+	service: Schema.optional(ServiceName),
 }) {}
 
 export class MetricsSummaryResponse extends Schema.Class<MetricsSummaryResponse>("MetricsSummaryResponse")({

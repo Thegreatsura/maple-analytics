@@ -1,10 +1,12 @@
 import { Clock, Effect, Schema } from "effect"
 import {
+	DeploymentEnvironment,
 	ServiceDbEdgesForServiceRequest,
 	ServiceDbEdgesRequest,
 	ServiceDbQuerySummaryRequest,
 	ServiceDependenciesForServiceRequest,
 	ServiceDependenciesRequest,
+	ServiceName,
 	ServicePlatformsRequest,
 } from "@maple/domain/http"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
@@ -110,33 +112,31 @@ export interface ServicePlatformsResponse {
 const GetServiceMapInputSchema = Schema.Struct({
 	startTime: Schema.optional(WarehouseDateTimeString),
 	endTime: Schema.optional(WarehouseDateTimeString),
-	deploymentEnv: Schema.optional(Schema.String),
+	deploymentEnv: Schema.optional(DeploymentEnvironment),
 })
 
-export type GetServiceMapInput = Schema.Schema.Type<typeof GetServiceMapInputSchema>
+export type GetServiceMapInput = (typeof GetServiceMapInputSchema)["Encoded"]
 
 const GetServiceMapForServiceInputSchema = Schema.Struct({
-	serviceName: Schema.String,
+	serviceName: ServiceName,
 	startTime: Schema.optional(WarehouseDateTimeString),
 	endTime: Schema.optional(WarehouseDateTimeString),
-	deploymentEnv: Schema.optional(Schema.String),
+	deploymentEnv: Schema.optional(DeploymentEnvironment),
 })
 
-export type GetServiceMapForServiceInput = Schema.Schema.Type<typeof GetServiceMapForServiceInputSchema>
+export type GetServiceMapForServiceInput = (typeof GetServiceMapForServiceInputSchema)["Encoded"]
 
 const GetServiceDbQuerySummaryInputSchema = Schema.Struct({
 	dbSystem: Schema.String,
 	startTime: Schema.optional(WarehouseDateTimeString),
 	endTime: Schema.optional(WarehouseDateTimeString),
-	sourceService: Schema.optional(Schema.String),
-	deploymentEnv: Schema.optional(Schema.String),
+	sourceService: Schema.optional(ServiceName),
+	deploymentEnv: Schema.optional(DeploymentEnvironment),
 	bucketSeconds: Schema.optional(Schema.Number),
 	topN: Schema.optional(Schema.Number),
 })
 
-export type GetServiceDbQuerySummaryInput = Schema.Schema.Type<
-	typeof GetServiceDbQuerySummaryInputSchema
->
+export type GetServiceDbQuerySummaryInput = (typeof GetServiceDbQuerySummaryInputSchema)["Encoded"]
 
 function transformEdge(row: Record<string, unknown>, durationSeconds: number): ServiceEdge {
 	const callCount = Number(row.callCount ?? 0)

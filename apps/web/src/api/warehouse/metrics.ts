@@ -1,6 +1,6 @@
 import { QueryEngineExecuteRequest, type MetricType } from "@maple/query-engine"
 import { Clock, Effect, Schema } from "effect"
-import { ListMetricsRequest, MetricsSummaryRequest } from "@maple/domain/http"
+import { ListMetricsRequest, MetricName, MetricsSummaryRequest, ServiceName } from "@maple/domain/http"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import { mapleApiClientLayer } from "@/lib/registry"
 import {
@@ -19,14 +19,14 @@ const ListMetricsInputSchema = Schema.Struct({
 		Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(1000)),
 	),
 	offset: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-	service: Schema.optional(Schema.String),
+	service: Schema.optional(ServiceName),
 	metricType: Schema.optional(MetricTypeSchema),
 	startTime: Schema.optional(WarehouseDateTimeString),
 	endTime: Schema.optional(WarehouseDateTimeString),
 	search: Schema.optional(Schema.String),
 })
 
-export type ListMetricsInput = Schema.Schema.Type<typeof ListMetricsInputSchema>
+export type ListMetricsInput = (typeof ListMetricsInputSchema)["Encoded"]
 
 export interface Metric {
 	metricName: string
@@ -93,15 +93,15 @@ const listMetricsEffect = Effect.fn("QueryEngine.listMetrics")(function* ({
 })
 
 const GetMetricTimeSeriesInputSchema = Schema.Struct({
-	metricName: Schema.String,
+	metricName: MetricName,
 	metricType: MetricTypeSchema,
-	service: Schema.optional(Schema.String),
+	service: Schema.optional(ServiceName),
 	startTime: Schema.optional(WarehouseDateTimeString),
 	endTime: Schema.optional(WarehouseDateTimeString),
 	bucketSeconds: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
 })
 
-export type GetMetricTimeSeriesInput = Schema.Schema.Type<typeof GetMetricTimeSeriesInputSchema>
+export type GetMetricTimeSeriesInput = (typeof GetMetricTimeSeriesInputSchema)["Encoded"]
 
 export interface MetricTimeSeriesPoint {
 	bucket: string
@@ -229,12 +229,12 @@ const getMetricTimeSeriesEffect = Effect.fn("QueryEngine.getMetricTimeSeries")(f
 })
 
 const GetMetricsSummaryInputSchema = Schema.Struct({
-	service: Schema.optional(Schema.String),
+	service: Schema.optional(ServiceName),
 	startTime: Schema.optional(WarehouseDateTimeString),
 	endTime: Schema.optional(WarehouseDateTimeString),
 })
 
-export type GetMetricsSummaryInput = Schema.Schema.Type<typeof GetMetricsSummaryInputSchema>
+export type GetMetricsSummaryInput = (typeof GetMetricsSummaryInputSchema)["Encoded"]
 
 export interface MetricTypeSummary {
 	metricType: string

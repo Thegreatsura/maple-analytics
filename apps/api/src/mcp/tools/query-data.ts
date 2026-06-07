@@ -26,7 +26,20 @@ import {
 	type MetricsBreakdownQuery,
 } from "@maple/query-engine"
 import { formatQueryResult } from "../lib/format-query-result"
-import type { QueryDataQueryContext } from "@maple/domain"
+import {
+	CommitSha,
+	DeploymentEnvironment,
+	MetricName,
+	ServiceName,
+	SpanName,
+	type QueryDataQueryContext,
+} from "@maple/domain"
+
+const asServiceName = Schema.decodeUnknownSync(ServiceName)
+const asSpanName = Schema.decodeUnknownSync(SpanName)
+const asDeploymentEnvironment = Schema.decodeUnknownSync(DeploymentEnvironment)
+const asCommitSha = Schema.decodeUnknownSync(CommitSha)
+const asMetricName = Schema.decodeUnknownSync(MetricName)
 
 const queryDataSchema = Schema.Struct({
 	source: Schema.Literals(["traces", "logs", "metrics"]).annotate({
@@ -153,11 +166,15 @@ export function registerQueryDataTool(server: McpToolRegistrar) {
 					}
 
 					const filters: TracesFilters = {
-						...(params.service_name && { serviceName: params.service_name }),
-						...(params.span_name && { spanName: params.span_name }),
+						...(params.service_name && { serviceName: asServiceName(params.service_name) }),
+						...(params.span_name && { spanName: asSpanName(params.span_name) }),
 						...(params.root_spans_only && { rootSpansOnly: params.root_spans_only }),
-						...(params.environments && { environments: splitCsv(params.environments) }),
-						...(params.commit_shas && { commitShas: splitCsv(params.commit_shas) }),
+						...(params.environments && {
+							environments: splitCsv(params.environments).map((env) => asDeploymentEnvironment(env)),
+						}),
+						...(params.commit_shas && {
+							commitShas: splitCsv(params.commit_shas).map((sha) => asCommitSha(sha)),
+						}),
 						...(params.group_by === "attribute" &&
 							params.attribute_key && { groupByAttributeKeys: [params.attribute_key] }),
 						...(attributeFilters.length > 0 && { attributeFilters }),
@@ -206,7 +223,7 @@ export function registerQueryDataTool(server: McpToolRegistrar) {
 					if (!params.metric) decisions.push(`metric: fixed to "count" (only option for logs)`)
 
 					const filters: LogsFilters = {
-						...(params.service_name && { serviceName: params.service_name }),
+						...(params.service_name && { serviceName: asServiceName(params.service_name) }),
 						...(params.severity && { severity: params.severity }),
 					}
 					const hasFilters = Object.keys(filters).length > 0
@@ -258,9 +275,9 @@ export function registerQueryDataTool(server: McpToolRegistrar) {
 					}
 
 					const filters: MetricsFilters = {
-						metricName,
+						metricName: asMetricName(metricName),
 						metricType,
-						...(params.service_name && { serviceName: params.service_name }),
+						...(params.service_name && { serviceName: asServiceName(params.service_name) }),
 						...(params.group_by === "attribute" &&
 							params.attribute_key && { groupByAttributeKey: params.attribute_key }),
 						...(metricsAttributeFilters.length > 0 && { attributeFilters: metricsAttributeFilters }),

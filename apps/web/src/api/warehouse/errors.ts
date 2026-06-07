@@ -1,10 +1,13 @@
 import { Clock, Effect, Schema } from "effect"
 import { QueryEngineExecuteRequest, warehouseDateTimeToIso } from "@maple/query-engine"
 import {
+	DeploymentEnvironment,
 	ErrorsByTypeRequest,
 	ErrorsSummaryRequest,
 	ErrorDetailTracesRequest,
 	ErrorsTimeseriesRequest,
+	FingerprintHash,
+	ServiceName,
 } from "@maple/domain/http"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import {
@@ -15,7 +18,9 @@ import {
 	runWarehouseQuery,
 } from "@/api/warehouse/effect-utils"
 
-const OptionalStringArray = Schema.optional(Schema.mutable(Schema.Array(Schema.String)))
+const OptionalServiceArray = Schema.optional(Schema.mutable(Schema.Array(ServiceName)))
+const OptionalDeploymentEnvArray = Schema.optional(Schema.mutable(Schema.Array(DeploymentEnvironment)))
+const OptionalFingerprintHashArray = Schema.optional(Schema.mutable(Schema.Array(FingerprintHash)))
 
 export interface ErrorByType {
 	fingerprintHash: string
@@ -34,15 +39,15 @@ export interface ErrorsByTypeResponse {
 const GetErrorsByTypeInputSchema = Schema.Struct({
 	startTime: Schema.optional(WarehouseDateTimeString),
 	endTime: Schema.optional(WarehouseDateTimeString),
-	services: OptionalStringArray,
-	deploymentEnvs: OptionalStringArray,
-	fingerprintHashes: OptionalStringArray,
+	services: OptionalServiceArray,
+	deploymentEnvs: OptionalDeploymentEnvArray,
+	fingerprintHashes: OptionalFingerprintHashArray,
 	limit: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
 	showSpam: Schema.optional(Schema.Boolean),
 	rootOnly: Schema.optional(Schema.Boolean),
 })
 
-export type GetErrorsByTypeInput = Schema.Schema.Type<typeof GetErrorsByTypeInputSchema>
+export type GetErrorsByTypeInput = (typeof GetErrorsByTypeInputSchema)["Encoded"]
 
 export function getErrorsByType({ data }: { data: GetErrorsByTypeInput }) {
 	return getErrorsByTypeEffect({ data })
@@ -104,14 +109,14 @@ export interface ErrorsFacetsResponse {
 const GetErrorsFacetsInputSchema = Schema.Struct({
 	startTime: Schema.optional(WarehouseDateTimeString),
 	endTime: Schema.optional(WarehouseDateTimeString),
-	services: OptionalStringArray,
-	deploymentEnvs: OptionalStringArray,
-	fingerprintHashes: OptionalStringArray,
+	services: OptionalServiceArray,
+	deploymentEnvs: OptionalDeploymentEnvArray,
+	fingerprintHashes: OptionalFingerprintHashArray,
 	showSpam: Schema.optional(Schema.Boolean),
 	rootOnly: Schema.optional(Schema.Boolean),
 })
 
-export type GetErrorsFacetsInput = Schema.Schema.Type<typeof GetErrorsFacetsInputSchema>
+export type GetErrorsFacetsInput = (typeof GetErrorsFacetsInputSchema)["Encoded"]
 
 const defaultErrorsTimeRange = (nowMillis: number) => {
 	const fmt = (ms: number) => new Date(ms).toISOString().replace("T", " ").slice(0, 19)
@@ -188,14 +193,14 @@ export interface ErrorsSummaryResponse {
 const GetErrorsSummaryInputSchema = Schema.Struct({
 	startTime: Schema.optional(WarehouseDateTimeString),
 	endTime: Schema.optional(WarehouseDateTimeString),
-	services: OptionalStringArray,
-	deploymentEnvs: OptionalStringArray,
-	fingerprintHashes: OptionalStringArray,
+	services: OptionalServiceArray,
+	deploymentEnvs: OptionalDeploymentEnvArray,
+	fingerprintHashes: OptionalFingerprintHashArray,
 	showSpam: Schema.optional(Schema.Boolean),
 	rootOnly: Schema.optional(Schema.Boolean),
 })
 
-export type GetErrorsSummaryInput = Schema.Schema.Type<typeof GetErrorsSummaryInputSchema>
+export type GetErrorsSummaryInput = (typeof GetErrorsSummaryInputSchema)["Encoded"]
 
 export function getErrorsSummary({ data }: { data: GetErrorsSummaryInput }) {
 	return getErrorsSummaryEffect({ data })
@@ -254,16 +259,16 @@ export interface ErrorDetailTracesResponse {
 }
 
 const GetErrorDetailTracesInputSchema = Schema.Struct({
-	fingerprintHash: Schema.String,
+	fingerprintHash: FingerprintHash,
 	startTime: Schema.optional(WarehouseDateTimeString),
 	endTime: Schema.optional(WarehouseDateTimeString),
-	services: OptionalStringArray,
+	services: OptionalServiceArray,
 	limit: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
 	showSpam: Schema.optional(Schema.Boolean),
 	rootOnly: Schema.optional(Schema.Boolean),
 })
 
-export type GetErrorDetailTracesInput = Schema.Schema.Type<typeof GetErrorDetailTracesInputSchema>
+export type GetErrorDetailTracesInput = (typeof GetErrorDetailTracesInputSchema)["Encoded"]
 
 export function getErrorDetailTraces({ data }: { data: GetErrorDetailTracesInput }) {
 	return getErrorDetailTracesEffect({ data })
@@ -312,15 +317,15 @@ export interface ErrorsTimeseriesItem {
 }
 
 const GetErrorsTimeseriesInputSchema = Schema.Struct({
-	fingerprintHash: Schema.String,
+	fingerprintHash: FingerprintHash,
 	startTime: Schema.optional(WarehouseDateTimeString),
 	endTime: Schema.optional(WarehouseDateTimeString),
-	services: OptionalStringArray,
+	services: OptionalServiceArray,
 	bucketSeconds: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
 	showSpam: Schema.optional(Schema.Boolean),
 })
 
-export type GetErrorsTimeseriesInput = Schema.Schema.Type<typeof GetErrorsTimeseriesInputSchema>
+export type GetErrorsTimeseriesInput = (typeof GetErrorsTimeseriesInputSchema)["Encoded"]
 
 export function getErrorsTimeseries({ data }: { data: GetErrorsTimeseriesInput }) {
 	return getErrorsTimeseriesEffect({ data })

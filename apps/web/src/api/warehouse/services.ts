@@ -1,6 +1,14 @@
 import { Clock, Effect, Schema } from "effect"
 import { QueryEngineExecuteRequest } from "@maple/query-engine"
-import { ServiceOverviewRequest, ServiceApdexRequest, ServiceReleasesRequest } from "@maple/domain/http"
+import {
+	CommitSha,
+	DeploymentEnvironment,
+	ServiceApdexRequest,
+	ServiceName,
+	ServiceNamespace,
+	ServiceOverviewRequest,
+	ServiceReleasesRequest,
+} from "@maple/domain/http"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import {
 	buildBucketTimeline,
@@ -50,12 +58,12 @@ export interface ServiceOverviewResponse {
 const GetServiceOverviewInput = Schema.Struct({
 	startTime: Schema.optional(dateTimeString),
 	endTime: Schema.optional(dateTimeString),
-	environments: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
-	namespaces: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
-	commitShas: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+	environments: Schema.optional(Schema.mutable(Schema.Array(DeploymentEnvironment))),
+	namespaces: Schema.optional(Schema.mutable(Schema.Array(ServiceNamespace))),
+	commitShas: Schema.optional(Schema.mutable(Schema.Array(CommitSha))),
 })
 
-export type GetServiceOverviewInput = Schema.Schema.Type<typeof GetServiceOverviewInput>
+export type GetServiceOverviewInput = (typeof GetServiceOverviewInput)["Encoded"]
 
 interface CoercedRow {
 	serviceName: string
@@ -433,12 +441,12 @@ export interface ServiceApdexTimeSeriesResponse {
 }
 
 const GetServiceDetailInput = Schema.Struct({
-	serviceName: Schema.String,
+	serviceName: ServiceName,
 	startTime: Schema.optional(dateTimeString),
 	endTime: Schema.optional(dateTimeString),
 })
 
-export type GetServiceDetailInput = Schema.Schema.Type<typeof GetServiceDetailInput>
+export type GetServiceDetailInput = (typeof GetServiceDetailInput)["Encoded"]
 
 export function getServiceApdexTimeSeries({ data }: { data: GetServiceDetailInput }) {
 	return getServiceApdexTimeSeriesEffect({ data })

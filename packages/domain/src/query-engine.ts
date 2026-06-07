@@ -1,4 +1,14 @@
 import { Schema } from "effect"
+import {
+	CommitSha,
+	DeploymentEnvironment,
+	FingerprintHash,
+	MetricName,
+	ServiceName,
+	ServiceNamespace,
+	SpanName,
+	TraceId,
+} from "./primitives"
 
 const dateTimePattern = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/
 
@@ -43,12 +53,12 @@ export const TracesMatchModes = Schema.Struct({
 export type TracesMatchModes = Schema.Schema.Type<typeof TracesMatchModes>
 
 export const TracesFilters = Schema.Struct({
-	serviceName: Schema.optional(Schema.String),
-	spanName: Schema.optional(Schema.String),
+	serviceName: Schema.optional(ServiceName),
+	spanName: Schema.optional(SpanName),
 	rootSpansOnly: Schema.optional(Schema.Boolean),
-	environments: Schema.optional(Schema.Array(Schema.String)),
-	namespaces: Schema.optional(Schema.Array(Schema.String)),
-	commitShas: Schema.optional(Schema.Array(Schema.String)),
+	environments: Schema.optional(Schema.Array(DeploymentEnvironment)),
+	namespaces: Schema.optional(Schema.Array(ServiceNamespace)),
+	commitShas: Schema.optional(Schema.Array(CommitSha)),
 	groupByAttributeKeys: Schema.optional(Schema.Array(Schema.String)),
 	errorsOnly: Schema.optional(Schema.Boolean),
 	minDurationMs: Schema.optional(Schema.Number),
@@ -56,37 +66,37 @@ export const TracesFilters = Schema.Struct({
 	matchModes: Schema.optional(TracesMatchModes),
 	attributeFilters: Schema.optional(Schema.Array(AttributeFilter)),
 	resourceAttributeFilters: Schema.optional(Schema.Array(AttributeFilter)),
-	excludedServiceNames: Schema.optional(Schema.Array(Schema.String)),
-	excludedSpanNames: Schema.optional(Schema.Array(Schema.String)),
-	excludedEnvironments: Schema.optional(Schema.Array(Schema.String)),
-	excludedNamespaces: Schema.optional(Schema.Array(Schema.String)),
+	excludedServiceNames: Schema.optional(Schema.Array(ServiceName)),
+	excludedSpanNames: Schema.optional(Schema.Array(SpanName)),
+	excludedEnvironments: Schema.optional(Schema.Array(DeploymentEnvironment)),
+	excludedNamespaces: Schema.optional(Schema.Array(ServiceNamespace)),
 })
 export type TracesFilters = Schema.Schema.Type<typeof TracesFilters>
 
 export const LogsFilters = Schema.Struct({
-	serviceName: Schema.optional(Schema.String),
+	serviceName: Schema.optional(ServiceName),
 	severity: Schema.optional(Schema.String),
-	traceId: Schema.optional(Schema.String),
+	traceId: Schema.optional(TraceId),
 	search: Schema.optional(Schema.String),
-	environments: Schema.optional(Schema.Array(Schema.String)),
+	environments: Schema.optional(Schema.Array(DeploymentEnvironment)),
 	deploymentEnvMatchMode: Schema.optional(Schema.Literal("contains")),
-	namespaces: Schema.optional(Schema.Array(Schema.String)),
+	namespaces: Schema.optional(Schema.Array(ServiceNamespace)),
 	namespaceMatchMode: Schema.optional(Schema.Literal("contains")),
 })
 export type LogsFilters = Schema.Schema.Type<typeof LogsFilters>
 
 export const ErrorsFilters = Schema.Struct({
 	rootOnly: Schema.optional(Schema.Boolean),
-	services: Schema.optional(Schema.Array(Schema.String)),
-	deploymentEnvs: Schema.optional(Schema.Array(Schema.String)),
-	fingerprintHashes: Schema.optional(Schema.Array(Schema.String)),
+	services: Schema.optional(Schema.Array(ServiceName)),
+	deploymentEnvs: Schema.optional(Schema.Array(DeploymentEnvironment)),
+	fingerprintHashes: Schema.optional(Schema.Array(FingerprintHash)),
 })
 export type ErrorsFilters = Schema.Schema.Type<typeof ErrorsFilters>
 
 export const MetricsFilters = Schema.Struct({
-	metricName: Schema.String,
+	metricName: MetricName,
 	metricType: MetricType,
-	serviceName: Schema.optional(Schema.String),
+	serviceName: Schema.optional(ServiceName),
 	groupByAttributeKey: Schema.optional(Schema.String),
 	attributeFilters: Schema.optional(Schema.Array(AttributeFilter)),
 })

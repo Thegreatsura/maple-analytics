@@ -15,6 +15,14 @@ import {
 	trimSparseLeadingBuckets,
 } from "@/api/warehouse/timeseries-utils"
 import {
+	CommitSha,
+	DeploymentEnvironment,
+	MetricName,
+	ServiceName,
+	ServiceNamespace,
+	SpanName,
+} from "@maple/domain/http"
+import {
 	WarehouseDateTimeString,
 	decodeInput,
 	executeQueryEngine,
@@ -24,6 +32,9 @@ import { listMetrics } from "@/api/warehouse/metrics"
 import { getActiveOrgId } from "@/lib/services/common/auth-headers"
 import type { ServiceDetailTimeSeriesPoint, ServiceTimeSeriesPoint } from "@/api/warehouse/services"
 const dateTimeString = WarehouseDateTimeString
+
+const asMetricName = Schema.decodeUnknownSync(MetricName)
+const asServiceName = Schema.decodeUnknownSync(ServiceName)
 
 // SpanMetrics connector metric names — try namespaced first, then default
 const SPANMETRICS_CALLS_CANDIDATES = ["span.metrics.calls", "calls"] as const
@@ -134,9 +145,9 @@ export function querySpanMetricsCalls(params: {
 					metric: "increase",
 					groupBy: ["service"],
 					filters: {
-						metricName,
+						metricName: asMetricName(metricName),
 						metricType: "sum",
-						serviceName: params.service,
+						serviceName: params.service ? asServiceName(params.service) : undefined,
 						attributeFilters: [{ key: "span.kind", value: "SPAN_KIND_SERVER", mode: "equals" }],
 					},
 					bucketSeconds: params.bucket_seconds,
@@ -240,15 +251,15 @@ function fillServiceSparklinePoints(
 }
 
 const SharedFiltersSchema = Schema.Struct({
-	serviceName: Schema.optional(Schema.String),
-	spanName: Schema.optional(Schema.String),
+	serviceName: Schema.optional(ServiceName),
+	spanName: Schema.optional(SpanName),
 	severity: Schema.optional(Schema.String),
-	metricName: Schema.optional(Schema.String),
+	metricName: Schema.optional(MetricName),
 	metricType: Schema.optional(Schema.Literals(["sum", "gauge", "histogram", "exponential_histogram"])),
 	rootSpansOnly: Schema.optional(Schema.Boolean),
-	environments: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
-	namespaces: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
-	commitShas: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+	environments: Schema.optional(Schema.mutable(Schema.Array(DeploymentEnvironment))),
+	namespaces: Schema.optional(Schema.mutable(Schema.Array(ServiceNamespace))),
+	commitShas: Schema.optional(Schema.mutable(Schema.Array(CommitSha))),
 	groupByAttributeKeys: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
 	groupByAttributeKey: Schema.optional(Schema.String),
 	attributeFilters: Schema.optional(
@@ -296,7 +307,8 @@ const CustomChartTimeSeriesInputSchema = Schema.Struct({
 	apdexThresholdMs: Schema.optional(Schema.Number.check(Schema.isFinite(), Schema.isGreaterThan(0))),
 })
 
-export type CustomChartTimeSeriesInput = Schema.Schema.Type<typeof CustomChartTimeSeriesInputSchema>
+export type CustomChartTimeSeriesInput = (typeof CustomChartTimeSeriesInputSchema)["Encoded"]
+type CustomChartTimeSeriesDecoded = (typeof CustomChartTimeSeriesInputSchema)["Type"]
 
 export interface CustomChartTimeSeriesPoint {
 	bucket: string
@@ -319,7 +331,7 @@ const tracesMetrics = new Set<TracesMetric>([
 const metricsMetrics = new Set<MetricsMetric>(["avg", "sum", "min", "max", "count", "rate", "increase"])
 const metricsBreakdownMetrics = new Set<"avg" | "sum" | "count">(["avg", "sum", "count"])
 
-function buildTimeseriesQuerySpec(data: CustomChartTimeSeriesInput): QuerySpec | string {
+function buildTimeseriesQuerySpec(data: CustomChartTimeSeriesDecoded): QuerySpec | string {
 	if (data.source === "traces") {
 		if (!tracesMetrics.has(data.metric as TracesMetric)) {
 			return `Unknown trace metric: ${data.metric}`
@@ -476,7 +488,8 @@ const CustomChartBreakdownInputSchema = Schema.Struct({
 	),
 })
 
-export type CustomChartBreakdownInput = Schema.Schema.Type<typeof CustomChartBreakdownInputSchema>
+export type CustomChartBreakdownInput = (typeof CustomChartBreakdownInputSchema)["Encoded"]
+type CustomChartBreakdownDecoded = (typeof CustomChartBreakdownInputSchema)["Type"]
 
 export interface CustomChartBreakdownItem {
 	name: string
@@ -487,7 +500,7 @@ export interface CustomChartBreakdownResponse {
 	data: CustomChartBreakdownItem[]
 }
 
-function buildBreakdownQuerySpec(data: CustomChartBreakdownInput): QuerySpec | string {
+function buildBreakdownQuerySpec(data: CustomChartBreakdownDecoded): QuerySpec | string {
 	if (data.source === "traces") {
 		if (!tracesMetrics.has(data.metric as TracesMetric)) {
 			return `Unknown trace metric: ${data.metric}`
@@ -600,12 +613,12 @@ const getCustomChartBreakdownEffect = Effect.fn("QueryEngine.getCustomChartBreak
 })
 
 const GetCustomChartServiceDetailInputSchema = Schema.Struct({
-	serviceName: Schema.String,
+	serviceName: ServiceName,
 	startTime: Schema.optional(dateTimeString),
 	endTime: Schema.optional(dateTimeString),
 })
 
-type GetCustomChartServiceDetailInput = Schema.Schema.Type<typeof GetCustomChartServiceDetailInputSchema>
+type GetCustomChartServiceDetailInput = (typeof GetCustomChartServiceDetailInputSchema)["Encoded"]
 
 export function getCustomChartServiceDetail({ data }: { data: GetCustomChartServiceDetailInput }) {
 	return getCustomChartServiceDetailEffect({ data })
@@ -615,10 +628,10 @@ function makeAllMetricsTimeseriesRequest(opts: {
 	startTime?: string
 	endTime?: string
 	bucketSeconds: number
-	serviceName?: string
+	serviceName?: ServiceName
 	rootSpansOnly?: boolean
-	environments?: string[]
-	commitShas?: string[]
+	environments?: ReadonlyArray<DeploymentEnvironment>
+	commitShas?: ReadonlyArray<CommitSha>
 	groupBy?: string[]
 }) {
 	return new QueryEngineExecuteRequest({
@@ -849,10 +862,10 @@ const getCustomChartServiceDetailEffect = Effect.fn("QueryEngine.getCustomChartS
 const GetOverviewTimeSeriesInputSchema = Schema.Struct({
 	startTime: Schema.optional(dateTimeString),
 	endTime: Schema.optional(dateTimeString),
-	environments: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+	environments: Schema.optional(Schema.mutable(Schema.Array(DeploymentEnvironment))),
 })
 
-type GetOverviewTimeSeriesInput = Schema.Schema.Type<typeof GetOverviewTimeSeriesInputSchema>
+type GetOverviewTimeSeriesInput = (typeof GetOverviewTimeSeriesInputSchema)["Encoded"]
 
 export function getOverviewTimeSeries({ data }: { data: GetOverviewTimeSeriesInput }) {
 	return getOverviewTimeSeriesEffect({ data })
@@ -929,13 +942,11 @@ const getOverviewTimeSeriesEffect = Effect.fn("QueryEngine.getOverviewTimeSeries
 const GetCustomChartServiceSparklinesInputSchema = Schema.Struct({
 	startTime: Schema.optional(dateTimeString),
 	endTime: Schema.optional(dateTimeString),
-	environments: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
-	commitShas: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
+	environments: Schema.optional(Schema.mutable(Schema.Array(DeploymentEnvironment))),
+	commitShas: Schema.optional(Schema.mutable(Schema.Array(CommitSha))),
 })
 
-type GetCustomChartServiceSparklinesInput = Schema.Schema.Type<
-	typeof GetCustomChartServiceSparklinesInputSchema
->
+type GetCustomChartServiceSparklinesInput = (typeof GetCustomChartServiceSparklinesInputSchema)["Encoded"]
 
 export function getCustomChartServiceSparklines({ data }: { data: GetCustomChartServiceSparklinesInput }) {
 	return getCustomChartServiceSparklinesEffect({ data })

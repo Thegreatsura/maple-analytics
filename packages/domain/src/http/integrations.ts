@@ -1,12 +1,13 @@
 import { HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi"
 import { Schema } from "effect"
+import { ExternalUserId, UserId } from "../primitives"
 import { Authorization } from "./current-tenant"
 
 export class HazelIntegrationStatus extends Schema.Class<HazelIntegrationStatus>("HazelIntegrationStatus")({
 	connected: Schema.Boolean,
-	externalUserId: Schema.NullOr(Schema.String),
+	externalUserId: Schema.NullOr(ExternalUserId),
 	externalUserEmail: Schema.NullOr(Schema.String),
-	connectedByUserId: Schema.NullOr(Schema.String),
+	connectedByUserId: Schema.NullOr(UserId),
 	scope: Schema.NullOr(Schema.String),
 }) {}
 

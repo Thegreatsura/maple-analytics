@@ -1,7 +1,13 @@
 import { Clock, Effect, Schema } from "effect"
 import { QueryEngineExecuteRequest } from "@maple/query-engine"
 import { TraceId, SpanId } from "@maple/domain"
-import { GetLogRequest, ListLogsRequest } from "@maple/domain/http"
+import {
+	DeploymentEnvironment,
+	GetLogRequest,
+	ListLogsRequest,
+	ServiceName,
+	ServiceNamespace,
+} from "@maple/domain/http"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import {
 	WarehouseDateTimeString,
@@ -20,24 +26,24 @@ const ListLogsInputSchema = Schema.Struct({
 	limit: Schema.optional(
 		Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(1000)),
 	),
-	service: Schema.optional(Schema.String),
+	service: Schema.optional(ServiceName),
 	severity: Schema.optional(Schema.String),
 	minSeverity: Schema.optional(
 		Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(255)),
 	),
 	startTime: Schema.optional(WarehouseDateTimeString),
 	endTime: Schema.optional(WarehouseDateTimeString),
-	traceId: Schema.optional(Schema.String),
+	traceId: Schema.optional(TraceId),
 	spanId: Schema.optional(Schema.String),
 	cursor: Schema.optional(Schema.String),
 	search: Schema.optional(Schema.String),
-	deploymentEnv: Schema.optional(Schema.String),
+	deploymentEnv: Schema.optional(DeploymentEnvironment),
 	deploymentEnvMatchMode: Schema.optional(Schema.Literal("contains")),
-	namespace: Schema.optional(Schema.String),
+	namespace: Schema.optional(ServiceNamespace),
 	namespaceMatchMode: Schema.optional(Schema.Literal("contains")),
 })
 
-export type ListLogsInput = Schema.Schema.Type<typeof ListLogsInputSchema>
+export type ListLogsInput = (typeof ListLogsInputSchema)["Encoded"]
 
 const DEFAULT_LIMIT = 100
 
@@ -138,12 +144,12 @@ const listLogsEffect = Effect.fn("QueryEngine.listLogs")(function* ({ data }: { 
 
 const GetLogInputSchema = Schema.Struct({
 	timestamp: Schema.String,
-	serviceName: Schema.String,
-	traceId: Schema.optional(Schema.String),
+	serviceName: ServiceName,
+	traceId: Schema.optional(TraceId),
 	spanId: Schema.optional(Schema.String),
 })
 
-export type GetLogInput = Schema.Schema.Type<typeof GetLogInputSchema>
+export type GetLogInput = (typeof GetLogInputSchema)["Encoded"]
 
 export interface GetLogResult {
 	data: Log | null
@@ -236,17 +242,17 @@ export interface LogsFacetsResponse {
 }
 
 const GetLogsFacetsInputSchema = Schema.Struct({
-	service: Schema.optional(Schema.String),
+	service: Schema.optional(ServiceName),
 	severity: Schema.optional(Schema.String),
-	deploymentEnv: Schema.optional(Schema.String),
+	deploymentEnv: Schema.optional(DeploymentEnvironment),
 	deploymentEnvMatchMode: Schema.optional(Schema.Literal("contains")),
-	namespace: Schema.optional(Schema.String),
+	namespace: Schema.optional(ServiceNamespace),
 	namespaceMatchMode: Schema.optional(Schema.Literal("contains")),
 	startTime: Schema.optional(WarehouseDateTimeString),
 	endTime: Schema.optional(WarehouseDateTimeString),
 })
 
-export type GetLogsFacetsInput = Schema.Schema.Type<typeof GetLogsFacetsInputSchema>
+export type GetLogsFacetsInput = (typeof GetLogsFacetsInputSchema)["Encoded"]
 
 export function getLogsFacets({ data }: { data: GetLogsFacetsInput }) {
 	return getLogsFacetsEffect({ data })
