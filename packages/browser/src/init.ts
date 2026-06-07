@@ -144,13 +144,18 @@ function sessionMetaRow(
 		os_name: ua.osName,
 		device_type: ua.deviceType,
 		service_name: config.serviceName,
-		resource_attributes: config.environment
-			? {
-					// Dual-emit: legacy key (pre-extracted by Tinybird MVs) + canonical.
-					"deployment.environment": config.environment,
-					"deployment.environment.name": config.environment,
-				}
-			: {},
+		resource_attributes: {
+			...(config.environment
+				? {
+						// Dual-emit: legacy key (pre-extracted by Tinybird MVs) + canonical.
+						"deployment.environment": config.environment,
+						"deployment.environment.name": config.environment,
+					}
+				: {}),
+			...(config.serviceVersion
+				? { "deployment.commit_sha": config.serviceVersion }
+				: {}),
+		},
 	}
 	if (status === "ended") {
 		row.end_time = formatCHDateTime(now)

@@ -32,6 +32,7 @@ if (replayIngestKey) {
 		ingestKey: replayIngestKey,
 		serviceName: "maple-web",
 		serviceNamespace: "client",
+		serviceVersion: import.meta.env.VITE_COMMIT_SHA?.trim() || undefined,
 		endpoint: ingestUrl,
 		environment: import.meta.env.MODE,
 		tracing: { enabled: true, instrumentFetch: false },

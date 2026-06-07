@@ -28,6 +28,10 @@ jobs:
             DOPPLER_CONFIG: pr
             PR_NUMBER: ${{ github.event.pull_request.number }}
             PR_BRANCH: ${{ github.head_ref }}
+            # Stamped onto deployed telemetry as `deployment.commit_sha`. Use the PR
+            # head SHA (github.sha is the merge commit on pull_request events).
+            COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+            VITE_COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
         steps:
             - name: Checkout
               uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

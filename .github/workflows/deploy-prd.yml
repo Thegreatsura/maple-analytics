@@ -20,6 +20,10 @@ jobs:
         env:
             DOPPLER_PROJECT: maple
             DOPPLER_CONFIG: prd
+            # Stamped onto deployed telemetry as `deployment.commit_sha` (server SDK
+            # reads COMMIT_SHA; web build reads VITE_COMMIT_SHA via Vite define).
+            COMMIT_SHA: ${{ github.sha }}
+            VITE_COMMIT_SHA: ${{ github.sha }}
         steps:
             - name: Checkout
               uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
