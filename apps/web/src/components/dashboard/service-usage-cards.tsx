@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@maple/ui/components/u
 import { Skeleton } from "@maple/ui/components/ui/skeleton"
 import { getServiceUsageResultAtom } from "@/lib/services/atoms/warehouse-query-atoms"
 import { useRefreshableAtomValue } from "@/hooks/use-refreshable-atom-value"
-import type { ServiceUsageResponse } from "@/api/warehouse/service-usage"
+import type { ServiceUsageResponse, ServiceUsageTotals } from "@/api/warehouse/service-usage"
 import { normalizeTimestampInput } from "@/lib/timezone-format"
 
 function formatNumber(num: number): string {
@@ -103,18 +103,18 @@ function DeltaChip({ current, previous }: { current: number; previous: number })
 }
 
 export function ServiceUsageCards({ startTime, endTime }: ServiceUsageCardsProps = {}) {
-	const responseResult = useRefreshableAtomValue(
-		getServiceUsageResultAtom({ data: { startTime, endTime } }),
-	)
-
+	// Current + previous totals come back in ONE request (sumIf over the union
+	// window) instead of two separate per-period queries.
 	const { startTime: prevStart, endTime: prevEnd } = shiftRangeBack(startTime, endTime)
-	const previousResult = useRefreshableAtomValue(
-		getServiceUsageResultAtom({ data: { startTime: prevStart, endTime: prevEnd } }),
+	const responseResult = useRefreshableAtomValue(
+		getServiceUsageResultAtom({
+			data: { startTime, endTime, previousStartTime: prevStart, previousEndTime: prevEnd },
+		}),
 	)
 
-	const previousTotals = Result.builder(previousResult)
-		.onSuccess((r) => sumTotals(r))
-		.orElse(() => null as null | ReturnType<typeof sumTotals>)
+	const previousTotals = Result.builder(responseResult)
+		.onSuccess((r) => r.previousTotals ?? null)
+		.orElse(() => null as null | ServiceUsageTotals)
 
 	return Result.builder(responseResult)
 		.onInitial(() => (

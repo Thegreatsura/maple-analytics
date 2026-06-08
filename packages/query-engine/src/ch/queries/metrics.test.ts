@@ -103,8 +103,13 @@ describe("metricsTimeseriesRateQuery", () => {
 		// Partition must isolate each pod/series (ResourceAttributes) and
 		// accumulation epoch (StartTimeUnix) — otherwise cumulative deltas are
 		// computed across interleaved replicas and inflate by orders of magnitude.
+		// The attribute Maps are folded into cityHash64 series fingerprints so the
+		// window sort key is fixed-width instead of a serialized Map per row.
 		expect(sql).toContain(
-			"PARTITION BY ServiceName, MetricName, Attributes, ResourceAttributes, StartTimeUnix",
+			"PARTITION BY ServiceName, MetricName, " +
+				"cityHash64(mapKeys(Attributes), mapValues(Attributes)), " +
+				"cityHash64(mapKeys(ResourceAttributes), mapValues(ResourceAttributes)), " +
+				"StartTimeUnix",
 		)
 		expect(sql).toContain("rateValue")
 		expect(sql).toContain("increaseValue")

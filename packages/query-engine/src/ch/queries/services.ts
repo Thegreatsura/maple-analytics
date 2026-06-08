@@ -206,6 +206,79 @@ export function serviceUsageQuery(opts: ServiceUsageOpts) {
 		.format("JSON")
 }
 
+export interface ServiceUsageWithPreviousOutput extends ServiceUsageOutput {
+	readonly previousLogCount: number
+	readonly previousTraceCount: number
+	readonly previousSumMetricCount: number
+	readonly previousGaugeMetricCount: number
+	readonly previousHistogramMetricCount: number
+	readonly previousExpHistogramMetricCount: number
+	readonly previousSizeBytes: number
+}
+
+/**
+ * Single-scan variant of {@link serviceUsageQuery} that also returns each
+ * service's totals for a previous comparison window. Scans the union span
+ * [previousStartTime, endTime] once and splits it with `sumIf`, replacing the
+ * two separate per-period requests the usage cards used to fire. `total*`
+ * columns keep their current-window meaning (snap-to-hour, see
+ * `serviceUsageQuery`); `previous*` columns carry only the aggregate counts the
+ * delta chips consume.
+ */
+export function serviceUsageWithPreviousQuery(opts: ServiceUsageOpts) {
+	const hourFloor = (p: string) => CH.toStartOfHour(CH.toDateTime(param.dateTime(p)))
+	const inCurrent = ($: ColumnAccessor<typeof ServiceUsage.columns>) =>
+		$.Hour.gte(hourFloor("startTime")).and($.Hour.lte(hourFloor("endTime")))
+	const inPrevious = ($: ColumnAccessor<typeof ServiceUsage.columns>) =>
+		$.Hour.gte(hourFloor("previousStartTime")).and($.Hour.lte(hourFloor("previousEndTime")))
+
+	return from(ServiceUsage)
+		.select(($) => ({
+			serviceName: $.ServiceName,
+			totalLogCount: CH.sumIf($.LogCount, inCurrent($)),
+			totalLogSizeBytes: CH.sumIf($.LogSizeBytes, inCurrent($)),
+			totalTraceCount: CH.sumIf($.TraceCount, inCurrent($)),
+			totalTraceSizeBytes: CH.sumIf($.TraceSizeBytes, inCurrent($)),
+			totalSumMetricCount: CH.sumIf($.SumMetricCount, inCurrent($)),
+			totalSumMetricSizeBytes: CH.sumIf($.SumMetricSizeBytes, inCurrent($)),
+			totalGaugeMetricCount: CH.sumIf($.GaugeMetricCount, inCurrent($)),
+			totalGaugeMetricSizeBytes: CH.sumIf($.GaugeMetricSizeBytes, inCurrent($)),
+			totalHistogramMetricCount: CH.sumIf($.HistogramMetricCount, inCurrent($)),
+			totalHistogramMetricSizeBytes: CH.sumIf($.HistogramMetricSizeBytes, inCurrent($)),
+			totalExpHistogramMetricCount: CH.sumIf($.ExpHistogramMetricCount, inCurrent($)),
+			totalExpHistogramMetricSizeBytes: CH.sumIf($.ExpHistogramMetricSizeBytes, inCurrent($)),
+			totalSizeBytes: CH.sumIf($.LogSizeBytes, inCurrent($))
+				.add(CH.sumIf($.TraceSizeBytes, inCurrent($)))
+				.add(CH.sumIf($.SumMetricSizeBytes, inCurrent($)))
+				.add(CH.sumIf($.GaugeMetricSizeBytes, inCurrent($)))
+				.add(CH.sumIf($.HistogramMetricSizeBytes, inCurrent($)))
+				.add(CH.sumIf($.ExpHistogramMetricSizeBytes, inCurrent($))),
+			previousLogCount: CH.sumIf($.LogCount, inPrevious($)),
+			previousTraceCount: CH.sumIf($.TraceCount, inPrevious($)),
+			previousSumMetricCount: CH.sumIf($.SumMetricCount, inPrevious($)),
+			previousGaugeMetricCount: CH.sumIf($.GaugeMetricCount, inPrevious($)),
+			previousHistogramMetricCount: CH.sumIf($.HistogramMetricCount, inPrevious($)),
+			previousExpHistogramMetricCount: CH.sumIf($.ExpHistogramMetricCount, inPrevious($)),
+			previousSizeBytes: CH.sumIf($.LogSizeBytes, inPrevious($))
+				.add(CH.sumIf($.TraceSizeBytes, inPrevious($)))
+				.add(CH.sumIf($.SumMetricSizeBytes, inPrevious($)))
+				.add(CH.sumIf($.GaugeMetricSizeBytes, inPrevious($)))
+				.add(CH.sumIf($.HistogramMetricSizeBytes, inPrevious($)))
+				.add(CH.sumIf($.ExpHistogramMetricSizeBytes, inPrevious($))),
+		}))
+		.where(($) => [
+			$.OrgId.eq(param.string("orgId")),
+			// Scan the union window [previousStartTime, endTime] once; sumIf splits
+			// it into the two periods. Hour-floored bounds match serviceUsageQuery.
+			$.Hour.gte(hourFloor("previousStartTime")),
+			$.Hour.lte(hourFloor("endTime")),
+			CH.when(opts.serviceName, (v: string) => $.ServiceName.eq(v)),
+		])
+		.groupBy("serviceName")
+		.orderBy(["totalSizeBytes", "desc"])
+		.format("JSON")
+}
+
 // ---------------------------------------------------------------------------
 // Services facets (UNION ALL — environment + commit_sha facets)
 // ---------------------------------------------------------------------------
@@ -216,6 +289,12 @@ export interface ServicesFacetsOutput {
 	readonly facetType: string
 }
 
+// NOTE: kept as a 4-way UNION ALL on purpose. A single-scan rewrite (ARRAY JOIN
+// of (facetType, value) pairs, or GROUP BY GROUPING SETS) reads ~3× fewer rows
+// but benchmarked 2–4× SLOWER in wall-clock on the deployed warehouse: ClickHouse
+// runs the UNION branches in parallel and each is a cheap LowCardinality GROUP BY,
+// whereas the array/tuple/lambda CPU + row replication of the single-scan forms
+// dominates. The I/O saving doesn't translate to latency here.
 export function servicesFacetsQuery(): CHUnionQuery<ServicesFacetsOutput> {
 	const baseWhere = (
 		$: ColumnAccessor<typeof ServiceOverviewSpans.columns>,
@@ -258,9 +337,6 @@ export function servicesFacetsQuery(): CHUnionQuery<ServicesFacetsOutput> {
 		.orderBy(["count", "desc"])
 		.limit(50)
 
-	// Service-name facet — reused by `useDefaultPreset` on the dashboard route to
-	// detect the all-demo case without firing a separate `serviceOverview` query.
-	// Same MV scan as the env / commit branches; effectively free.
 	const serviceQuery = from(ServiceOverviewSpans)
 		.select(($) => ({
 			name: $.ServiceName,

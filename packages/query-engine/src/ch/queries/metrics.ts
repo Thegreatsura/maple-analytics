@@ -171,7 +171,18 @@ export function metricsTimeseriesRateQuery(opts: MetricsRateTimeseriesOpts) {
 	// low-counter pod to a high-counter one books that pod's entire accumulated
 	// value as a bogus increase, inflating the result by orders of magnitude on
 	// any multi-replica service.
-	const PARTITION = "PARTITION BY ServiceName, MetricName, Attributes, ResourceAttributes, StartTimeUnix"
+	//
+	// The two attribute Maps are folded into fixed-width `cityHash64` series
+	// fingerprints rather than partitioning by the raw `Map` columns: the window
+	// must sort every row by the partition key, and comparing serialized Maps per
+	// row dominates the query cost (raw `metrics_sum` scans of span.metrics.calls
+	// ran ~7s p95). Hashing keeps per-series identity — points of one series share
+	// one exporter, so map key order is stable — at a ~2^-64 collision risk.
+	const PARTITION =
+		"PARTITION BY ServiceName, MetricName, " +
+		"cityHash64(mapKeys(Attributes), mapValues(Attributes)), " +
+		"cityHash64(mapKeys(ResourceAttributes), mapValues(ResourceAttributes)), " +
+		"StartTimeUnix"
 	const cteSql = compileCH(
 		from(MetricsSum)
 			.select(($) => ({

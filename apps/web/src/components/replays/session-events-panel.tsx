@@ -175,6 +175,9 @@ function EventLine({ ev, onSeek }: { ev: EventRow; onSeek: () => void }) {
 				<Link
 					to="/traces/$traceId"
 					params={{ traceId: ev.traceId }}
+					// Carry the event timestamp so the span-hierarchy query narrows the
+					// ClickHouse partition scan instead of reading the full retention.
+					search={{ t: ev.timestamp }}
 					className="shrink-0 text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
 					title="Open backend trace"
 				>

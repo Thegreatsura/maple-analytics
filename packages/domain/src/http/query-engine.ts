@@ -413,6 +413,11 @@ export class ServiceUsageRequest extends Schema.Class<ServiceUsageRequest>("Serv
 	startTime: TinybirdDateTime,
 	endTime: TinybirdDateTime,
 	service: Schema.optional(ServiceName),
+	// When both are set, the usage query also returns per-service `previous*`
+	// totals for the [previousStartTime, previousEndTime] window in the SAME scan
+	// (delta chips) instead of the caller issuing a second request.
+	previousStartTime: Schema.optional(TinybirdDateTime),
+	previousEndTime: Schema.optional(TinybirdDateTime),
 }) {}
 
 export class ServiceUsageResponse extends Schema.Class<ServiceUsageResponse>("ServiceUsageResponse")({

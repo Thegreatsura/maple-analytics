@@ -559,16 +559,20 @@ export const servicePlatformsHourly = defineDatasource("service_platforms_hourly
 	},
 	// The K8sStatefulSetName/K8sDaemonSetName/K8sNamespaceName columns were added
 	// after this datasource already held data. This MV's 90-day TTL outlives the
-	// `traces` source's 30-day TTL, so a re-populate from `traces` can't refill
-	// the 30-90 day window. Forward-migrate existing rows in place instead,
-	// defaulting the new columns to '' (the empty-string sentinel the `max()`
-	// platform classifier already treats as "attribute not present").
+	// `traces` source's 30-day TTL, so a re-populate from `traces` couldn't refill
+	// the 30-90 day window; the add-deploy forward-migrated existing rows in place,
+	// defaulting the new columns to '' (the sentinel the `max()` platform
+	// classifier treats as "attribute not present"). That one-time migration is
+	// COMPLETE — the columns now exist in the deployed datasource and are
+	// populated, so the forward query carries them through unchanged. Re-defaulting
+	// them (the old `defaultValueOfTypeName(...)`) would overwrite the values
+	// accumulated since, which Tinybird rejects on every later deploy.
 	forwardQuery: `SELECT
     OrgId, Hour, ServiceName, DeploymentEnv,
     K8sCluster, K8sPodName, K8sDeploymentName,
-    defaultValueOfTypeName('SimpleAggregateFunction(max, String)') AS K8sStatefulSetName,
-    defaultValueOfTypeName('SimpleAggregateFunction(max, String)') AS K8sDaemonSetName,
-    defaultValueOfTypeName('SimpleAggregateFunction(max, String)') AS K8sNamespaceName,
+    K8sStatefulSetName,
+    K8sDaemonSetName,
+    K8sNamespaceName,
     CloudPlatform, CloudProvider, FaasName, MapleSdkType, ProcessRuntimeName, SpanCount`,
 	engine: engine.aggregatingMergeTree({
 		partitionKey: "toDate(Hour)",
@@ -1279,6 +1283,65 @@ export const tracesAggregatesHourly = defineDatasource("traces_aggregates_hourly
 export type TracesAggregatesHourlyRow = InferRow<typeof tracesAggregatesHourly>
 
 /**
+ * Hourly per-series last-value rollup of the span-metrics `calls` counter, so
+ * the dashboard's sampling-aware throughput reads pre-aggregated data for
+ * completed hours instead of scanning raw `metrics_sum` with a window function
+ * (the ~7s p95 offender). Per-series identity =
+ * (ServiceName, MetricName, SpanKind, AttrFingerprint, ResourceFingerprint,
+ * StartTimeUnix); `LastValue` is the cumulative counter at the end of each hour
+ * (argMax by TimeUnix). Per-hour increase = LastValue(hour) − LastValue(prev
+ * hour) per series, summed per service — telescopes to exactly what
+ * `metricsTimeseriesRateQuery` computes (the in-progress hour stays on the live
+ * window query; see query-engine runtime).
+ *
+ * Populated by materialized view, not direct ingestion.
+ *
+ * SOURCE TTL: 90d (matches `metrics_sum.ttl`). Update in lockstep if raw TTL
+ * changes — see docs/persistence.md.
+ */
+export const spanMetricsCallsHourly = defineDatasource("span_metrics_calls_hourly", {
+	description:
+		"Hourly per-series last-value (argMax) rollup of the span-metrics calls counter. AggregatingMergeTree MV target powering sampling-aware throughput without scanning raw metrics_sum.",
+	jsonPaths: false,
+	schema: {
+		OrgId: t.string().lowCardinality(),
+		Hour: t.dateTime(),
+		ServiceName: t.string().lowCardinality(),
+		MetricName: t.string().lowCardinality(),
+		SpanKind: t.string().lowCardinality(),
+		// cityHash64 fingerprints of the metric / resource attribute Maps — a
+		// fixed-width series identity (mirrors the window-query partition fix in
+		// metricsTimeseriesRateQuery).
+		AttrFingerprint: t.uint64(),
+		ResourceFingerprint: t.uint64(),
+		// Counter-reset epoch; isolates accumulation runs within one series.
+		StartTimeUnix: t.dateTime64(9),
+		// Cumulative counter value at the end of the hour for this series-epoch.
+		// Finalize with argMaxMerge(LastValue). Tinybird's aggregateFunction(func,
+		// type) emits one type slot, so the value type (Float64) is smuggled into
+		// the function name and the key type (DateTime64(9)) is the type arg:
+		//   AggregateFunction(argMax, Float64, DateTime64(9))
+		LastValue: t.aggregateFunction("argMax, Float64", t.dateTime64(9)),
+	},
+	engine: engine.aggregatingMergeTree({
+		partitionKey: "toDate(Hour)",
+		sortingKey: [
+			"OrgId",
+			"Hour",
+			"ServiceName",
+			"MetricName",
+			"SpanKind",
+			"AttrFingerprint",
+			"ResourceFingerprint",
+			"StartTimeUnix",
+		],
+		ttl: "toDate(Hour) + INTERVAL 90 DAY",
+	}),
+})
+
+export type SpanMetricsCallsHourlyRow = InferRow<typeof spanMetricsCallsHourly>
+
+/**
  * Generalized hourly aggregating MV target for logs. Severity-aware so
  * "errors per service per hour" / "log volume by severity" queries no
  * longer scan raw logs.
@@ -1299,14 +1362,18 @@ export const logsAggregatesHourly = defineDatasource("logs_aggregates_hourly", {
 		SizeBytes: t.simpleAggregateFunction("sum", t.uint64()),
 		ServiceNamespace: t.string().lowCardinality(),
 	},
-	// ServiceNamespace was added after this 90-day aggregate already held data.
-	// The source `logs` table only retains 30 days, so Tinybird cannot safely
-	// backfill the full aggregate window from the materialized pipe. Preserve
-	// historical rows in place and default the new dimension to ''.
+	// ServiceNamespace was added after this 90-day aggregate already held data
+	// (the source `logs` table only retains 30 days, so the full window could not
+	// be rebuilt — the add-deploy defaulted the new dimension to '' in place).
+	// That one-time migration is COMPLETE: the column now exists in the deployed
+	// datasource and is populated. The forward query therefore carries every
+	// column — including ServiceNamespace — through unchanged. Re-defaulting it
+	// (the old `defaultValueOfTypeName(...) AS ServiceNamespace`) would overwrite
+	// the values accumulated since, which Tinybird rejects on every later deploy.
 	forwardQuery: `SELECT
     OrgId, Hour, ServiceName, SeverityText, DeploymentEnv,
     Count, SizeBytes,
-    defaultValueOfTypeName('LowCardinality(String)') AS ServiceNamespace`,
+    ServiceNamespace`,
 	engine: engine.aggregatingMergeTree({
 		partitionKey: "toDate(Hour)",
 		// ServiceNamespace is a grouping dimension, so it must live in the sorting

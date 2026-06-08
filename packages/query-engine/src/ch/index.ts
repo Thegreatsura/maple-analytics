@@ -262,6 +262,7 @@ export {
 	serviceReleasesTimelineQuery,
 	serviceApdexTimeseriesQuery,
 	serviceUsageQuery,
+	serviceUsageWithPreviousQuery,
 	servicesFacetsQuery,
 	type ServiceOverviewOpts,
 	type ServiceOverviewOutput,
@@ -271,6 +272,7 @@ export {
 	type ServiceApdexTimeseriesOutput,
 	type ServiceUsageOpts,
 	type ServiceUsageOutput,
+	type ServiceUsageWithPreviousOutput,
 	type ServicesFacetsOutput,
 } from "./queries/services"
 

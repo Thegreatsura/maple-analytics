@@ -714,11 +714,22 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 			.handle("serviceUsage", ({ payload }) =>
 				Effect.gen(function* () {
 					const tenant = yield* CurrentTenant.Context
-					const compiled = CH.compile(CH.serviceUsageQuery({ serviceName: payload.service }), {
-						orgId: tenant.orgId,
-						startTime: payload.startTime,
-						endTime: payload.endTime,
-					})
+					const prevStart = payload.previousStartTime
+					const prevEnd = payload.previousEndTime
+					const compiled =
+						prevStart != null && prevEnd != null
+							? CH.compile(CH.serviceUsageWithPreviousQuery({ serviceName: payload.service }), {
+									orgId: tenant.orgId,
+									startTime: payload.startTime,
+									endTime: payload.endTime,
+									previousStartTime: prevStart,
+									previousEndTime: prevEnd,
+								})
+							: CH.compile(CH.serviceUsageQuery({ serviceName: payload.service }), {
+									orgId: tenant.orgId,
+									startTime: payload.startTime,
+									endTime: payload.endTime,
+								})
 					const rows = yield* queryEngine.cachedDirect(
 						tenant,
 						"serviceUsage",

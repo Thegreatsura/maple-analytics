@@ -277,6 +277,13 @@ export interface BucketCacheServiceShape {
 const enabledConfig = Config.boolean("QE_BUCKET_CACHE_ENABLED").pipe(Config.withDefault(true))
 const ttlSecondsConfig = Config.number("QE_BUCKET_CACHE_TTL_SECONDS").pipe(Config.withDefault(86400))
 const fluxSecondsConfig = Config.number("QE_BUCKET_CACHE_FLUX_SECONDS").pipe(Config.withDefault(60))
+// Cap how many missing sub-ranges fan out to the warehouse per cache miss. A
+// single cold dashboard request only ever splits into a few ranges, but
+// "unbounded" let a burst of concurrent misses multiply into a warehouse
+// stampede (the mechanism behind the eval-bucket-cache regression). Bound it.
+const fillConcurrencyConfig = Config.number("QE_BUCKET_CACHE_FILL_CONCURRENCY").pipe(
+	Config.withDefault(4),
+)
 
 export class BucketCacheService extends Context.Service<BucketCacheService, BucketCacheServiceShape>()(
 	"@maple/api/lib/BucketCacheService",
@@ -286,6 +293,7 @@ export class BucketCacheService extends Context.Service<BucketCacheService, Buck
 			const enabled = yield* enabledConfig
 			const ttlSeconds = yield* ttlSecondsConfig
 			const fluxSeconds = yield* fluxSecondsConfig
+			const fillConcurrency = yield* fillConcurrencyConfig
 
 			// Heterogeneous in-flight map. Each entry stores a pre-typed awaiter so
 			// callers never need to cast Deferred<any, any>. The error channel is
@@ -377,7 +385,7 @@ export class BucketCacheService extends Context.Service<BucketCacheService, Buck
 
 				const fillMissingRanges = Effect.gen(function* () {
 					const freshByRange = yield* Effect.forEach(missing, (m) => computeRange(m.range), {
-						concurrency: "unbounded",
+						concurrency: fillConcurrency,
 					})
 
 					const rangeResults = Arr.zip(missing, freshByRange)

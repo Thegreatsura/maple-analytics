@@ -41,7 +41,7 @@ export function LogList({ props }: BaseComponentProps<LogListProps>) {
 							<span className="min-w-0 flex-1 truncate">{log.body}</span>
 							{log.traceId && (
 								<a
-									href={`/traces/${log.traceId}`}
+									href={`/traces/${log.traceId}${log.timestamp ? `?t=${encodeURIComponent(log.timestamp)}` : ""}`}
 									className="shrink-0 text-primary hover:underline"
 									title={log.traceId}
 								>

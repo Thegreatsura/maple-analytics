@@ -51,7 +51,7 @@ export function TraceList({ props }: BaseComponentProps<TraceListProps>) {
 							<tr key={trace.traceId} className="border-b border-border/20 last:border-0">
 								<td className="py-1 pr-2">
 									<a
-										href={`/traces/${trace.traceId}`}
+										href={`/traces/${trace.traceId}${trace.startTime ? `?t=${encodeURIComponent(trace.startTime)}` : ""}`}
 										className="font-mono text-primary hover:underline"
 									>
 										{trace.traceId.slice(0, 12)}
