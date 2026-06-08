@@ -8,6 +8,7 @@ order: 1
 import LocalHero from "../../components/local/LocalHero.astro"
 import LocalFlow from "../../components/local/LocalFlow.astro"
 import LocalCommandGrid from "../../components/local/LocalCommandGrid.astro"
+import InstallTabs from "../../components/local/InstallTabs.astro"
 
 <LocalHero />
 
@@ -15,19 +16,11 @@ Local mode is the fastest way to look at OpenTelemetry data — point any OTLP e
 
 ## Install
 
-```bash
-brew install Makisuo/tap/maple
-```
+Pick your package manager. Homebrew is the easiest path on macOS and Linux; the install script works anywhere a shell does.
 
-Homebrew downloads the matching release bundle, verifies its checksum, installs `maple` and `libchdb` together, and links `maple` onto your `PATH`. macOS (Apple Silicon) and Linux (x86_64 & arm64) are supported. Upgrade later with `brew upgrade maple`; Homebrew-managed installs block `maple update` so the package manager stays in charge. If Homebrew asks you to trust the third-party tap, run `brew trust Makisuo/tap` once and retry the install.
+<InstallTabs />
 
-Prefer the standalone installer?
-
-```bash
-curl -fsSL https://maple.dev/cli/install | sh
-```
-
-The script is [`scripts/install.sh`](https://github.com/Makisuo/maple/blob/main/scripts/install.sh) — read it first, or download a release bundle from [GitHub Releases](https://github.com/Makisuo/maple/releases) by hand. Uninstall Homebrew builds with `brew uninstall maple`; uninstall script builds with `curl -fsSL https://maple.dev/cli/uninstall | sh` (your `~/.maple/data` is kept). If you migrate from the script to Homebrew, remove the old PATH symlink so your shell resolves Homebrew's `maple`.
+> Prefer to do it by hand? Download a release bundle (both `maple` + `libchdb`) from [GitHub Releases](https://github.com/Makisuo/maple/releases), or read [`scripts/install.sh`](https://github.com/Makisuo/maple/blob/main/scripts/install.sh) first before piping it to a shell.
 
 ## Start the server
 
