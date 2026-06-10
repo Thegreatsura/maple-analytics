@@ -57,7 +57,8 @@ export const CATALOG: ReadonlyArray<CatalogEntry> = [
 		description:
 			"Monitor WarpStream clusters via agent metrics or the hosted Prometheus endpoint.",
 		icon: WarpStreamIcon,
-		accent: "#6E56CF",
+		// WarpStream's brand crimson (fill of the official mark).
+		accent: "#E52344",
 		docsUrl: "https://maple.dev/docs/integrations/warpstream",
 	},
 	{
@@ -176,7 +177,7 @@ export function IntegrationIconPlate({
 					background: `radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--tile-accent) 16%, transparent), transparent 70%)`,
 				}}
 			/>
-			<span className="relative text-foreground/90">
+			<span className="relative" style={{ color: entry.accent }}>
 				<Icon size={size} />
 			</span>
 		</span>
