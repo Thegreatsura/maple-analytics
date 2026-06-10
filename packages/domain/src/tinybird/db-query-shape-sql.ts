@@ -61,9 +61,14 @@ export const presentableStatementSql = (stmt: string): string =>
  * Best-effort low-cardinality summary derived from raw statement text when the
  * instrumentation didn't emit `db.query.summary`: `{VERB} {first table}`
  * (e.g. "SELECT users", "UPDATE public.accounts"). Empty when no statement.
+ *
+ * `upper`, not `upperUTF8`: the input is an RE2 `\w+` capture (ASCII-only), so
+ * the two are byte-identical here — and `upperUTF8` is ICU-gated since
+ * ClickHouse 24.8, absent from the non-ICU libchdb that local mode embeds
+ * (using it broke fresh `maple start` store bootstrap).
  */
 const derivedStatementSummarySql = (stmt: string): string =>
-	String.raw`if(${stmt} != '', trimBoth(concat(upperUTF8(extract(${stmt}, '^\\s*(\\w+)')), if(extract(${stmt}, '(?i)(?:from|into|update|join|table)\\s+\\W?([\\w.]+)') != '', concat(' ', extract(${stmt}, '(?i)(?:from|into|update|join|table)\\s+\\W?([\\w.]+)')), ''))), '')`
+	String.raw`if(${stmt} != '', trimBoth(concat(upper(extract(${stmt}, '^\\s*(\\w+)')), if(extract(${stmt}, '(?i)(?:from|into|update|join|table)\\s+\\W?([\\w.]+)') != '', concat(' ', extract(${stmt}, '(?i)(?:from|into|update|join|table)\\s+\\W?([\\w.]+)')), ''))), '')`
 
 /**
  * `{db.operation.name} {db.collection.name|db.namespace}` (e.g. "SELECT users",
