@@ -40,6 +40,22 @@ These are span **fields**, not attributes, and both spellings are load-bearing o
 
 Fix: `maple-onboarding-style` + per-language style skill ("record exceptions" pattern; in TS/JS `withSpan` from `@maple/otel-helpers` handles status + exception recording).
 
+## SPAN — Trace coverage
+
+Not just "are the spans right" but "is everything that should be traced actually traced". Read the code the way an on-call operator would: when this service misbehaves, which operations would they need to see? Auto-instrumentation covers HTTP in/out, DB queries, and framework lifecycle — that's the floor; anything with real latency or a failure mode above that floor needs its own span (the same bar `maple-onboard` Step 3 applies when installing).
+
+| Id      | Check                                                                                                                                                                                                                  | Severity | Feature affected                                                                                          |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------ |
+| SPAN-01 | Auto-instrumentation is registered for every framework and client library the service actually uses — HTTP server, HTTP client, DB driver, queue client. A used dependency with no instrumentation package/hook means that whole traffic category emits nothing. | warn     | Entire categories of work (e.g. all DB queries, all outbound HTTP) invisible in traces, latency breakdowns, and the service map. |
+| SPAN-02 | Critical business operations are wrapped in spans: payment/order/signup flows, batch jobs, LLM calls, anything a human would ask "how long did it take and did it fail?" about. Span names are `domain.verb` with entity-ID attributes (order.id, tenant.id) and branch outcomes. | warn     | The trace shows one opaque parent span; no per-operation latency, error attribution, or top-operations view for the work that matters. |
+| SPAN-03 | Background jobs, cron tasks, and queue consumers start their own root spans (or continue propagated context) — they don't run untraced just because no inbound HTTP request started a trace.                              | warn     | Async work is completely absent from Maple; failures in jobs surface nowhere.                                  |
+| SPAN-04 | Trace context propagates across async boundaries the code crosses: queue publish→consume carries context (or links), fire-and-forget tasks inherit the active span, internal service calls send `traceparent`.            | info     | Traces fragment at the boundary — the consumer's work appears as a disconnected trace instead of one end-to-end view. |
+| SPAN-05 | No span noise at the other extreme: trivial getters, pure transforms, and per-item spans inside tight loops don't each get a span.                                                                                        | info     | Trace waterfalls become unreadable; span volume (and cost) inflates without signal.                            |
+
+Static heuristics for SPAN-01/02: compare the dependency manifest (HTTP frameworks, DB drivers, queue clients, LLM SDKs) against the instrumentation registered in the bootstrap; grep entry points for job/consumer handlers with no `startActiveSpan`/`withSpan`/decorator in their call path.
+
+Fix: `maple-onboard` Step 3 + `maple-onboarding-style` (span naming, attributes, `withSpan`); per-language style skill for the auto-instrumentation package list.
+
 ## MAP — Service-map attribution
 
 | Id     | Check                                                                                                                                                                       | Severity | Feature affected                                                                                       |

@@ -19,8 +19,8 @@ For *how* to fix what you find, use the companion skills — don't improvise rec
 | Severity   | Meaning                                                                                                                                                                                                              |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `critical` | Breaks a Maple feature outright or is a data risk: missing `service.name`, hand-stamped status strings (error analytics read zero rows), logs without trace correlation, missing `peer.service`/`db.system` on client spans, PII in attributes. |
-| `warn`     | Feature works degraded: missing environment/VCS resource attrs, deprecated semconv keys, double-emission, high-cardinality labels or span names, outbound calls left `Internal`.                                        |
-| `info`     | Signal-quality improvements: missing business spans/metrics, naming style, missing `gen_ai.*` on LLM calls.                                                                                                             |
+| `warn`     | Feature works degraded or work is invisible: missing environment/VCS resource attrs, deprecated semconv keys, double-emission, high-cardinality labels or span names, outbound calls left `Internal`, untraced operations (missing auto-instrumentation for a used framework/driver, business operations and background jobs with no spans). |
+| `info`     | Signal-quality improvements: trace-context propagation across async boundaries, span noise, missing metrics, naming style, missing `gen_ai.*` on LLM calls.                                                            |
 
 ## Step 1 — Enumerate services and classify
 
@@ -38,12 +38,13 @@ Per instrumented service, work through the categories in `checks.md`:
 
 1. **Bootstrap & resource (RES-\*)** — read the SDK init: is `service.name` explicit, are `service.version`, `deployment.environment.name`, `vcs.repository.url.full`, `vcs.ref.head.revision` on the resource? Any invented keys?
 2. **Status & kind (STAT-\*)** — grep for status handling: SDK status enum vs hand-stamped strings; failure paths recording exceptions; outbound calls created as `Client`/`Producer` spans.
-3. **Service-map attribution (MAP-\*)** — for every outbound dependency in the code (HTTP clients to internal services, DB drivers, queues), check the corresponding spans set `peer.service` (and `db.system` for DBs) consistently.
-4. **Attribute keys (REN-\*, NAME-\*)** — grep attribute call sites (`setAttribute`, `set_attribute`, `setAttributes`, attribute map literals) for the deprecated/camelCase keys in the REN table and for double-emission of old+new keys.
-5. **Logs (LOG-\*)** — is an OTLP log bridge wired under the logger the app actually uses? Do in-span logs carry trace context? Structured fields?
-6. **Metrics (MET-\*)** — instruments at module scope, low-cardinality labels, business coverage.
-7. **PII (PII-01)** — scan attribute values for emails, tokens, auth headers, full bodies.
-8. **LLM (LLM-\*)** — only if the project calls LLM providers.
+3. **Trace coverage (SPAN-\*)** — what *should* be traced but isn't. Compare the dependency manifest against the instrumentation registered in the bootstrap (a DB driver or queue client with no instrumentation package means that whole category emits nothing). Then read the code for critical business operations, background jobs, and queue consumers with no span in their call path — when this service misbehaves, what would an operator need to see that currently emits nothing?
+4. **Service-map attribution (MAP-\*)** — for every outbound dependency in the code (HTTP clients to internal services, DB drivers, queues), check the corresponding spans set `peer.service` (and `db.system` for DBs) consistently.
+5. **Attribute keys (REN-\*, NAME-\*)** — grep attribute call sites (`setAttribute`, `set_attribute`, `setAttributes`, attribute map literals) for the deprecated/camelCase keys in the REN table and for double-emission of old+new keys.
+6. **Logs (LOG-\*)** — is an OTLP log bridge wired under the logger the app actually uses? Do in-span logs carry trace context? Structured fields?
+7. **Metrics (MET-\*)** — instruments at module scope, low-cardinality labels, business coverage.
+8. **PII (PII-01)** — scan attribute values for emails, tokens, auth headers, full bodies.
+9. **LLM (LLM-\*)** — only if the project calls LLM providers.
 
 Collect findings as you go: service, check id, severity, evidence (`file:line`), and which Maple feature it affects (from `checks.md`).
 
@@ -55,6 +56,7 @@ If `mcp__maple__*` tools are available, verify the static findings against what'
 - **`list_services`** — confirm every service you enumerated actually reports. A service that's instrumented in code but absent here is a `critical` export problem (bootstrap not loaded, key wrong, exporter blocked).
 - **`explore_attributes`** (resource scope) — confirm environment/VCS/version resource attrs arrive in practice.
 - **`service_map`** — a service whose code makes outbound calls but shows no outgoing edges confirms MAP-01/02/03 findings from the data side.
+- **`get_service_top_operations`** (or `search_traces` per service) — confirm trace-coverage findings: a critical operation you flagged under SPAN-02/03 that never appears as a span name in live data is confirmed untraced; a DB-heavy service whose traces contain no DB client spans confirms SPAN-01.
 
 Annotate existing findings with live evidence rather than duplicating them.
 
