@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useDeferredValue, useState } from "react"
 
 import { Input } from "@maple/ui/components/ui/input"
 import { MetricsSummaryCards, type MetricType } from "./metrics-summary-cards"
@@ -16,6 +16,7 @@ interface MetricsOverviewProps {
 
 export function MetricsOverview({ startTime, endTime, timePreset }: MetricsOverviewProps) {
 	const [search, setSearch] = useState("")
+	const deferredSearch = useDeferredValue(search)
 	const [selectedType, setSelectedType] = useState<MetricType | null>(null)
 	const [selectedMetric, setSelectedMetric] = useState<Metric | null>(null)
 
@@ -68,7 +69,8 @@ export function MetricsOverview({ startTime, endTime, timePreset }: MetricsOverv
 			<div>
 				<h3 className="mb-4 text-lg font-semibold">Available Metrics</h3>
 				<MetricsTable
-					search={search}
+					key={`${deferredSearch}|${selectedType ?? ""}|${effectiveStartTime ?? ""}|${effectiveEndTime ?? ""}`}
+					search={deferredSearch}
 					metricType={selectedType}
 					selectedMetric={selectedMetric}
 					onSelectMetric={handleSelectMetric}

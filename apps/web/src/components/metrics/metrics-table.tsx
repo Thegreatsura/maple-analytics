@@ -1,5 +1,8 @@
+import { useState } from "react"
+
 import { Result, useAtomValue } from "@/lib/effect-atom"
 
+import { Button } from "@maple/ui/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@maple/ui/components/ui/table"
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from "@maple/ui/components/ui/empty"
 import { Skeleton } from "@maple/ui/components/ui/skeleton"
@@ -83,6 +86,11 @@ function LoadingState() {
 	)
 }
 
+const PAGE_SIZE = 100
+// Backend rejects limit > 1000 (ListMetricsInputSchema); we request limit + 1
+// to detect more pages, so the displayed cap is 999.
+const MAX_LIMIT = 1000
+
 export function MetricsTable({
 	search,
 	metricType,
@@ -91,35 +99,59 @@ export function MetricsTable({
 	startTime,
 	endTime,
 }: MetricsTableProps) {
+	const [limit, setLimit] = useState(PAGE_SIZE)
+	const requestLimit = Math.min(limit + 1, MAX_LIMIT)
+
 	const metricsResult = useAtomValue(
 		listMetricsResultAtom({
 			data: {
 				search: search || undefined,
 				metricType: metricType || undefined,
-				limit: 100,
+				limit: requestLimit,
 				startTime,
 				endTime,
 			},
 		}),
 	)
 
-	return Result.builder(metricsResult)
-		.onInitial(() => <LoadingState />)
-		.onError((error) => <QueryErrorState error={error} />)
-		.onSuccess((response, result) =>
-			response.data.length === 0 ? (
-				<Empty>
-					<EmptyHeader>
-						<EmptyTitle>No metrics found</EmptyTitle>
-						<EmptyDescription>
-							No metrics matched your filters in the selected time range.
-						</EmptyDescription>
-					</EmptyHeader>
-				</Empty>
-			) : (
-				<div className={`space-y-4 ${result.waiting ? "opacity-60" : ""}`}>
-					<div className="rounded-md border overflow-auto">
-						<Table className="table-fixed">
+	// Each Load more swaps to a new atom (the limit is part of the query key),
+	// which starts in its initial state. Keep the last successful page so the
+	// table stays rendered (dimmed) while the next page loads.
+	const [view, setView] = useState<{
+		source: { data: Metric[] }
+		metrics: Metric[]
+		hasMore: boolean
+	} | null>(null)
+	if (Result.isSuccess(metricsResult) && view?.source !== metricsResult.value) {
+		setView({
+			source: metricsResult.value,
+			metrics: metricsResult.value.data.slice(0, limit),
+			hasMore: metricsResult.value.data.length > limit,
+		})
+	}
+
+	if (Result.isFailure(metricsResult) || view === null) {
+		return Result.builder(metricsResult)
+			.onError((error) => <QueryErrorState error={error} />)
+			.orElse(() => <LoadingState />)
+	}
+
+	const { metrics, hasMore } = view
+	const waiting = !Result.isSuccess(metricsResult) || metricsResult.waiting
+
+	return metrics.length === 0 ? (
+		<Empty>
+			<EmptyHeader>
+				<EmptyTitle>No metrics found</EmptyTitle>
+				<EmptyDescription>
+					No metrics matched your filters in the selected time range.
+				</EmptyDescription>
+			</EmptyHeader>
+		</Empty>
+	) : (
+		<div className={`space-y-4 ${waiting ? "opacity-60" : ""}`}>
+			<div className="rounded-md border overflow-auto">
+				<Table className="table-fixed">
 							<TableHeader>
 								<TableRow>
 									<TableHead className="w-[40%]">Metric Name</TableHead>
@@ -130,7 +162,7 @@ export function MetricsTable({
 								</TableRow>
 							</TableHeader>
 							<TableBody>
-								{response.data.map((metric) => {
+								{metrics.map((metric) => {
 									const isSelected =
 										selectedMetric?.metricName === metric.metricName &&
 										selectedMetric?.metricType === metric.metricType &&
@@ -185,11 +217,22 @@ export function MetricsTable({
 						</Table>
 					</div>
 
-					<div className="text-sm text-muted-foreground">
-						Showing {response.data.length} metrics
+					<div className="flex items-center gap-3 text-sm text-muted-foreground">
+						<span>
+							Showing {metrics.length} metrics
+							{hasMore ? " — more available" : ""}
+						</span>
+						{hasMore && (
+							<Button
+								variant="outline"
+								size="sm"
+								disabled={waiting}
+								onClick={() => setLimit((current) => current + PAGE_SIZE)}
+							>
+								{waiting ? "Loading…" : "Load more"}
+							</Button>
+						)}
 					</div>
 				</div>
-			),
-		)
-		.render()
+	)
 }
