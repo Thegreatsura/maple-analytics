@@ -30,7 +30,9 @@ export function formatCellValue(value: unknown, unit?: string): string {
 		case "duration_ns":
 			return formatDuration(num / 1_000_000)
 		case "percent":
-			return `${num.toFixed(1)}%`
+			// Percent values arrive as 0–1 ratios (warehouse errorRate columns);
+			// scale on format, matching @maple/ui's formatValueByUnit.
+			return `${(num * 100).toFixed(1)}%`
 		case "number":
 			return formatNumber(num)
 		case "requests_per_sec":

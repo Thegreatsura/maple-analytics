@@ -75,7 +75,7 @@ export function AlertCreateFormSurface({
 	// entry with no pre-fills.
 	const [templatesOpen, setTemplatesOpen] = useState(() => showTemplatesInitially)
 
-	const { chartData, chartLoading } = useAlertRuleChart(ruleForm)
+	const { chartData, chartLoading, chartError } = useAlertRuleChart(ruleForm)
 
 	const validationIssues = useMemo(
 		() => deriveValidationIssues(ruleForm, destinations),
@@ -147,6 +147,7 @@ export function AlertCreateFormSurface({
 					form={ruleForm}
 					chartData={chartData}
 					chartLoading={chartLoading}
+					chartError={chartError}
 					onTestRule={() => runTest(false)}
 					testing={previewingRule}
 					previewResult={previewResult}

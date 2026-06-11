@@ -1,5 +1,6 @@
 import { Effect, Result, Schema } from "effect"
 import { QueryEngineExecuteRequest, type QuerySpec } from "@maple/query-engine"
+import { NO_QUERY_DATA_MESSAGE } from "@/lib/alerts/preview-failure"
 import { formatForTinybird } from "@/lib/time-utils"
 import {
 	buildFormulaResults,
@@ -158,7 +159,7 @@ function noQueryDataMessage(queryResults: QueryRunResult[]): string {
 		(result) => typeof result.error === "string" && result.error.length > 0,
 	)?.error
 
-	return firstQueryError ?? "No query data found in selected time range"
+	return firstQueryError ?? NO_QUERY_DATA_MESSAGE
 }
 
 function shiftBucket(bucket: string, offsetMs: number): string {
@@ -174,13 +175,6 @@ function shiftResultPoints(points: TimeseriesPoint[], offsetMs: number): Timeser
 	return points.map((point) => ({
 		bucket: shiftBucket(point.bucket, offsetMs),
 		series: { ...point.series },
-	}))
-}
-
-function normalizeErrorRatePoints(points: TimeseriesPoint[]): TimeseriesPoint[] {
-	return points.map((point) => ({
-		...point,
-		series: Object.fromEntries(Object.entries(point.series).map(([key, value]) => [key, value / 100])),
 	}))
 }
 
@@ -641,10 +635,10 @@ const runQueryWindow = Effect.fn("QueryEngine.runQueryWindow")(function* (
 					status: "success",
 					error: null,
 					warnings,
-					data:
-						query.aggregation === "error_rate"
-							? normalizeErrorRatePoints(execution.points)
-							: execution.points,
+					// error_rate arrives from the query engine as a 0–1 ratio — the
+					// canonical unit everywhere (the "percent" display unit multiplies
+					// by 100 when formatting). No rescaling here.
+					data: execution.points,
 				} satisfies QueryRunResult
 			}),
 		{ concurrency: enabledQueries.length },
@@ -677,7 +671,6 @@ export const __testables = {
 	countSuccessfulQuerySeries,
 	mergeQueryRunResults,
 	appendPercentChangeSeries,
-	normalizeErrorRatePoints,
 }
 
 export function getQueryBuilderTimeseries({ data }: { data: QueryBuilderTimeseriesInput }) {

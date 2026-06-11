@@ -20,6 +20,7 @@ interface RuleLiveChartHeroProps {
 	form: RuleFormState
 	chartData: Record<string, unknown>[]
 	chartLoading: boolean
+	chartError: string | null
 	onTestRule: () => void
 	testing: boolean
 	previewResult: {
@@ -40,6 +41,7 @@ export function RuleLiveChartHero({
 	form,
 	chartData,
 	chartLoading,
+	chartError,
 	onTestRule,
 	testing,
 	previewResult,
@@ -111,6 +113,8 @@ export function RuleLiveChartHero({
 			<div className="px-4 pb-4">
 				{isRawQuery ? (
 					<RawQueryPreviewPlaceholder />
+				) : chartError != null ? (
+					<ChartErrorPlaceholder message={chartError} />
 				) : !chartLoading && !hasPreviewSeries ? (
 					<EmptyPreviewPlaceholder message={emptyMessage} />
 				) : (
@@ -135,6 +139,17 @@ function formatGroupBySummary(form: RuleFormState): string | null {
 	const visible = groupBy.filter((value) => value !== "none")
 	if (visible.length === 0) return null
 	return visible.join(", ")
+}
+
+function ChartErrorPlaceholder({ message }: { message: string }) {
+	return (
+		<div className="flex h-[220px] w-full items-center justify-center rounded-md border border-dashed border-destructive/40 bg-destructive/5 px-6 text-center">
+			<div className="max-w-md space-y-1">
+				<p className="font-medium text-destructive text-sm">Preview query failed</p>
+				<p className="line-clamp-3 text-muted-foreground text-xs">{message}</p>
+			</div>
+		</div>
+	)
 }
 
 function EmptyPreviewPlaceholder({ message }: { message: string }) {

@@ -7,6 +7,7 @@ import {
 	encodeWidgetFixContextToSearchParam,
 	type WidgetFixContext,
 } from "@/components/chat/widget-fix-context"
+import { encodeAlertChartToSearchParam } from "@/lib/alerts/widget-chart-param"
 
 export interface WidgetActions {
 	remove?: () => void
@@ -64,7 +65,32 @@ export function WidgetActionsProvider({ widget, dataState, children }: WidgetAct
 			endpoint === "custom_query_builder_list"
 		const createAlert =
 			dashboardId && alertable
-				? () => navigate({ to: "/alerts/create", search: { dashboardId, widgetId: widget.id } })
+				? () => {
+						// Carry the live widget (optimistic builder state) so the alert
+						// page prefills without racing the dashboard autosave; the
+						// id pair stays as the lookup fallback for oversized payloads.
+						const chart = encodeAlertChartToSearchParam({
+							dashboardId,
+							widget: {
+								id: widget.id,
+								visualization: widget.visualization,
+								dataSource: {
+									endpoint: widget.dataSource.endpoint,
+									params: widget.dataSource.params,
+									transform: widget.dataSource.transform,
+								},
+								display: { title: widget.display.title },
+							},
+						})
+						navigate({
+							to: "/alerts/create",
+							search: {
+								dashboardId,
+								widgetId: widget.id,
+								...(chart ? { chart } : {}),
+							},
+						})
+					}
 				: undefined
 
 		const fix =

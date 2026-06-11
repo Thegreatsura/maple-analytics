@@ -342,31 +342,6 @@ export function buildQueryDraftFromForm(form: RuleFormState): QueryBuilderQueryD
 	return { ...base, dataSource: form.queryDataSource }
 }
 
-export type AlertPreviewGroupBy =
-	| "service"
-	| "span_name"
-	| "status_code"
-	| "http_method"
-	| "severity"
-	| "attribute"
-	| "none"
-
-function firstPreviewGroupBy(value: readonly string[] | undefined): AlertPreviewGroupBy | undefined {
-	const first = value?.[0]
-	if (
-		first === "service" ||
-		first === "span_name" ||
-		first === "status_code" ||
-		first === "http_method" ||
-		first === "severity" ||
-		first === "attribute" ||
-		first === "none"
-	) {
-		return first
-	}
-	return undefined
-}
-
 export function rawSqlHasValueColumn(sql: string): boolean {
 	const trimmed = sql.trim()
 	if (trimmed.length === 0) return false
@@ -472,13 +447,17 @@ export function isRulePreviewReady(form: RuleFormState): boolean {
 	return deriveRuleQueryIssues(form).length === 0
 }
 
-/** Map signal type to the query engine source and metric fields */
+/**
+ * Map a built-in signal type to the custom-chart preview's source/metric/
+ * filters. `builder_query` and `raw_query` return null — the builder preview
+ * runs the draft through `getQueryBuilderTimeseries` (the dashboard chart
+ * path) instead, and raw SQL has no structured preview.
+ */
 export function signalToQueryParams(form: RuleFormState): {
 	source: "traces" | "logs" | "metrics"
 	metric: string
 	filters: Record<string, unknown>
 	apdexThresholdMs?: number
-	groupBy?: AlertPreviewGroupBy
 } | null {
 	const baseFilters = form.serviceNames.length === 1 ? { serviceName: form.serviceNames[0] } : {}
 
@@ -522,23 +501,8 @@ export function signalToQueryParams(form: RuleFormState): {
 				},
 			}
 		}
-		case "builder_query": {
-			// Compile the draft with the shared query-builder compiler and read
-			// back the resolved source/metric/filters for the preview chart.
-			const built = buildTimeseriesQuerySpec(buildQueryDraftFromForm(form))
-			if (built.error != null || built.query == null || built.query.kind !== "timeseries") {
-				return null
-			}
-			const spec = built.query
-			return {
-				source: spec.source,
-				metric: "metric" in spec ? spec.metric : "count",
-				filters: (spec.filters as Record<string, unknown> | undefined) ?? {},
-				groupBy: firstPreviewGroupBy(spec.groupBy),
-			}
-		}
+		case "builder_query":
 		case "raw_query":
-			// Raw SQL alerts have no structured spec; the preview chart is skipped.
 			return null
 	}
 }

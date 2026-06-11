@@ -6,8 +6,16 @@ import type { AlertDestinationDocument, AlertRuleDocument, DashboardDocument } f
 import { AlertCreateFormSurface } from "@/components/alerts/alert-create-form-surface"
 import { useAutocompleteValuesContext } from "@/hooks/use-autocomplete-values"
 import { defaultRuleForm, ruleToFormState, type RuleFormState } from "@/lib/alerts/form-utils"
-import { resolveWidgetAlertPrefill, type WidgetAlertPrefillNotice } from "@/lib/alerts/widget-prefill"
-import { Result, useAtomValue } from "@/lib/effect-atom"
+import {
+	decodeAlertChartFromSearchParam,
+	type AlertChartContext,
+} from "@/lib/alerts/widget-chart-param"
+import {
+	createWidgetAlertPrefill,
+	resolveWidgetAlertPrefill,
+	type WidgetAlertPrefillNotice,
+} from "@/lib/alerts/widget-prefill"
+import { Atom, Result, useAtomValue } from "@/lib/effect-atom"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 
 type AlertCreateSearchValue = {
@@ -15,6 +23,7 @@ type AlertCreateSearchValue = {
 	ruleId?: string
 	dashboardId?: string
 	widgetId?: string
+	chart?: string
 }
 
 type InitialRuleDraft = {
@@ -25,8 +34,22 @@ type InitialRuleDraft = {
 	showTemplatesInitially: boolean
 }
 
+/** Stand-in subscription when the dashboards lookup fallback isn't needed. */
+const idleDashboardsAtom = Atom.make(Result.initial())
+
 export function AlertCreatePageContent() {
 	const search = useSearch({ from: "/alerts/create" }) as AlertCreateSearchValue
+
+	const chartContext = useMemo(
+		() => (search.chart ? decodeAlertChartFromSearchParam(search.chart) : undefined),
+		[search.chart],
+	)
+
+	// The dashboards list is only needed for the legacy id-lookup fallback —
+	// when the navigation carried a decodable widget snapshot, prefill is
+	// synchronous and the fetch (plus its loading remount) is skipped entirely.
+	const needsDashboards =
+		!search.ruleId && chartContext == null && Boolean(search.dashboardId || search.widgetId)
 
 	const destinationsQueryAtom = MapleApiAtomClient.query("alerts", "listDestinations", {
 		reactivityKeys: ["alertDestinations"],
@@ -39,7 +62,7 @@ export function AlertCreatePageContent() {
 	})
 	const destinationsResult = useAtomValue(destinationsQueryAtom)
 	const rulesResult = useAtomValue(rulesQueryAtom)
-	const dashboardsResult = useAtomValue(dashboardsQueryAtom)
+	const dashboardsResult = useAtomValue(needsDashboards ? dashboardsQueryAtom : idleDashboardsAtom)
 
 	const autocompleteValues = useAutocompleteValuesContext()
 	const serviceNameOptions = autocompleteValues.traces.services ?? []
@@ -52,10 +75,11 @@ export function AlertCreatePageContent() {
 		() =>
 			deriveInitialRuleDraft({
 				search,
+				chartContext,
 				rulesResult,
 				dashboardsResult,
 			}),
-		[search, rulesResult, dashboardsResult],
+		[search, chartContext, rulesResult, dashboardsResult],
 	)
 
 	return (
@@ -74,10 +98,12 @@ export function AlertCreatePageContent() {
 
 function deriveInitialRuleDraft({
 	search,
+	chartContext,
 	rulesResult,
 	dashboardsResult,
 }: {
 	search: AlertCreateSearchValue
+	chartContext: AlertChartContext | undefined
 	rulesResult: Result.Result<{ rules: readonly AlertRuleDocument[] }, unknown>
 	dashboardsResult: Result.Result<
 		{
@@ -117,6 +143,20 @@ function deriveInitialRuleDraft({
 			key: `loading-rule:${search.ruleId}`,
 			form: base,
 			prefillNotices: [],
+			editingRule: null,
+			showTemplatesInitially: false,
+		}
+	}
+
+	// Snapshot carried through navigation — synchronous prefill, no dashboards
+	// fetch, immune to the autosave race. Garbage/oversized params decode to
+	// undefined and fall through to the id-lookup path below.
+	if (chartContext) {
+		const result = createWidgetAlertPrefill(chartContext.widget, base)
+		return {
+			key: `chart:${chartContext.dashboardId}:${chartContext.widget.id}`,
+			form: result.form,
+			prefillNotices: result.notices,
 			editingRule: null,
 			showTemplatesInitially: false,
 		}

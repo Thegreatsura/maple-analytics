@@ -1,17 +1,12 @@
 import { describe, expect, it } from "vitest"
 
-import { __testables } from "@/api/warehouse/query-builder-breakdown"
+import * as breakdownModule from "@/api/warehouse/query-builder-breakdown"
 
-describe("query-builder breakdown normalization", () => {
-	it("normalizes error rate breakdown values from percent points to ratios", () => {
-		expect(
-			__testables.normalizeErrorRateBreakdownData([
-				{ name: "checkout", value: 2.1 },
-				{ name: "billing", value: 5 },
-			]),
-		).toEqual([
-			{ name: "checkout", value: 0.021 },
-			{ name: "billing", value: 0.05 },
-		])
+describe("query-builder breakdown units", () => {
+	it("does not rescale error_rate values — the engine's 0–1 ratio is canonical", () => {
+		// Regression guard: a ÷100 "normalize" survived from the Tinybird-pipe
+		// era (which returned percent points) long after the CH engine switched
+		// to emitting ratios, making error_rate breakdowns 100× too small.
+		expect(breakdownModule).not.toHaveProperty("__testables")
 	})
 })

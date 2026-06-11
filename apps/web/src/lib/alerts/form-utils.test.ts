@@ -155,80 +155,33 @@ describe("threshold unit conversion", () => {
 })
 
 describe("signalToQueryParams", () => {
-	it("parses traces query filters from the where clause for alert previews", () => {
+	it("returns null for builder_query — the preview runs the draft through the query-builder path", () => {
 		const form = queryRuleForm({
 			dataSource: "traces",
 			aggregation: "count",
-			whereClause:
-				'service.name = "checkout" AND span.name = "GET /checkout" AND has_error = true',
+			whereClause: 'service.name = "checkout"',
 		})
+
+		expect(signalToQueryParams(form)).toBeNull()
+	})
+
+	it("returns null for raw_query — raw SQL has no structured preview", () => {
+		const form: RuleFormState = { ...defaultRuleForm(), signalType: "raw_query" }
+
+		expect(signalToQueryParams(form)).toBeNull()
+	})
+
+	it("maps built-in signals to the custom-chart preview params", () => {
+		const form: RuleFormState = {
+			...defaultRuleForm(),
+			signalType: "error_rate",
+			serviceNames: ["checkout"],
+		}
 
 		expect(signalToQueryParams(form)).toEqual({
 			source: "traces",
-			metric: "count",
-			filters: {
-				serviceName: "checkout",
-				spanName: "GET /checkout",
-				errorsOnly: true,
-			},
-		})
-	})
-
-	it("parses logs query filters from the where clause for alert previews", () => {
-		const form = queryRuleForm({
-			dataSource: "logs",
-			aggregation: "count",
-			whereClause: 'service.name = "checkout" AND severity = "error"',
-		})
-
-		expect(signalToQueryParams(form)).toEqual({
-			source: "logs",
-			metric: "count",
-			filters: {
-				serviceName: "checkout",
-				severity: "error",
-			},
-		})
-	})
-
-	it("parses metrics query service filters from the where clause for alert previews", () => {
-		const form = queryRuleForm({
-			dataSource: "metrics",
-			aggregation: "avg",
-			metricName: "cpu.usage",
-			metricType: "gauge",
-			whereClause: 'service.name = "worker"',
-		})
-
-		expect(signalToQueryParams(form)).toEqual({
-			source: "metrics",
-			metric: "avg",
-			filters: {
-				metricName: "cpu.usage",
-				metricType: "gauge",
-				serviceName: "worker",
-			},
-		})
-	})
-
-	it("preserves query-builder attribute grouping for alert previews", () => {
-		const form = queryRuleForm({
-			dataSource: "traces",
-			aggregation: "count",
-			whereClause:
-				'service.name = "openrev-integrations" AND root_only = true AND attr.http.request.header.integration_id exists',
-			groupBy: ["attr.http.request.header.integration_id"],
-		})
-
-		expect(signalToQueryParams(form)).toMatchObject({
-			source: "traces",
-			metric: "count",
-			groupBy: "attribute",
-			filters: {
-				serviceName: "openrev-integrations",
-				rootSpansOnly: true,
-				groupByAttributeKeys: ["http.request.header.integration_id"],
-			},
+			metric: "error_rate",
+			filters: { serviceName: "checkout", rootSpansOnly: true },
 		})
 	})
 })

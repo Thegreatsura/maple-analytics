@@ -182,6 +182,11 @@ export function SignalAndThresholdSection({
 	// error_rate thresholds are entered as a percent (the form↔domain helpers in
 	// form-utils convert to/from the stored 0–1 ratio).
 	const isErrorRate = form.signalType === "error_rate"
+	// Builder-query thresholds compare against the query's raw output — for an
+	// error_rate aggregation that's the engine's 0–1 ratio, so surface the unit
+	// to head off "5 means 5%" mistakes (5 would mean a 500% error rate).
+	const isBuilderErrorRate =
+		form.signalType === "builder_query" && form.queryBuilderDraft.aggregation === "error_rate"
 	const [advancedOpen, setAdvancedOpen] = useState(false)
 
 	const kind = signalTypeToKind(form.signalType)
@@ -263,6 +268,9 @@ export function SignalAndThresholdSection({
 						<Label htmlFor="rule-threshold" className="text-xs">
 							{rangeMode ? "Lower" : "Threshold"}
 							{isErrorRate && <span className="text-muted-foreground"> (%)</span>}
+							{isBuilderErrorRate && (
+								<span className="text-muted-foreground"> (0–1 ratio, 0.05 = 5%)</span>
+							)}
 						</Label>
 						<Input
 							id="rule-threshold"
@@ -284,6 +292,9 @@ export function SignalAndThresholdSection({
 						>
 							Upper
 							{isErrorRate && <span className="text-muted-foreground"> (%)</span>}
+							{isBuilderErrorRate && (
+								<span className="text-muted-foreground"> (0–1 ratio)</span>
+							)}
 						</Label>
 						<Input
 							id="rule-threshold-upper"

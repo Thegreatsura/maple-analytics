@@ -94,6 +94,10 @@ function queryToForm(
 		queryDataSource: query.dataSource,
 		queryAggregation: query.aggregation,
 		queryWhereClause: query.whereClause ?? "",
+		// Builder thresholds compare against the query's raw output. error_rate
+		// is a 0–1 ratio, so the blank-form default of "5" (tuned for the
+		// percent-entry error_rate signal) would mean a 500% error rate.
+		threshold: query.aggregation === "error_rate" ? "0.05" : base.threshold,
 		groupBy: [],
 		metricName: query.dataSource === "metrics" ? (query.metricName ?? "") : base.metricName,
 		metricType:

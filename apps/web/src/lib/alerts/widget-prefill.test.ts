@@ -97,6 +97,40 @@ describe("createWidgetAlertPrefill", () => {
 		expect(result.notices.map((notice) => notice.message).join("\n")).toContain("2 visible queries")
 	})
 
+	it("seeds a ratio-scale threshold for error_rate builder queries", () => {
+		const result = createWidgetAlertPrefill(
+			{
+				id: "w1",
+				dataSource: {
+					endpoint: "custom_query_builder_timeseries",
+					params: {
+						queries: [builderQuery({ aggregation: "error_rate" })],
+					},
+				},
+			},
+			defaultRuleForm(),
+		)
+
+		// error_rate evaluates as a 0–1 ratio; the blank-form default of "5"
+		// (percent entry for the built-in signal) would mean 500%.
+		expect(result.form.threshold).toBe("0.05")
+	})
+
+	it("keeps the default threshold for non-ratio aggregations", () => {
+		const result = createWidgetAlertPrefill(
+			{
+				id: "w1",
+				dataSource: {
+					endpoint: "custom_query_builder_timeseries",
+					params: { queries: [builderQuery({ aggregation: "count" })] },
+				},
+			},
+			defaultRuleForm(),
+		)
+
+		expect(result.form.threshold).toBe(defaultRuleForm().threshold)
+	})
+
 	it("surfaces metrics query validation issues", () => {
 		const result = createWidgetAlertPrefill(
 			{

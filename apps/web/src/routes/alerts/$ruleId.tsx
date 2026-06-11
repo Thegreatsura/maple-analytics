@@ -141,7 +141,7 @@ function RuleDetailPage() {
 	}, [timelineSegments])
 
 	const formState = useMemo(() => (rule ? ruleToFormState(rule) : defaultRuleForm()), [rule])
-	const { chartData, chartLoading } = useAlertRuleChart(formState)
+	const { chartData, chartLoading, chartError } = useAlertRuleChart(formState)
 
 	if (Result.isInitial(rulesResult)) {
 		return (
@@ -300,13 +300,26 @@ function RuleDetailPage() {
 						<h2 className="text-muted-foreground text-xs font-medium uppercase tracking-wider">
 							{signalLabels[rule.signalType]}: Last 24h
 						</h2>
-						<AlertPreviewChart
-							data={chartData}
-							threshold={rule.threshold}
-							signalType={rule.signalType}
-							loading={chartLoading}
-							className="h-[300px] w-full"
-						/>
+						{chartError != null ? (
+							<div className="flex h-[300px] w-full items-center justify-center rounded-md border border-dashed border-destructive/40 bg-destructive/5 px-6 text-center">
+								<div className="max-w-md space-y-1">
+									<p className="font-medium text-destructive text-sm">
+										Preview query failed
+									</p>
+									<p className="line-clamp-3 text-muted-foreground text-xs">
+										{chartError}
+									</p>
+								</div>
+							</div>
+						) : (
+							<AlertPreviewChart
+								data={chartData}
+								threshold={rule.threshold}
+								signalType={rule.signalType}
+								loading={chartLoading}
+								className="h-[300px] w-full"
+							/>
+						)}
 					</div>
 
 					<div className="space-y-3">

@@ -26,13 +26,6 @@ export interface QueryBuilderBreakdownResponse {
 	data: Array<Record<string, string | number>>
 }
 
-function normalizeErrorRateBreakdownData(data: BreakdownQueryResult["data"]): BreakdownQueryResult["data"] {
-	return data.map((item) => ({
-		...item,
-		value: item.value / 100,
-	}))
-}
-
 const executeBreakdownQuery = Effect.fn("QueryEngine.executeBreakdownQuery")(function* (
 	startTime: string,
 	endTime: string,
@@ -96,7 +89,10 @@ const executeBreakdownQuery = Effect.fn("QueryEngine.executeBreakdownQuery")(fun
 		queryName: query.name,
 		status: "success",
 		error: null,
-		data: query.aggregation === "error_rate" ? normalizeErrorRateBreakdownData(mapped) : mapped,
+		// error_rate arrives from the query engine as a 0–1 ratio — the canonical
+		// unit everywhere (the "percent" display unit multiplies by 100 when
+		// formatting). No rescaling here.
+		data: mapped,
 	} satisfies BreakdownQueryResult
 })
 
@@ -156,10 +152,6 @@ function mergeBreakdownResults(
 
 export function getQueryBuilderBreakdown({ data }: { data: QueryBuilderBreakdownInput }) {
 	return getQueryBuilderBreakdownEffect({ data })
-}
-
-export const __testables = {
-	normalizeErrorRateBreakdownData,
 }
 
 const getQueryBuilderBreakdownEffect = Effect.fn("QueryEngine.getQueryBuilderBreakdown")(function* ({

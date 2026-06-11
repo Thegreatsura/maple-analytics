@@ -359,19 +359,10 @@ describe("query-builder timeseries strategy", () => {
 		expect(rows[0]["Errors: checkout (%Δ)"]).toBe(100)
 	})
 
-	it("normalizes error rate series from percent points to ratios", () => {
-		const points = __testables.normalizeErrorRatePoints([
-			{
-				bucket: "2026-01-01T00:00:00.000Z",
-				series: { all: 2.1, checkout: 5 },
-			},
-		])
-
-		expect(points).toEqual([
-			{
-				bucket: "2026-01-01T00:00:00.000Z",
-				series: { all: 0.021, checkout: 0.05 },
-			},
-		])
+	it("does not rescale error_rate series — the engine's 0–1 ratio is canonical", () => {
+		// Regression guard: a ÷100 "normalize" survived from the Tinybird-pipe
+		// era (which returned percent points) long after the CH engine switched
+		// to emitting ratios, making every error_rate chart 100× too small.
+		expect(__testables).not.toHaveProperty("normalizeErrorRatePoints")
 	})
 })

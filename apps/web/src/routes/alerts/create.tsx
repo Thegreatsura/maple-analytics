@@ -10,6 +10,12 @@ const AlertCreateSearch = Schema.Struct({
 	/** Set by the "Create alert" action on a dashboard chart widget. */
 	dashboardId: Schema.optional(Schema.String),
 	widgetId: Schema.optional(Schema.String),
+	/**
+	 * Base64url-encoded snapshot of the source widget (see widget-chart-param.ts).
+	 * Carries the live builder state so prefill doesn't race the dashboard
+	 * autosave; dashboardId/widgetId remain as the lookup fallback.
+	 */
+	chart: Schema.optional(Schema.String),
 })
 
 export const Route = effectRoute(createFileRoute("/alerts/create"))({

@@ -1,3 +1,5 @@
+import { fromBase64Url, toBase64Url } from "@/lib/base64url"
+
 export interface WidgetFixContext {
 	dashboardId: string
 	widgetId: string
@@ -5,34 +7,6 @@ export interface WidgetFixContext {
 	widgetJson: string
 	errorTitle: string | null
 	errorMessage: string | null
-}
-
-const fromBase64Url = (input: string): string => {
-	const padded = input.replace(/-/g, "+").replace(/_/g, "/")
-	const pad = padded.length % 4
-	const full = pad === 0 ? padded : padded + "=".repeat(4 - pad)
-	if (typeof atob !== "undefined") {
-		try {
-			return decodeURIComponent(escape(atob(full)))
-		} catch {
-			return atob(full)
-		}
-	}
-	return Buffer.from(full, "base64").toString("utf8")
-}
-
-const toBase64Url = (input: string): string => {
-	let raw: string
-	if (typeof btoa !== "undefined") {
-		try {
-			raw = btoa(unescape(encodeURIComponent(input)))
-		} catch {
-			raw = btoa(input)
-		}
-	} else {
-		raw = Buffer.from(input, "utf8").toString("base64")
-	}
-	return raw.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
 }
 
 export const encodeWidgetFixContextToSearchParam = (ctx: WidgetFixContext): string =>
