@@ -3,7 +3,7 @@ import type { LanguageModel } from "ai"
 
 export const OPENROUTER_PROVIDER_NAME = "openrouter"
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-export const DEFAULT_MODEL_ID = "moonshotai/kimi-k2.5:nitro"
+export const DEFAULT_MODEL_ID = "moonshotai/kimi-k2.7-code:nitro"
 
 export interface OpenRouterAppOptions {
 	readonly appBaseUrl?: string

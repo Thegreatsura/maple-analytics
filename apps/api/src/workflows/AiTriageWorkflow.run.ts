@@ -86,7 +86,7 @@ const triageTelemetry = MapleCloudflareSDK.make({
 	repositoryUrl: "https://github.com/Makisuo/maple",
 })
 
-const DEFAULT_TRIAGE_MODEL = "moonshotai/kimi-k2.5:nitro"
+const DEFAULT_TRIAGE_MODEL = "moonshotai/kimi-k2.7-code:nitro"
 const MAX_AGENT_STEPS = 12
 const MAX_OUTPUT_TOKENS = 4096
 

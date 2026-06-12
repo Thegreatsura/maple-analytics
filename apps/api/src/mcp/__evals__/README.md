@@ -44,7 +44,7 @@ OPENROUTER_API_KEY=sk-or-... \
   --reporter=vitest-evals/reporter
 ```
 
-Model defaults to the production `moonshotai/kimi-k2.5`. Override per-run with
+Model defaults to the production `moonshotai/kimi-k2.7-code`. Override per-run with
 `MCP_EVAL_MODEL=...` (CI reads it from the `MCP_EVAL_MODEL` repo variable).
 
 ## Files

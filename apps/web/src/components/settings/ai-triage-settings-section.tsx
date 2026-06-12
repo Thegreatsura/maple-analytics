@@ -146,7 +146,7 @@ export function AiTriageSettingsSection({ isAdmin, hasEntitlement }: AiTriageSet
 									<Label htmlFor="ai-triage-model">Model override</Label>
 									<Input
 										id="ai-triage-model"
-										placeholder="moonshotai/kimi-k2.5:nitro (default)"
+										placeholder="moonshotai/kimi-k2.7-code:nitro (default)"
 										value={modelDraft ?? current.modelOverride ?? ""}
 										onChange={(event) => setModelDraft(event.target.value)}
 										onBlur={() => {
