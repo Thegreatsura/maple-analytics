@@ -2,7 +2,7 @@ import { useState } from "react"
 import { createFileRoute, Navigate } from "@tanstack/react-router"
 import { useAuth } from "@clerk/clerk-react"
 import { AnimatePresence, motion } from "motion/react"
-import { useCustomer } from "autumn-js/react"
+import { useMapleCustomer } from "@/hooks/use-maple-customer"
 
 import { OnboardingLayout } from "@/components/onboarding/onboarding-layout"
 import {
@@ -37,7 +37,7 @@ function QuickStartPage() {
 		setDemoDataRequested,
 	} = useQuickStart(orgId)
 
-	const { data: customer } = useCustomer()
+	const { data: customer } = useMapleCustomer()
 	const planSelected = hasSelectedPlan(customer)
 
 	// "plan" completion is the live Autumn plan state, never a persisted flag.

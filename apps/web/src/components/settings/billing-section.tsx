@@ -1,5 +1,6 @@
 import { useMemo } from "react"
-import { useCustomer, useAggregateEvents } from "autumn-js/react"
+import { useAggregateEvents } from "autumn-js/react"
+import { useMapleCustomer } from "@/hooks/use-maple-customer"
 import { PricingCards } from "./pricing-cards"
 import { format } from "date-fns"
 
@@ -50,7 +51,7 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }
 
 function SubscriptionStrip({ billingPeriodLabel }: { billingPeriodLabel: string }) {
 	const { isTrialing, daysRemaining, trialEndsAt, planName, planStatus, isLoading } = useTrialStatus()
-	const { openCustomerPortal } = useCustomer()
+	const { openCustomerPortal } = useMapleCustomer()
 
 	if (isLoading) {
 		return (
@@ -122,7 +123,7 @@ function UsageSkeleton() {
 }
 
 export function BillingSection() {
-	const { data: customer, isLoading: isCustomerLoading } = useCustomer()
+	const { data: customer, isLoading: isCustomerLoading } = useMapleCustomer()
 	const { total, isLoading: isUsageLoading } = useAggregateEvents({
 		featureId: ["logs", "traces", "metrics", "browser_sessions"],
 		range: "1bc",

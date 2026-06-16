@@ -1,4 +1,4 @@
-import { useCustomer } from "autumn-js/react"
+import { useMapleCustomer } from "@/hooks/use-maple-customer"
 import { TRIAL_DURATION_DAYS } from "@/lib/billing/plans"
 import { PricingCards } from "@/components/settings/pricing-cards"
 import { Button } from "@maple/ui/components/ui/button"
@@ -9,7 +9,7 @@ export function StepPlan({
 }: {
 	onBack?: () => void
 }) {
-	const { isLoading } = useCustomer()
+	const { isLoading } = useMapleCustomer()
 
 	return (
 		<div className="flex-1 flex flex-col items-center px-6 py-12 overflow-auto">
