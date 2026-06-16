@@ -56,6 +56,15 @@ function servicesLinkSearch({
 	return { startTime, endTime, timePreset, environments, health }
 }
 
+/**
+ * Search params for the per-service detail route. That route accepts only the
+ * time-range slice (no `environments`/`health`), so this is narrower than
+ * {@link servicesLinkSearch}.
+ */
+function serviceDetailSearch({ startTime, endTime, timePreset }: ServiceHealthProps) {
+	return { startTime, endTime, timePreset }
+}
+
 interface EnrichedService {
 	service: ServiceOverview
 	health: ServiceHealth
@@ -298,6 +307,7 @@ export function ServiceHealthList(props: ServiceHealthProps) {
 										health={health}
 										hasOpenIncident={hasOpenIncident}
 										baseline={baseline}
+										detailSearch={serviceDetailSearch(props)}
 									/>
 								))}
 							</ul>
@@ -309,41 +319,56 @@ export function ServiceHealthList(props: ServiceHealthProps) {
 		.render()
 }
 
-function ServiceHealthRow({ service, health, hasOpenIncident, baseline }: EnrichedService) {
+function ServiceHealthRow({
+	service,
+	health,
+	hasOpenIncident,
+	baseline,
+	detailSearch,
+}: EnrichedService & { detailSearch: ReturnType<typeof serviceDetailSearch> }) {
 	return (
-		<li className="flex items-center gap-3 px-4 py-2.5">
-			<span
-				aria-hidden
-				className="size-2 shrink-0 rounded-full"
-				style={{ backgroundColor: HEALTH_DOT_COLOR[health] }}
-			/>
-			<div className="flex min-w-0 flex-1 items-center gap-2">
-				<span className="truncate text-sm font-medium text-foreground">{service.serviceName}</span>
-				<span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground">
-					{service.environment}
-				</span>
-				{hasOpenIncident && (
-					<Badge variant="error" size="sm" className="shrink-0">
-						Alerting
-					</Badge>
-				)}
-			</div>
-			<div className="flex shrink-0 items-center gap-5 font-mono text-xs tabular-nums">
-				<Metric
-					label="err"
-					value={formatErrorRate(service.errorRate)}
-					tone={errorRateTone(service.errorRate)}
+		<li>
+			<Link
+				to="/services/$serviceName"
+				params={{ serviceName: service.serviceName }}
+				search={detailSearch}
+				className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+			>
+				<span
+					aria-hidden
+					className="size-2 shrink-0 rounded-full"
+					style={{ backgroundColor: HEALTH_DOT_COLOR[health] }}
 				/>
-				<Metric
-					label="p95"
-					value={formatLatency(service.p95LatencyMs)}
-					tone={latencyTone(service.p95LatencyMs, service.spanCount, baseline)}
-				/>
-				<Metric
-					label="rps"
-					value={`${service.hasSampling ? "~" : ""}${formatThroughput(service.throughput)}`}
-				/>
-			</div>
+				<div className="flex min-w-0 flex-1 items-center gap-2">
+					<span className="truncate text-sm font-medium text-foreground">
+						{service.serviceName}
+					</span>
+					<span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground">
+						{service.environment}
+					</span>
+					{hasOpenIncident && (
+						<Badge variant="error" size="sm" className="shrink-0">
+							Alerting
+						</Badge>
+					)}
+				</div>
+				<div className="flex shrink-0 items-center gap-5 font-mono text-xs tabular-nums">
+					<Metric
+						label="err"
+						value={formatErrorRate(service.errorRate)}
+						tone={errorRateTone(service.errorRate)}
+					/>
+					<Metric
+						label="p95"
+						value={formatLatency(service.p95LatencyMs)}
+						tone={latencyTone(service.p95LatencyMs, service.spanCount, baseline)}
+					/>
+					<Metric
+						label="rps"
+						value={`${service.hasSampling ? "~" : ""}${formatThroughput(service.throughput)}`}
+					/>
+				</div>
+			</Link>
 		</li>
 	)
 }
