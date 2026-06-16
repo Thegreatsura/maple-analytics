@@ -11,8 +11,16 @@ import { ProviderLogo } from "@/components/alerts/destination-provider"
 import { AlertStatusBadge } from "@/components/alerts/alert-status-badge"
 import { AlertSeverityBadge } from "@/components/alerts/alert-severity-badge"
 import { AlertStatCard, AlertFiringHero } from "@/components/alerts/alert-stat-card"
+import { AlertTagControls } from "@/components/alerts/alert-tag-controls"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
+import { BooleanFromStringParam, OptionalStringArrayParam } from "@/lib/search-params"
+import {
+	filterByTags,
+	groupByTag as groupItemsByTag,
+	tagFacets,
+	type TagGroup,
+} from "@/lib/alerts/tag-grouping"
 import { formatRelativeTime } from "@/lib/format"
 import {
 	AlertDeliveryEventDocument,
@@ -77,6 +85,10 @@ const AlertsSearch = Schema.Struct({
 	tab: Schema.optional(Schema.String),
 	serviceName: Schema.optional(Schema.String),
 	createdBy: Schema.optional(Schema.String),
+	/** Tag filter, shared across the Monitor and Rules tabs. */
+	tags: OptionalStringArrayParam,
+	/** When set, the active list is grouped into per-tag sections. */
+	groupByTag: Schema.optional(Schema.Union([Schema.Boolean, BooleanFromStringParam])),
 })
 
 /** Sentinel value for the "Created by" filter meaning no creator restriction. */
@@ -110,6 +122,49 @@ function SignalBadge({ signalType }: { signalType: string }) {
 		<Badge variant="outline" className={cn("text-xs", signalBadgeClass[signalType])}>
 			{signalLabels[signalType as keyof typeof signalLabels] ?? signalType}
 		</Badge>
+	)
+}
+
+/** Secondary-tone tag chips, kept visually distinct from outline service badges. */
+function TagChips({ tags }: { tags: readonly string[] }) {
+	if (tags.length === 0) return null
+	return (
+		<div className="mt-1 flex flex-wrap gap-1">
+			{tags.map((tag) => (
+				<Badge key={tag} variant="secondary" size="sm">
+					{tag}
+				</Badge>
+			))}
+		</div>
+	)
+}
+
+/** Group-header row reused by the Rules and Monitor grouped tables. */
+function TagGroupHeaderRow({
+	label,
+	count,
+	noun,
+	colSpan,
+}: {
+	label: string
+	count: number
+	noun: string
+	colSpan: number
+}) {
+	return (
+		<TableRow>
+			<TableCell
+				colSpan={colSpan}
+				className="bg-muted/30 py-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+			>
+				<span className="flex items-center gap-2">
+					{label}
+					<span className="tracking-normal normal-case text-muted-foreground/55 tabular-nums">
+						{count} {count === 1 ? noun : `${noun}s`}
+					</span>
+				</span>
+			</TableCell>
+		</TableRow>
 	)
 }
 
@@ -164,11 +219,19 @@ function MonitorTab({
 	incidents,
 	deliveryEvents,
 	loading,
+	selectedTags,
+	grouped,
+	onSelectedTagsChange,
+	onGroupedChange,
 }: {
 	rules: AlertRule[]
 	incidents: AlertIncidentDocument[]
 	deliveryEvents: AlertDeliveryEvent[]
 	loading: boolean
+	selectedTags: string[]
+	grouped: boolean
+	onSelectedTagsChange: (tags: string[]) => void
+	onGroupedChange: (grouped: boolean) => void
 }) {
 	const openIncidents = useMemo(() => incidents.filter((i) => i.status === "open"), [incidents])
 	const criticalCount = openIncidents.filter((i) => i.severity === "critical").length
@@ -198,6 +261,29 @@ function MonitorTab({
 
 	const rulesById = useMemo(() => new Map(rules.map((r) => [r.id, r])), [rules])
 
+	// Incidents inherit their rule's tags via a client-side join — no incident
+	// row carries tags itself.
+	const tagsByRuleId = useMemo(() => new Map(rules.map((r) => [r.id, r.tags])), [rules])
+	const incidentTagFacets = useMemo(
+		() => tagFacets(openIncidents, (i) => tagsByRuleId.get(i.ruleId) ?? []),
+		[openIncidents, tagsByRuleId],
+	)
+	const visibleIncidents = useMemo(
+		() => [...filterByTags(openIncidents, (i) => tagsByRuleId.get(i.ruleId) ?? [], selectedTags)],
+		[openIncidents, tagsByRuleId, selectedTags],
+	)
+	const incidentGroups = useMemo(
+		() =>
+			grouped
+				? groupItemsByTag(visibleIncidents, (i) => tagsByRuleId.get(i.ruleId) ?? [])
+				: null,
+		[grouped, visibleIncidents, tagsByRuleId],
+	)
+	const visibleEvents = useMemo(
+		() => [...filterByTags(deliveryEvents, (e) => tagsByRuleId.get(e.ruleId) ?? [], selectedTags)],
+		[deliveryEvents, tagsByRuleId, selectedTags],
+	)
+
 	if (loading) {
 		return (
 			<div className="space-y-6">
@@ -215,6 +301,53 @@ function MonitorTab({
 	const lastEvaluatedHint = deliveryEvents[0]?.scheduledAt
 		? `Last evaluated ${formatRelativeTime(deliveryEvents[0].scheduledAt)}`
 		: undefined
+
+	const renderIncidentRow = (incident: AlertIncidentDocument, key: string) => {
+		const duration = incident.lastTriggeredAt ? formatRelativeTime(incident.lastTriggeredAt) : "—"
+		const tags = tagsByRuleId.get(incident.ruleId) ?? []
+		return (
+			<TableRow key={key} className="cursor-pointer">
+				<TableCell>
+					<AlertSeverityBadge severity={incident.severity} />
+				</TableCell>
+				<TableCell>
+					<Link
+						to="/alerts/$ruleId"
+						params={{ ruleId: incident.ruleId }}
+						className="font-medium hover:underline"
+					>
+						{incident.ruleName}
+					</Link>
+					{!grouped && <TagChips tags={tags} />}
+				</TableCell>
+				<TableCell>
+					<span className="font-mono text-muted-foreground">{incident.groupKey ?? "all"}</span>
+				</TableCell>
+				<TableCell>
+					<span className="font-mono text-destructive">
+						{formatSignalValue(incident.signalType, incident.lastObservedValue)}
+					</span>
+					<span className="text-muted-foreground text-xs ml-1">
+						/ {formatSignalValue(incident.signalType, incident.threshold)}
+					</span>
+				</TableCell>
+				<TableCell>{duration}</TableCell>
+				<TableCell>
+					{incident.lastNotifiedAt ? formatRelativeTime(incident.lastNotifiedAt) : "Never"}
+				</TableCell>
+			</TableRow>
+		)
+	}
+
+	const tagControls = (
+		<AlertTagControls
+			facets={incidentTagFacets}
+			selected={selectedTags}
+			onSelectedChange={onSelectedTagsChange}
+			grouped={grouped}
+			onGroupedChange={onGroupedChange}
+		/>
+	)
 
 	return (
 		<div className="space-y-8">
@@ -246,14 +379,17 @@ function MonitorTab({
 				</div>
 			)}
 
-			{/* Active Incidents */}
+			{/* Active incidents — filterable + groupable by the rule's tags */}
 			{openIncidents.length > 0 && (
 				<div className="space-y-3">
-					<div className="flex items-center gap-2">
-						<h2 className="text-lg font-semibold">Active incidents</h2>
-						<Badge variant="secondary" className="rounded-full tabular-nums">
-							{openIncidents.length}
-						</Badge>
+					<div className="flex items-center justify-between gap-2">
+						<div className="flex items-center gap-2">
+							<h2 className="text-lg font-semibold">Active incidents</h2>
+							<Badge variant="secondary" className="rounded-full tabular-nums">
+								{visibleIncidents.length}
+							</Badge>
+						</div>
+						{tagControls}
 					</div>
 
 					<Table>
@@ -268,56 +404,39 @@ function MonitorTab({
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{openIncidents.map((incident) => {
-								const duration = incident.lastTriggeredAt
-									? formatRelativeTime(incident.lastTriggeredAt)
-									: "—"
-								return (
-									<TableRow key={incident.id} className="cursor-pointer">
-										<TableCell>
-											<AlertSeverityBadge severity={incident.severity} />
-										</TableCell>
-										<TableCell>
-											<Link
-												to="/alerts/$ruleId"
-												params={{ ruleId: incident.ruleId }}
-												className="font-medium hover:underline"
-											>
-												{incident.ruleName}
-											</Link>
-										</TableCell>
-										<TableCell>
-											<span className="font-mono text-muted-foreground">
-												{incident.groupKey ?? "all"}
-											</span>
-										</TableCell>
-										<TableCell>
-											<span className="font-mono text-destructive">
-												{formatSignalValue(
-													incident.signalType,
-													incident.lastObservedValue,
-												)}
-											</span>
-											<span className="text-muted-foreground text-xs ml-1">
-												/ {formatSignalValue(incident.signalType, incident.threshold)}
-											</span>
-										</TableCell>
-										<TableCell>{duration}</TableCell>
-										<TableCell>
-											{incident.lastNotifiedAt
-												? formatRelativeTime(incident.lastNotifiedAt)
-												: "Never"}
-										</TableCell>
-									</TableRow>
-								)
-							})}
+							{visibleIncidents.length === 0 ? (
+								<TableRow>
+									<TableCell
+										colSpan={6}
+										className="py-8 text-center text-muted-foreground text-sm"
+									>
+										No active incidents match the selected tags.
+									</TableCell>
+								</TableRow>
+							) : incidentGroups ? (
+								incidentGroups.map((group) => (
+									<Fragment key={group.key}>
+										<TagGroupHeaderRow
+											label={group.label}
+											count={group.count}
+											noun="incident"
+											colSpan={6}
+										/>
+										{group.items.map((incident) =>
+											renderIncidentRow(incident, `${group.key}:${incident.id}`),
+										)}
+									</Fragment>
+								))
+							) : (
+								visibleIncidents.map((incident) => renderIncidentRow(incident, incident.id))
+							)}
 						</TableBody>
 					</Table>
 				</div>
 			)}
 
 			{/* Recent Activity — compact, rule-centric preview of the full delivery log */}
-			{deliveryEvents.length > 0 && (
+			{visibleEvents.length > 0 && (
 				<div className="space-y-3">
 					<div>
 						<h2 className="text-lg font-semibold">Recent activity</h2>
@@ -335,7 +454,7 @@ function MonitorTab({
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{deliveryEvents.slice(0, 10).map((event) => {
+							{visibleEvents.slice(0, 10).map((event) => {
 								const rule = rulesById.get(event.ruleId)
 								const ev = eventTypeMeta[event.eventType]
 
@@ -496,6 +615,16 @@ function AlertsPage() {
 	const creatorFilter = search.createdBy ?? ANY_CREATOR
 	const showCreatorFilter = Object.keys(creatorOptions).length > 2
 
+	// Tag filter + grouping, shared across the Monitor and Rules tabs via search.
+	const selectedTags = useMemo(() => search.tags ?? [], [search.tags])
+	const groupByTagOn = search.groupByTag ?? false
+	const setSelectedTags = (tags: string[]) =>
+		navigate({ search: (prev) => ({ ...prev, tags: tags.length > 0 ? tags : undefined }) })
+	const setGroupByTagOn = (grouped: boolean) =>
+		navigate({ search: (prev) => ({ ...prev, groupByTag: grouped ? true : undefined }) })
+
+	const ruleTagFacets = useMemo(() => tagFacets(rules, (r) => r.tags), [rules])
+
 	// Rules tab: build firing status from open incidents
 	const firingRuleIds = useMemo(() => {
 		const ids = new Set<string>()
@@ -624,11 +753,17 @@ function AlertsPage() {
 			result = result.filter(
 				(r) =>
 					r.name.toLowerCase().includes(q) ||
-					r.serviceNames?.some((s) => s.toLowerCase().includes(q)),
+					r.serviceNames?.some((s) => s.toLowerCase().includes(q)) ||
+					r.tags.some((t) => t.includes(q)),
 			)
 		}
-		return result
-	}, [rules, searchQuery, creatorFilter])
+		return [...filterByTags(result, (r) => r.tags, selectedTags)]
+	}, [rules, searchQuery, creatorFilter, selectedTags])
+
+	const ruleGroups: TagGroup<AlertRule>[] | null = useMemo(
+		() => (groupByTagOn ? groupItemsByTag(filteredRules, (r) => r.tags) : null),
+		[groupByTagOn, filteredRules],
+	)
 
 	// Resolve each rule's destination IDs against the destinations already loaded
 	// for the page — no extra query — so the Notify column can show real channels.
@@ -636,6 +771,102 @@ function AlertsPage() {
 		() => new Map(destinations.map((d) => [d.id, d])),
 		[destinations],
 	)
+
+	const renderRuleRow = (rule: AlertRule, key: string) => {
+		const status: "firing" | "ok" | "disabled" = !rule.enabled
+			? "disabled"
+			: firingRuleIds.has(rule.id)
+				? "firing"
+				: "ok"
+		// Dedupe by id: a rule that lists the same destination twice still
+		// notifies it once, so show one mark (and keep React keys unique).
+		const ruleDestinations = [...new Set(rule.destinationIds)]
+			.map((id) => destinationsById.get(id))
+			.filter((d): d is AlertDestination => d != null)
+
+		return (
+			<TableRow
+				key={key}
+				className="cursor-pointer"
+				onClick={() => navigate({ to: "/alerts/$ruleId", params: { ruleId: rule.id } })}
+			>
+				<TableCell onClick={(e) => e.stopPropagation()}>
+					<Switch
+						checked={rule.enabled}
+						onCheckedChange={() => handleRuleToggle(rule)}
+						disabled={!isAdmin}
+					/>
+				</TableCell>
+				<TableCell className={cn("font-medium", !rule.enabled && "text-muted-foreground")}>
+					{rule.name}
+					{!groupByTagOn && <TagChips tags={rule.tags} />}
+				</TableCell>
+				<TableCell>
+					<SignalBadge signalType={rule.signalType} />
+				</TableCell>
+				<TableCell>
+					{rule.serviceNames?.length > 0 ? (
+						<div className="flex flex-wrap gap-1">
+							{rule.serviceNames.map((s) => (
+								<Badge key={s} variant="outline" className="text-xs">
+									{s}
+								</Badge>
+							))}
+						</div>
+					) : (
+						<span className="font-mono text-muted-foreground text-xs">
+							{rule.groupBy && rule.groupBy.length > 0
+								? `all · per ${rule.groupBy.join(" · ")}`
+								: "all"}
+						</span>
+					)}
+					{rule.excludeServiceNames?.length > 0 && (
+						<div className="flex flex-wrap gap-1 mt-0.5">
+							{rule.excludeServiceNames.map((s) => (
+								<Badge
+									key={s}
+									variant="outline"
+									className="text-xs text-muted-foreground line-through"
+								>
+									{s}
+								</Badge>
+							))}
+						</div>
+					)}
+				</TableCell>
+				<TableCell>
+					<span className="font-mono text-xs">
+						{comparatorLabels[rule.comparator]}{" "}
+						{formatSignalValue(rule.signalType, rule.threshold)} / {rule.windowMinutes}min
+					</span>
+				</TableCell>
+				<TableCell>
+					<AlertSeverityBadge severity={rule.severity} />
+				</TableCell>
+				<TableCell onClick={(e) => e.stopPropagation()}>
+					<NotifyChannels destinations={ruleDestinations} enabled={rule.enabled} />
+				</TableCell>
+				<TableCell>
+					<div className="flex items-center gap-1.5">
+						<AlertStatusBadge state={status} />
+						{rule.lastEvaluationError && (
+							<Tooltip>
+								<TooltipTrigger
+									render={<span className="inline-flex cursor-default" />}
+									onClick={(e) => e.stopPropagation()}
+								>
+									<CircleWarningIcon size={14} className="text-destructive" />
+								</TooltipTrigger>
+								<TooltipContent className="max-w-[280px]">
+									Last evaluation failed: {rule.lastEvaluationError}
+								</TooltipContent>
+							</Tooltip>
+						)}
+					</div>
+				</TableCell>
+			</TableRow>
+		)
+	}
 
 	const tabBar = (
 		<Tabs value={activeTab} onValueChange={(v) => handleTabSelect(v as AlertsTab)}>
@@ -692,6 +923,10 @@ function AlertsPage() {
 							incidents={incidents}
 							deliveryEvents={deliveryEvents}
 							loading={Result.isInitial(rulesResult) || Result.isInitial(incidentsResult)}
+							selectedTags={selectedTags}
+							grouped={groupByTagOn}
+							onSelectedTagsChange={setSelectedTags}
+							onGroupedChange={setGroupByTagOn}
 						/>
 					)}
 
@@ -749,6 +984,13 @@ function AlertsPage() {
 										</SelectContent>
 									</Select>
 								)}
+								<AlertTagControls
+									facets={ruleTagFacets}
+									selected={selectedTags}
+									onSelectedChange={setSelectedTags}
+									grouped={groupByTagOn}
+									onGroupedChange={setGroupByTagOn}
+								/>
 							</div>
 
 							{Result.isInitial(rulesResult) ? (
@@ -804,7 +1046,7 @@ function AlertsPage() {
 										</EmptyMedia>
 										<EmptyTitle>No rules match your filters</EmptyTitle>
 										<EmptyDescription>
-											Try a different search term or creator.
+											Try a different search term, creator, or tag.
 										</EmptyDescription>
 									</EmptyHeader>
 								</Empty>
@@ -823,121 +1065,21 @@ function AlertsPage() {
 										</TableRow>
 									</TableHeader>
 									<TableBody>
-										{filteredRules.map((rule) => {
-											const status: "firing" | "ok" | "disabled" = !rule.enabled
-												? "disabled"
-												: firingRuleIds.has(rule.id)
-													? "firing"
-													: "ok"
-											// Dedupe by id: a rule that lists the same destination twice
-											// still notifies it once, so show one mark (and keep React keys unique).
-											const ruleDestinations = [...new Set(rule.destinationIds)]
-												.map((id) => destinationsById.get(id))
-												.filter((d): d is AlertDestination => d != null)
-
-											return (
-												<TableRow
-													key={rule.id}
-													className="cursor-pointer"
-													onClick={() =>
-														navigate({
-															to: "/alerts/$ruleId",
-															params: { ruleId: rule.id },
-														})
-													}
-												>
-													<TableCell onClick={(e) => e.stopPropagation()}>
-														<Switch
-															checked={rule.enabled}
-															onCheckedChange={() => handleRuleToggle(rule)}
-															disabled={!isAdmin}
+										{ruleGroups
+											? ruleGroups.map((group) => (
+													<Fragment key={group.key}>
+														<TagGroupHeaderRow
+															label={group.label}
+															count={group.count}
+															noun="rule"
+															colSpan={8}
 														/>
-													</TableCell>
-													<TableCell
-														className={cn(
-															"font-medium",
-															!rule.enabled && "text-muted-foreground",
+														{group.items.map((rule) =>
+															renderRuleRow(rule, `${group.key}:${rule.id}`),
 														)}
-													>
-														{rule.name}
-													</TableCell>
-													<TableCell>
-														<SignalBadge signalType={rule.signalType} />
-													</TableCell>
-													<TableCell>
-														{rule.serviceNames?.length > 0 ? (
-															<div className="flex flex-wrap gap-1">
-																{rule.serviceNames.map((s) => (
-																	<Badge
-																		key={s}
-																		variant="outline"
-																		className="text-xs"
-																	>
-																		{s}
-																	</Badge>
-																))}
-															</div>
-														) : (
-															<span className="font-mono text-muted-foreground text-xs">
-																{rule.groupBy && rule.groupBy.length > 0
-																	? `all · per ${rule.groupBy.join(" · ")}`
-																	: "all"}
-															</span>
-														)}
-														{rule.excludeServiceNames?.length > 0 && (
-															<div className="flex flex-wrap gap-1 mt-0.5">
-																{rule.excludeServiceNames.map((s) => (
-																	<Badge
-																		key={s}
-																		variant="outline"
-																		className="text-xs text-muted-foreground line-through"
-																	>
-																		{s}
-																	</Badge>
-																))}
-															</div>
-														)}
-													</TableCell>
-													<TableCell>
-														<span className="font-mono text-xs">
-															{comparatorLabels[rule.comparator]}{" "}
-															{formatSignalValue(
-																rule.signalType,
-																rule.threshold,
-															)}{" "}
-															/ {rule.windowMinutes}min
-														</span>
-													</TableCell>
-													<TableCell>
-														<AlertSeverityBadge severity={rule.severity} />
-													</TableCell>
-													<TableCell onClick={(e) => e.stopPropagation()}>
-														<NotifyChannels
-															destinations={ruleDestinations}
-															enabled={rule.enabled}
-														/>
-													</TableCell>
-													<TableCell>
-														<div className="flex items-center gap-1.5">
-															<AlertStatusBadge state={status} />
-															{rule.lastEvaluationError && (
-																<Tooltip>
-																	<TooltipTrigger
-																		render={<span className="inline-flex cursor-default" />}
-																		onClick={(e) => e.stopPropagation()}
-																	>
-																		<CircleWarningIcon size={14} className="text-destructive" />
-																	</TooltipTrigger>
-																	<TooltipContent className="max-w-[280px]">
-																		Last evaluation failed: {rule.lastEvaluationError}
-																	</TooltipContent>
-																</Tooltip>
-															)}
-														</div>
-													</TableCell>
-												</TableRow>
-											)
-										})}
+													</Fragment>
+												))
+											: filteredRules.map((rule) => renderRuleRow(rule, rule.id))}
 									</TableBody>
 								</Table>
 							)}

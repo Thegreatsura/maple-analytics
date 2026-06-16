@@ -43,6 +43,8 @@ export type RuleFormState = {
 	severity: AlertSeverity
 	serviceNames: string[]
 	excludeServiceNames: string[]
+	/** Free-form tags used to group and filter rules in the alerts list. */
+	tags: string[]
 	/**
 	 * Group-by dimensions to evaluate the rule per-group. Stored as the
 	 * dashboard-style tokens (e.g. `service.name`, `span.name`,
@@ -219,6 +221,7 @@ export function defaultRuleForm(serviceName?: string): RuleFormState {
 		severity: "warning",
 		serviceNames: serviceName ? [serviceName] : [],
 		excludeServiceNames: [],
+		tags: [],
 		groupBy: [],
 		signalType: "error_rate",
 		comparator: "gt",
@@ -275,6 +278,7 @@ export function ruleToFormState(rule: AlertRuleDocument): RuleFormState {
 		severity: rule.severity,
 		serviceNames: rule.serviceNames?.length > 0 ? [...rule.serviceNames] : [],
 		excludeServiceNames: rule.excludeServiceNames?.length > 0 ? [...rule.excludeServiceNames] : [],
+		tags: rule.tags?.length > 0 ? [...rule.tags] : [],
 		groupBy: rule.groupBy ? [...rule.groupBy] : [],
 		signalType: rule.signalType === "metric" ? "builder_query" : rule.signalType,
 		comparator: rule.comparator,
@@ -387,6 +391,7 @@ export function buildRuleRequest(form: RuleFormState): AlertRuleUpsertRequest {
 		notes: form.notes.trim() || null,
 		enabled: form.enabled,
 		severity: form.severity,
+		tags: form.tags,
 		serviceNames: queryOwnsScope ? [] : form.serviceNames.filter((s) => s.trim().length > 0),
 		excludeServiceNames: queryOwnsScope
 			? []

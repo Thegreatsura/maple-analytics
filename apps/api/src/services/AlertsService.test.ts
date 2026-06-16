@@ -1430,6 +1430,60 @@ describe("AlertsService", () => {
 		}).pipe(Effect.provide(makeLayer(url, makeWarehouseStub({ tracesAggregateRows: emptyWarehouseRows }))))
 	})
 
+	itEffect("round-trips and normalizes rule tags through create/update/list", () => {
+		const { url } = createTempDbUrl()
+
+		return Effect.gen(function* () {
+			const alerts = yield* AlertsService
+			const orgId = asOrgId("org_rule_tags")
+			const userId = asUserId("user_rule_tags")
+			const destination = yield* createWebhookDestination(alerts, orgId, userId)
+
+			const baseRule = {
+				name: "Tagged rule",
+				severity: "warning",
+				enabled: true,
+				serviceNames: ["checkout"],
+				signalType: "error_rate",
+				comparator: "gt",
+				threshold: 5,
+				windowMinutes: 5,
+				minimumSampleCount: 10,
+				consecutiveBreachesRequired: 2,
+				consecutiveHealthyRequired: 2,
+				renotifyIntervalMinutes: 30,
+				destinationIds: [destination.id],
+			} as const
+
+			// Tags are trimmed, lowercased, and deduped (so "Prod" and " prod "
+			// collapse to one group key) while preserving first-seen order.
+			const created = yield* alerts.createRule(
+				orgId,
+				userId,
+				adminRoles,
+				new AlertRuleUpsertRequest({ ...baseRule, tags: ["Prod", " payments ", "prod", ""] }),
+			)
+			expect(created.tags).toEqual(["prod", "payments"])
+
+			// The normalized tags survive a round-trip through the persisted row.
+			const afterCreate = yield* alerts.listRules(orgId)
+			expect(afterCreate.rules[0]?.tags).toEqual(["prod", "payments"])
+
+			// Clearing tags on update persists an empty list, not the prior value.
+			const updated = yield* alerts.updateRule(
+				orgId,
+				userId,
+				adminRoles,
+				created.id,
+				new AlertRuleUpsertRequest({ ...baseRule, tags: [] }),
+			)
+			expect(updated.tags).toEqual([])
+
+			const afterClear = yield* alerts.listRules(orgId)
+			expect(afterClear.rules[0]?.tags).toEqual([])
+		}).pipe(Effect.provide(makeLayer(url, makeWarehouseStub({ tracesAggregateRows: emptyWarehouseRows }))))
+	})
+
 	itEffect("opens per-service incidents for multi-service rules", () => {
 		const { url } = createTempDbUrl()
 		const state = {

@@ -46,6 +46,8 @@ export const alertRules = sqliteTable(
 		severity: text("severity").notNull(),
 		serviceNamesJson: text("service_names_json"),
 		excludeServiceNamesJson: text("exclude_service_names_json"),
+		/** JSON-encoded `string[]` of free-form tags used to group and filter rules. */
+		tagsJson: text("tags_json"),
 		signalType: text("signal_type").notNull(),
 		comparator: text("comparator").notNull(),
 		threshold: real("threshold").notNull(),

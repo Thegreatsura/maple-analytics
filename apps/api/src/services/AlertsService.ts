@@ -136,6 +136,7 @@ interface NormalizedRule {
 	readonly serviceName: string | null
 	readonly serviceNames: ReadonlyArray<string>
 	readonly excludeServiceNames: ReadonlyArray<string>
+	readonly tags: ReadonlyArray<string>
 	readonly groupBy: AlertGroupBy | null
 	readonly signalType: AlertSignalType
 	readonly comparator: AlertComparator
@@ -792,6 +793,26 @@ const serviceNamesFromRow = (row: AlertRuleRow): ReadonlyArray<string> =>
 const excludeServiceNamesFromRow = (row: AlertRuleRow): ReadonlyArray<string> =>
 	row.excludeServiceNamesJson ? safeParseStringArray(row.excludeServiceNamesJson) : []
 
+const tagsFromRow = (row: AlertRuleRow): ReadonlyArray<string> =>
+	row.tagsJson ? safeParseStringArray(row.tagsJson) : []
+
+/**
+ * Canonical tag form: trim, lowercase, drop empties, dedupe (order preserved).
+ * Lowercasing keeps `Prod` and `prod` from splitting into two groups in the UI.
+ */
+const normalizeTags = (tags: ReadonlyArray<string> | undefined): ReadonlyArray<string> => {
+	if (!tags || tags.length === 0) return []
+	const seen = new Set<string>()
+	const result: string[] = []
+	for (const raw of tags) {
+		const tag = raw.trim().toLowerCase()
+		if (tag.length === 0 || seen.has(tag)) continue
+		seen.add(tag)
+		result.push(tag)
+	}
+	return result
+}
+
 /** Most recent evaluation error for a rule, aggregated across its group states. */
 interface RuleEvaluationState {
 	readonly error: string | null
@@ -813,6 +834,7 @@ const rowToRuleDocument = (
 		severity: decodeAlertSeveritySync(row.severity),
 		serviceNames: [...serviceNames],
 		excludeServiceNames: [...excludeServiceNamesFromRow(row)],
+		tags: [...tagsFromRow(row)],
 		groupBy: parseStoredGroupBy(row.groupBy),
 		signalType: decodeAlertSignalTypeSync(row.signalType),
 		comparator: decodeAlertComparatorSync(row.comparator),
@@ -1118,6 +1140,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
 				serviceName: serviceNames.length === 1 ? serviceNames[0] : null,
 				serviceNames,
 				excludeServiceNames: excludeServiceNamesFromRow(row),
+				tags: tagsFromRow(row),
 				groupBy: parseStoredGroupBy(row.groupBy),
 				signalType: decodeAlertSignalTypeSync(row.signalType),
 				comparator: decodeAlertComparatorSync(row.comparator),
@@ -1158,6 +1181,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
 			const excludeServiceNames = request.excludeServiceNames
 				? request.excludeServiceNames.map((s) => s.trim()).filter((s) => s.length > 0)
 				: []
+			const tags = normalizeTags(request.tags)
 			const metricName = normalizeOptionalString(request.metricName)
 			// Dedupe while preserving selection order — a destination listed twice still
 			// notifies once, so we persist each id at most once. This is the authoritative
@@ -1237,6 +1261,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
 				serviceName,
 				serviceNames,
 				excludeServiceNames,
+				tags,
 				groupBy,
 				signalType: request.signalType,
 				comparator: request.comparator,
@@ -2164,6 +2189,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
 					normalized.excludeServiceNames.length > 0
 						? JSON.stringify(normalized.excludeServiceNames)
 						: null,
+				tagsJson: normalized.tags.length > 0 ? JSON.stringify(normalized.tags) : null,
 				groupBy: normalized.groupBy != null ? JSON.stringify(normalized.groupBy) : null,
 				signalType: normalized.signalType,
 				comparator: normalized.comparator,
