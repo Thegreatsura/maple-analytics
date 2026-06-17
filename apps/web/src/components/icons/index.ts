@@ -27,6 +27,7 @@ export {
 	EyeIcon,
 	FireIcon,
 	GlobeIcon,
+	LineHeightIcon,
 	LoaderIcon,
 	MagnifierIcon,
 	MenuIcon,
@@ -36,6 +37,8 @@ export {
 	PulseIcon,
 	RadioCheckedIcon,
 	SidebarLeftIcon,
+	TextWrapIcon,
+	ThumbtackIcon,
 	XmarkIcon,
 } from "@maple/ui/components/icons"
 
