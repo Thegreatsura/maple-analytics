@@ -410,6 +410,60 @@ const readErrorBody = (response: Response): Effect.Effect<string> =>
 	)
 
 /**
+ * A PagerDuty Events API v2 integration ("routing") key is exactly 32
+ * alphanumeric characters. A REST API token — the usual wrong paste — is shorter
+ * and may contain `+`/`_`/`-`, so the length+charset check alone rejects it.
+ */
+export const PAGERDUTY_ROUTING_KEY_PATTERN = /^[A-Za-z0-9]{32}$/
+
+export type PagerDutyKeyVerification =
+	| { status: "valid" }
+	| { status: "invalid"; reason: string }
+	/** Network error / timeout / 429 / 5xx — can't conclude; caller should fail open. */
+	| { status: "unknown" }
+
+/**
+ * Verify a PagerDuty routing key actually works by enqueuing a no-op `resolve`
+ * event. PagerDuty validates the routing key before the action, so a valid key
+ * returns 2xx (resolving an unknown dedup_key creates no incident and pages no
+ * one) and an invalid key returns 400 "Invalid routing key". Never fails — any
+ * transport/ambiguous response collapses to `unknown` so the caller owns policy.
+ */
+export const verifyPagerDutyRoutingKey = (
+	integrationKey: string,
+	fetchFn: typeof fetch,
+	timeoutMs: number,
+	dedupKey: string,
+): Effect.Effect<PagerDutyKeyVerification> =>
+	runTimedFetch("pagerduty", "PagerDuty", fetchFn, timeoutMs, () =>
+		fetchFn("https://events.pagerduty.com/v2/enqueue", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({
+				routing_key: integrationKey,
+				event_action: "resolve",
+				dedup_key: dedupKey,
+			}),
+		}),
+	).pipe(
+		Effect.flatMap((response) => {
+			if (response.ok) return Effect.succeed<PagerDutyKeyVerification>({ status: "valid" })
+			if (response.status === 400) {
+				return readErrorBody(response).pipe(
+					Effect.map(
+						(reason): PagerDutyKeyVerification => ({
+							status: "invalid",
+							reason: reason || "Invalid routing key",
+						}),
+					),
+				)
+			}
+			return Effect.succeed<PagerDutyKeyVerification>({ status: "unknown" })
+		}),
+		Effect.catch(() => Effect.succeed<PagerDutyKeyVerification>({ status: "unknown" })),
+	)
+
+/**
  * Resolve + render the effective title/body for a destination. Returns `null`
  * when the rule has no custom template (caller falls back to the hardcoded
  * formatter) or when rendering fails for any reason — templating must never

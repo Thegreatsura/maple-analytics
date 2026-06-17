@@ -1240,6 +1240,164 @@ describe("AlertsService", () => {
 		})
 	})
 
+	const VALID_PD_KEY = "e93facc04764012d7bfb002500d5d1a6" // 32 hex chars
+	const REST_API_TOKEN = "u+0123456789abcdefgh" // 20 chars, '+' — the common wrong paste
+
+	it("rejects a PagerDuty key of the wrong shape without calling PagerDuty", async () => {
+		const { url } = createTempDbUrl()
+		const requests: string[] = []
+		const fetchImpl = (async (input: RequestInfo | URL) => {
+			requests.push(String(input))
+			return new Response("", { status: 202 })
+		}) as typeof fetch
+
+		const exit = await Effect.runPromiseExit(
+			Effect.gen(function* () {
+				const alerts = yield* AlertsService
+				return yield* alerts.createDestination(
+					asOrgId("org_pd_shape"),
+					asUserId("user_pd_shape"),
+					adminRoles,
+					{ type: "pagerduty", name: "Paging", enabled: true, integrationKey: REST_API_TOKEN },
+				)
+			}).pipe(
+				Effect.provide(
+					makeLayer(url, makeWarehouseStub({ tracesAggregateRows: emptyWarehouseRows }), {
+						fetch: fetchImpl,
+					}),
+				),
+			),
+		)
+
+		expect(Exit.isFailure(exit)).toBe(true)
+		expect(getError(exit)).toMatchObject({
+			message: expect.stringContaining("32-character Events API v2 routing key"),
+		})
+		// Format check short-circuits before any network call.
+		expect(requests).toHaveLength(0)
+	})
+
+	it("rejects a well-formed PagerDuty key that PagerDuty reports invalid", async () => {
+		const { url } = createTempDbUrl()
+		const requests: Array<{ url: string; body: string }> = []
+		const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+			requests.push({ url: String(input), body: String(init?.body ?? "") })
+			return new Response(
+				JSON.stringify({
+					status: "invalid event",
+					message: "Event object is invalid",
+					errors: ["Invalid routing key"],
+				}),
+				{ status: 400 },
+			)
+		}) as typeof fetch
+
+		const exit = await Effect.runPromiseExit(
+			Effect.gen(function* () {
+				const alerts = yield* AlertsService
+				return yield* alerts.createDestination(
+					asOrgId("org_pd_invalid"),
+					asUserId("user_pd_invalid"),
+					adminRoles,
+					{ type: "pagerduty", name: "Paging", enabled: true, integrationKey: VALID_PD_KEY },
+				)
+			}).pipe(
+				Effect.provide(
+					makeLayer(url, makeWarehouseStub({ tracesAggregateRows: emptyWarehouseRows }), {
+						fetch: fetchImpl,
+					}),
+				),
+			),
+		)
+
+		expect(Exit.isFailure(exit)).toBe(true)
+		expect(getError(exit)).toMatchObject({
+			message: expect.stringContaining("Invalid routing key"),
+		})
+		expect(requests).toHaveLength(1)
+		expect(requests[0]?.url).toBe("https://events.pagerduty.com/v2/enqueue")
+		// Validation uses a no-op resolve so it never creates an incident.
+		expect(requests[0]?.body).toContain('"event_action":"resolve"')
+	})
+
+	itEffect("accepts a PagerDuty key that PagerDuty confirms", () => {
+		const { url } = createTempDbUrl()
+		const fetchImpl = (async () => new Response("", { status: 202 })) as typeof fetch
+		return Effect.gen(function* () {
+			const alerts = yield* AlertsService
+			const destination = yield* alerts.createDestination(
+				asOrgId("org_pd_ok"),
+				asUserId("user_pd_ok"),
+				adminRoles,
+				{ type: "pagerduty", name: "Paging", enabled: true, integrationKey: VALID_PD_KEY },
+			)
+			expect(destination.type).toBe("pagerduty")
+		}).pipe(
+			Effect.provide(
+				makeLayer(url, makeWarehouseStub({ tracesAggregateRows: emptyWarehouseRows }), {
+					fetch: fetchImpl,
+				}),
+			),
+		)
+	})
+
+	itEffect("creates the destination when PagerDuty is unreachable (fails open)", () => {
+		const { url } = createTempDbUrl()
+		const fetchImpl = (async () => {
+			throw new Error("network down")
+		}) as typeof fetch
+		return Effect.gen(function* () {
+			const alerts = yield* AlertsService
+			const destination = yield* alerts.createDestination(
+				asOrgId("org_pd_open"),
+				asUserId("user_pd_open"),
+				adminRoles,
+				{ type: "pagerduty", name: "Paging", enabled: true, integrationKey: VALID_PD_KEY },
+			)
+			expect(destination.type).toBe("pagerduty")
+		}).pipe(
+			Effect.provide(
+				makeLayer(url, makeWarehouseStub({ tracesAggregateRows: emptyWarehouseRows }), {
+					fetch: fetchImpl,
+				}),
+			),
+		)
+	})
+
+	itEffect("skips PagerDuty validation on update when the key is left blank", () => {
+		const { url } = createTempDbUrl()
+		let calls = 0
+		const fetchImpl = (async () => {
+			calls += 1
+			return new Response("", { status: 202 })
+		}) as typeof fetch
+		return Effect.gen(function* () {
+			const alerts = yield* AlertsService
+			const orgId = asOrgId("org_pd_update")
+			const userId = asUserId("user_pd_update")
+			const created = yield* alerts.createDestination(orgId, userId, adminRoles, {
+				type: "pagerduty",
+				name: "Paging",
+				enabled: true,
+				integrationKey: VALID_PD_KEY,
+			})
+			expect(calls).toBe(1) // create validated once
+
+			const updated = yield* alerts.updateDestination(orgId, userId, adminRoles, created.id, {
+				type: "pagerduty",
+				name: "Paging renamed",
+			})
+			expect(updated.name).toBe("Paging renamed")
+			expect(calls).toBe(1) // no re-validation when the key is omitted
+		}).pipe(
+			Effect.provide(
+				makeLayer(url, makeWarehouseStub({ tracesAggregateRows: emptyWarehouseRows }), {
+					fetch: fetchImpl,
+				}),
+			),
+		)
+	})
+
 	itEffect("opens per-service incidents for grouped logs query alerts", () => {
 		const { url } = createTempDbUrl()
 		const clock = makeManualClock()

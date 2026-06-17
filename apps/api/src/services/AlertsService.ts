@@ -110,6 +110,8 @@ import {
 	formatSignalLabel,
 	formatEventTypeLabel,
 	formatSignalMetric,
+	PAGERDUTY_ROUTING_KEY_PATTERN,
+	verifyPagerDutyRoutingKey,
 } from "./AlertDeliveryDispatch"
 import { Env } from "../lib/Env"
 import { describeCause } from "./ErrorsService"
@@ -1753,6 +1755,33 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
 			return new AlertDestinationsListResponse({ destinations })
 		})
 
+		// Reject a PagerDuty routing key that can't possibly work before we persist
+		// it, so a wrong key surfaces at connect time instead of at first page.
+		// Format check is instant; the live check enqueues a no-op resolve event and
+		// only rejects on a definitive "invalid key" — it fails open on outages.
+		const validatePagerDutyKey = Effect.fn("AlertsService.validatePagerDutyKey")(function* (
+			integrationKey: string,
+		) {
+			if (!PAGERDUTY_ROUTING_KEY_PATTERN.test(integrationKey)) {
+				return yield* Effect.fail(
+					makeValidationError(
+						"PagerDuty integration key must be a 32-character Events API v2 routing key — a REST API token won't work.",
+					),
+				)
+			}
+			const result = yield* verifyPagerDutyRoutingKey(
+				integrationKey,
+				runtime.fetch,
+				deliveryTimeoutMs(),
+				`maple-keycheck-${makeUuid()}`,
+			)
+			if (result.status === "invalid") {
+				return yield* Effect.fail(
+					makeValidationError(`PagerDuty rejected this routing key: ${result.reason}`),
+				)
+			}
+		})
+
 		const createDestination = Effect.fn("AlertsService.createDestination")(function* (
 			orgId: OrgId,
 			userId: UserId,
@@ -1798,6 +1827,9 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
 								),
 							)
 					: buildSecretConfig(request)
+			if (secretConfig.type === "pagerduty") {
+				yield* validatePagerDutyKey(secretConfig.integrationKey)
+			}
 			const encryptedSecret = yield* encryptSecret(JSON.stringify(secretConfig), encryptionKey)
 			const timestamp = yield* now
 
@@ -2027,6 +2059,14 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
 				}),
 			)
 
+			// Validate only a newly-supplied key; a blank key keeps the stored one.
+			if (
+				request.type === "pagerduty" &&
+				normalizeOptionalString(request.integrationKey) != null &&
+				nextSecretConfig.type === "pagerduty"
+			) {
+				yield* validatePagerDutyKey(nextSecretConfig.integrationKey)
+			}
 			const encryptedSecret = yield* encryptSecret(JSON.stringify(nextSecretConfig), encryptionKey)
 			const timestamp = yield* now
 			const nextName = normalizeOptionalString(request.name) ?? existing.name
