@@ -1,5 +1,15 @@
+// Request auth, ported from apps/chat-agent/src/lib/auth.ts.
+//
+// Two modes, selected by MAPLE_AUTH_MODE:
+//   - "clerk":       verify a Clerk session token via @clerk/backend
+//   - else (default): self-hosted HS256 session token signed with MAPLE_ROOT_PASSWORD
+//
+// The token is read from the Authorization/x-maple-auth header OR a `?token=`
+// query param — the query fallback matters for the agent event stream, a GET
+// (EventSource) that can't set headers.
+
 import { createClerkClient } from "@clerk/backend"
-import type { Env } from "./types"
+import type { ChatFlueEnv } from "./env.ts"
 
 export interface VerifiedRequest {
 	orgId: string
@@ -9,10 +19,10 @@ export interface VerifiedRequest {
 const TOKEN_QUERY_PARAM = "token"
 const ALLOWED_TOKEN_HEADERS = ["authorization", "x-maple-auth"]
 
-const getAuthMode = (env: Env): "clerk" | "self_hosted" =>
+const getAuthMode = (env: ChatFlueEnv): "clerk" | "self_hosted" =>
 	env.MAPLE_AUTH_MODE?.toLowerCase() === "clerk" ? "clerk" : "self_hosted"
 
-const extractBearerToken = (request: Request): string | undefined => {
+export const extractBearerToken = (request: Request): string | undefined => {
 	for (const headerName of ALLOWED_TOKEN_HEADERS) {
 		const header = request.headers.get(headerName)
 		if (!header) continue
@@ -46,7 +56,7 @@ const constantTimeEqual = (a: Uint8Array, b: Uint8Array): boolean => {
 	return mismatch === 0
 }
 
-const verifyHs256 = async (
+export const verifyHs256 = async (
 	token: string,
 	secret: string,
 ): Promise<{ sub: string; org_id: string } | undefined> => {
@@ -93,7 +103,7 @@ const verifyHs256 = async (
 }
 
 let cachedClerk: ReturnType<typeof createClerkClient> | undefined
-const getClerk = (env: Env) => {
+const getClerk = (env: ChatFlueEnv) => {
 	if (!env.CLERK_SECRET_KEY) return undefined
 	if (cachedClerk) return cachedClerk
 	cachedClerk = createClerkClient({
@@ -104,7 +114,10 @@ const getClerk = (env: Env) => {
 	return cachedClerk
 }
 
-export const verifyRequest = async (request: Request, env: Env): Promise<VerifiedRequest | undefined> => {
+export const verifyRequest = async (
+	request: Request,
+	env: ChatFlueEnv,
+): Promise<VerifiedRequest | undefined> => {
 	const token = extractBearerToken(request)
 	if (!token) return undefined
 
@@ -131,18 +144,17 @@ export const verifyRequest = async (request: Request, env: Env): Promise<Verifie
 	return { orgId: payload.org_id, userId: payload.sub }
 }
 
-export const parseDoNameFromUrl = (url: URL): string | undefined => {
-	const match = url.pathname.match(/^\/agents\/[^/]+\/([^/]+)/)
+/**
+ * Extract the agent instance id from a `/agents/<name>/<id>` request path.
+ * Returns `undefined` for non-agent paths. The id is the org-scoped
+ * `"<orgId>:<tabId>"` the web client addresses.
+ */
+export const instanceIdFromAgentPath = (pathname: string): string | undefined => {
+	const match = pathname.match(/^\/agents\/[^/]+\/([^/]+)/)
 	if (!match || !match[1]) return undefined
 	try {
 		return decodeURIComponent(match[1])
 	} catch {
 		return match[1]
 	}
-}
-
-export const orgIdFromDoName = (name: string): string | undefined => {
-	const idx = name.indexOf(":")
-	if (idx <= 0) return undefined
-	return name.slice(0, idx)
 }

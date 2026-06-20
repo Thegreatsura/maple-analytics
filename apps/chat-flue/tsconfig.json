@@ -3,7 +3,6 @@
 		"target": "ESNext",
 		"module": "ESNext",
 		"moduleResolution": "bundler",
-		"jsx": "react-jsx",
 		"baseUrl": ".",
 		"ignoreDeprecations": "6.0",
 		"lib": ["ESNext"],
@@ -17,16 +16,8 @@
 		"resolveJsonModule": true,
 		"isolatedModules": true,
 		"allowImportingTsExtensions": true,
-		"noEmit": true,
-		"paths": {
-			"@/mcp/*": ["../api/src/mcp/*"],
-			"@/services/*": ["../api/src/services/*"],
-			"@/lib/*": ["../api/src/lib/*"],
-			"@/dashboard-templates": ["../api/src/dashboard-templates/index.ts"],
-			"@/dashboard-templates/*": ["../api/src/dashboard-templates/*"],
-			"@/*": ["./src/*"]
-		}
+		"noEmit": true
 	},
-	"include": ["src"],
-	"exclude": ["node_modules"]
+	"include": ["src", "flue.config.ts"],
+	"exclude": ["node_modules", "dist"]
 }
