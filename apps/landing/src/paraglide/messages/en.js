@@ -695,7 +695,7 @@ export const mcp_lede = () => `Maple ships with a first-class MCP server. Any co
  * @returns {string}
  */
 /* @__NO_SIDE_EFFECTS__ */
-export const sessions_eyebrow = () => `06 · Sessions`
+export const sessions_eyebrow = () => `06 · Browser Sessions`
 
 
 /**
@@ -2808,14 +2808,6 @@ export const pricing_traces = () => `Traces`
  */
 /* @__NO_SIDE_EFFECTS__ */
 export const pricing_metrics = () => `Metrics`
-
-
-/**
- * 
- * @returns {string}
- */
-/* @__NO_SIDE_EFFECTS__ */
-export const pricing_sessions = () => `Session replays`
 
 
 /**

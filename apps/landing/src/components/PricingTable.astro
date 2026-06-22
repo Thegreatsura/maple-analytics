@@ -11,12 +11,8 @@ const DATA_FEATURE_LABELS: Record<string, string> = {
     logs: m.pricing_logs(),
     traces: m.pricing_traces(),
     metrics: m.pricing_metrics(),
-    browser_sessions: m.pricing_sessions(),
+    browser_sessions: m.nav_browser_sessions(),
 }
-
-// Feature ids billed by session count rather than ingested GB. Drives the
-// value/overage unit so sessions read "5,000 / then $3 per 1,000" not "GB".
-const SESSION_FEATURE_IDS = new Set<string>(["browser_sessions"])
 
 // Canonical row order so the plan card matches the Enterprise card (Autumn can
 // return items in any order).
@@ -95,31 +91,27 @@ try {
 
             const dataFeatures = product.items
                 .filter((item) => item.featureId && !HIDDEN_FEATURE_IDS.has(item.featureId))
-                .map((item) => {
-                    const isSessions = !!item.featureId && SESSION_FEATURE_IDS.has(item.featureId)
-                    return {
-                        featureId: item.featureId,
-                        label:
-                            (item.featureId ? DATA_FEATURE_LABELS[item.featureId] : undefined) ??
-                            item.feature?.name ??
-                            item.featureId ??
-                            "",
-                        value: item.unlimited
-                            ? "Unlimited"
-                            : isSessions
-                              ? Number(item.included ?? 0).toLocaleString("en-US")
-                              : `${Number(item.included ?? 0)} GB`,
-                        detail: isSessions
-                            ? item.price?.amount != null
-                              ? `then $${item.price.amount} per 1,000`
-                              : undefined
-                            : item.price?.display?.secondaryText
-                              ? item.price.display.secondaryText.replace(/\bper\s+(?:[\d,]+\s+)?(?:logs?|traces?|metrics?)\b/i, "per GB")
-                              : item.price?.amount != null
-                                ? `then $${item.price.amount} per GB`
-                                : undefined,
-                    }
-                })
+                .map((item) => ({
+                    featureId: item.featureId,
+                    label:
+                        (item.featureId ? DATA_FEATURE_LABELS[item.featureId] : undefined) ??
+                        item.feature?.name ??
+                        item.featureId ??
+                        "",
+                    // browser_sessions is metered by count, not bytes — everything else is GB.
+                    value: item.unlimited
+                        ? "Unlimited"
+                        : item.featureId === "browser_sessions"
+                          ? `${Number(item.included ?? 0).toLocaleString()} sessions`
+                          : `${Number(item.included ?? 0)} GB`,
+                    detail: item.price?.display?.secondaryText
+                        ? item.price.display.secondaryText.replace(/\bper\s+(?:[\d,]+\s+)?(?:logs?|traces?|metrics?)\b/i, "per GB")
+                        : item.price?.amount != null
+                          ? item.featureId === "browser_sessions"
+                            ? `then $${item.price.amount} per 1,000 sessions`
+                            : `then $${item.price.amount} per GB`
+                          : undefined,
+                }))
                 .sort((a, b) => dataFeatureRank(a.featureId) - dataFeatureRank(b.featureId))
 
             const platformFeatures = PLAN_FEATURES[slug] ?? PLAN_FEATURES["startup"] ?? []
@@ -161,7 +153,6 @@ if (plans.length === 0) {
                 { featureId: "logs", label: m.pricing_logs(), value: "100 GB", detail: "then $0.25 per GB" },
                 { featureId: "traces", label: m.pricing_traces(), value: "100 GB", detail: "then $0.25 per GB" },
                 { featureId: "metrics", label: m.pricing_metrics(), value: "100 GB", detail: "then $0.25 per GB" },
-                { featureId: "browser_sessions", label: m.pricing_sessions(), value: "5,000", detail: "then $3 per 1,000" },
             ],
             platformFeatures: PLAN_FEATURES["startup"]!,
             ctaLabel: m.pricing_start_trial({ duration: "14" }),
@@ -187,7 +178,7 @@ const enterprisePlan: PlanCard = {
         { featureId: "logs", label: m.pricing_logs(), value: m.pricing_custom() },
         { featureId: "traces", label: m.pricing_traces(), value: m.pricing_custom() },
         { featureId: "metrics", label: m.pricing_metrics(), value: m.pricing_custom() },
-        { featureId: "browser_sessions", label: m.pricing_sessions(), value: m.pricing_custom() },
+        { featureId: "browser_sessions", label: m.nav_browser_sessions(), value: m.pricing_custom() },
     ],
     platformFeatures: [
         m.pricing_custom_retention(),
@@ -251,16 +242,16 @@ const maxWidthClass = cards.length >= 3 ? "max-w-6xl" : "max-w-4xl"
                                     <div class="flex items-start justify-between gap-3">
                                         <div class="flex items-center gap-2 pt-0.5">
                                             {feature.featureId === "logs" && (
-                                                <svg class="w-4 h-4 text-fg-muted shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+                                                <svg class="w-4 h-4 text-fg-muted shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M8 18H16"/><path d="M8 14L11 14"/><path d="M12 4V10H8"/><path d="M4 20L4 10"/><path d="M20 20L20 4"/><path d="M12 2L18 2"/><path d="M6 22L18 22"/><path d="M6 8H6.01"/><path d="M8 6H8.01"/><path d="M10 4H10.01"/></svg>
                                             )}
                                             {feature.featureId === "traces" && (
-                                                <svg class="w-4 h-4 text-fg-muted shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                                                <svg class="w-4 h-4 text-fg-muted shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M6 18.01L6 18"/><path d="M18 7.01001L18 7.00001"/><path d="M8 20.01L8 20"/><path d="M2 16L4 16"/><path d="M14 9L16 9"/><path d="M20 5L22 5"/><path d="M10 16L10 18"/><path d="M12 11L12 14"/></svg>
                                             )}
                                             {feature.featureId === "metrics" && (
-                                                <svg class="w-4 h-4 text-fg-muted shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 5 5-6"/></svg>
+                                                <svg class="w-4 h-4 text-fg-muted shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M2 15.01V15"/><path d="M4 13.01V13"/><path d="M6 11.01V11"/><path d="M8 9.01V9"/><path d="M10 11.01V11"/><path d="M12 13.01V13"/><path d="M14 15.01V15"/><path d="M16 13.01V13"/><path d="M18 11.01V11"/><path d="M20 9.01V9"/><path d="M22 7.01V7"/></svg>
                                             )}
                                             {feature.featureId === "browser_sessions" && (
-                                                <svg class="w-4 h-4 text-fg-muted shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/><path d="m10 8 5 3-5 3Z"/></svg>
+                                                <svg class="w-4 h-4 text-fg-muted shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M4 6L4 6.01"/><path d="M6 4L6 4.01"/><path d="M20.01 6L20 6"/><path d="M18.01 4L18 4"/><path d="M20.01 18L20 18"/><path d="M18.01 20L18 20"/><path d="M6.01001 20L6.00001 20"/><path d="M4.01001 18L4.00001 18"/><path d="M2 8L2 16"/><path d="M22 14L22 16"/><path d="M8 2L16 2"/><path d="M8 22L16 22"/><path d="M22 8V4"/><path d="M17 12.01V12"/><path d="M14 10H15"/><path d="M14 14H15"/><path d="M12 8H9L9 16L12 16"/></svg>
                                             )}
                                             <span class="text-sm text-fg">{feature.label}</span>
                                         </div>
@@ -281,7 +272,7 @@ const maxWidthClass = cards.length >= 3 ? "max-w-6xl" : "max-w-4xl"
                             <div class="mt-4 space-y-3">
                                 {plan.platformFeatures.map((label) => (
                                     <div class="flex items-center gap-2.5">
-                                        <svg class="w-4 h-4 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+                                        <svg class="w-4 h-4 text-accent shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M8 2L16 2"/><path d="M8 22L16 22"/><path d="M2 8L2 16"/><path d="M22 8L22 16"/><path d="M6 4L6 4.01"/><path d="M4 6L4 6.01"/><path d="M18 4L18 4.01"/><path d="M20 6L20 6.01"/><path d="M6 20L6 20.01"/><path d="M4 18L4 18.01"/><path d="M18 20L18 20.01"/><path d="M20 18L20 18.01"/><path d="M8 12L11 15L16 9"/></svg>
                                         <span class="text-sm text-fg">{label}</span>
                                     </div>
                                 ))}

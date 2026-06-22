@@ -235,7 +235,6 @@
 	"pricing_logs": "\u30ed\u30b0",
 	"pricing_traces": "\u30c8\u30ec\u30fc\u30b9",
 	"pricing_metrics": "\u30e1\u30c8\u30ea\u30af\u30b9",
-	"pricing_sessions": "\u30bb\u30c3\u30b7\u30e7\u30f3\u30ea\u30d7\u30ec\u30a4",
 	"pricing_start_trial": "{duration}\u65e5\u9593\u306e\u7121\u6599\u30c8\u30e9\u30a4\u30a2\u30eb\u3092\u958b\u59cb",
 
 	"faq_badge": "FAQ",
@@ -510,7 +509,7 @@
 	"mcp_title": "Your AI agent reads it too.",
 	"mcp_lede": "Maple ships with a first-class MCP server. Any compatible agent can list services, search traces, find errors, propose fixes, open PRs. The transcript on the right is real.",
 
-	"sessions_eyebrow": "06 \u00b7 Sessions",
+	"sessions_eyebrow": "06 \u00b7 Browser Sessions",
 	"sessions_title": "Watch what the user did.",
 	"sessions_lede": "Session replay with every click, route, console line, and failed request captured. Replay and your spans share one session id \u2014 so you jump from the moment it broke straight to the trace behind it.",
 
