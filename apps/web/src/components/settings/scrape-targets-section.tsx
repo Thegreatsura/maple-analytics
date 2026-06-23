@@ -455,8 +455,11 @@ export function ScrapeTargetsSection({
 						<Skeleton className="h-[60px] w-full" />
 					</div>
 				) : !Result.isSuccess(listResult) ? (
-					<div className="text-muted-foreground py-8 text-center text-sm">
+					<div className="text-muted-foreground flex flex-col items-center gap-3 py-8 text-center text-sm">
 						Failed to load scrape targets.
+						<Button variant="outline" size="sm" onClick={() => refreshTargets()}>
+							Try again
+						</Button>
 					</div>
 				) : targets.length === 0 ? (
 					<Empty className="py-12">
@@ -478,7 +481,7 @@ export function ScrapeTargetsSection({
 					</Empty>
 				) : (
 					<div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
-						<div className="divide-y overflow-hidden rounded-lg border bg-card/40">
+						<div className="divide-y overflow-hidden rounded-lg border bg-card">
 							{targets.map((target) => (
 								<ScrapeTargetRow
 									key={target.id}
@@ -506,7 +509,7 @@ export function ScrapeTargetsSection({
 								onDelete={setDeleteConfirmTarget}
 							/>
 						) : (
-							<div className="hidden rounded-lg border bg-card/40 p-4 lg:block">
+							<div className="hidden rounded-lg border bg-card p-4 lg:block">
 								<div className="text-muted-foreground flex h-full min-h-[260px] flex-col items-center justify-center gap-2 text-center text-xs">
 									<CircleInfoIcon size={18} />
 									<span>Click a target to inspect scheduled checks.</span>
@@ -755,12 +758,12 @@ export function ScrapeTargetsSection({
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction
+							variant="destructive"
 							onClick={() => {
 								if (deleteConfirmTarget) {
 									void handleDelete(deleteConfirmTarget.id)
 								}
 							}}
-							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 						>
 							Delete
 						</AlertDialogAction>
@@ -954,7 +957,7 @@ function ScrapeTargetDetails({
 	const labels = labelEntries(target.labelsJson)
 
 	return (
-		<aside className="rounded-lg border bg-card/40">
+		<aside className="rounded-lg border bg-card">
 			<div className="space-y-3 border-b p-4">
 				<div className="flex items-start justify-between gap-3">
 					<div className="min-w-0">

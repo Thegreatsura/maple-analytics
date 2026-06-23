@@ -328,8 +328,11 @@ export function CloudflareLogpushSection() {
 						<Skeleton className="h-[60px] w-full" />
 					</div>
 				) : !Result.isSuccess(listResult) ? (
-					<div className="text-muted-foreground py-8 text-center text-sm">
+					<div className="text-muted-foreground flex flex-col items-center gap-3 py-8 text-center text-sm">
 						Failed to load Cloudflare connectors.
+						<Button variant="outline" size="sm" onClick={() => refreshConnectors()}>
+							Try again
+						</Button>
 					</div>
 				) : connectors.length === 0 ? (
 					<Empty className="py-12">
@@ -349,9 +352,9 @@ export function CloudflareLogpushSection() {
 						</Button>
 					</Empty>
 				) : (
-					<div className="divide-y">
+					<div className="divide-y overflow-hidden rounded-lg border bg-card">
 						{connectors.map((connector) => (
-							<div key={connector.id} className="flex items-center gap-3 px-1 py-3">
+							<div key={connector.id} className="flex items-center gap-3 px-4 py-3">
 								<div
 									className={cn(
 										"size-2 shrink-0 rounded-full",

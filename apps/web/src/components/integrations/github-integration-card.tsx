@@ -36,9 +36,7 @@ import {
 } from "@/components/icons"
 import { Result, useAtomRefresh, useAtomSet, useAtomValue } from "@/lib/effect-atom"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
-
-/** GitHub's brand black — third-party color, not a design token. */
-export const GITHUB_ACCENT = "#181717"
+import { GITHUB_ACCENT, IntegrationIconPlate } from "./integration-catalog"
 
 /** How often to re-fetch status while the connect flow / background sync is active. */
 const POLL_INTERVAL_MS = 3_000
@@ -291,11 +289,11 @@ export function GithubIntegrationCard() {
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction
+							variant="destructive"
 							onClick={() => {
 								setConfirmingDisconnect(false)
 								void handleDisconnect()
 							}}
-							className="bg-destructive text-white hover:bg-destructive/90"
 						>
 							Disconnect
 						</AlertDialogAction>
@@ -322,10 +320,10 @@ export function GithubIntegrationCard() {
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction
+							variant="destructive"
 							onClick={() => {
 								if (repoToDelete) void handleDeleteRepository(repoToDelete)
 							}}
-							className="bg-destructive text-white hover:bg-destructive/90"
 						>
 							Delete
 						</AlertDialogAction>
@@ -357,22 +355,13 @@ function LoadingState() {
 function NotConnectedState({ busy, onConnect }: { busy: boolean; onConnect: () => void }) {
 	return (
 		<div className="flex flex-col items-center gap-5 rounded-lg border border-border/60 bg-card px-6 py-10 text-center">
-			<span
-				className="relative inline-flex size-14 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-card"
-				style={{ ["--tile-accent" as string]: GITHUB_ACCENT }}
-				aria-hidden
-			>
-				<span
-					className="absolute inset-0 rounded-xl opacity-70"
-					style={{
-						background:
-							"radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--tile-accent) 16%, transparent), transparent 70%)",
-					}}
-				/>
-				<span className="relative text-foreground">
-					<GithubIcon size={26} />
-				</span>
-			</span>
+			<IntegrationIconPlate
+				icon={GithubIcon}
+				accent={GITHUB_ACCENT}
+				iconClassName="text-foreground"
+				size={26}
+				plateClassName="size-14 rounded-xl"
+			/>
 
 			<div className="flex max-w-md flex-col gap-1.5">
 				<h3 className="text-base font-semibold">Connect your GitHub organization</h3>
@@ -436,17 +425,18 @@ function DeactivatedState({
 
 	return (
 		<div className="flex flex-col items-center gap-5 rounded-lg border border-warning/40 bg-warning/5 px-6 py-10 text-center">
-			<span
-				className="relative inline-flex size-14 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-card"
-				aria-hidden
-			>
-				<span className="relative text-foreground">
-					<GithubIcon size={26} />
-				</span>
-				<span className="absolute -bottom-1.5 -right-1.5 inline-flex items-center justify-center rounded-full bg-card">
-					<CircleWarningIcon size={18} className="text-warning-foreground" />
-				</span>
-			</span>
+			<IntegrationIconPlate
+				icon={GithubIcon}
+				accent={GITHUB_ACCENT}
+				iconClassName="text-foreground"
+				size={26}
+				plateClassName="size-14 rounded-xl"
+				overlay={
+					<span className="absolute -bottom-1.5 -right-1.5 inline-flex items-center justify-center rounded-full bg-card">
+						<CircleWarningIcon size={18} className="text-warning-foreground" />
+					</span>
+				}
+			/>
 
 			<div className="flex max-w-md flex-col gap-1.5">
 				<h3 className="text-base font-semibold">
@@ -528,7 +518,7 @@ function ConnectedView({
 			<div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 bg-card px-4 py-3">
 				<div className="flex items-center gap-3">
 					<span className="relative flex size-2.5 shrink-0" aria-hidden>
-						<span className="absolute inline-flex size-full animate-ping rounded-full bg-success/60" />
+						<span className="absolute inline-flex size-full rounded-full bg-success/60 motion-safe:animate-ping" />
 						<span className="relative inline-flex size-2.5 rounded-full bg-success" />
 					</span>
 					<div className="leading-tight">
