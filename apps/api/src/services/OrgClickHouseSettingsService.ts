@@ -27,6 +27,7 @@ import {
 	type TableDiffEntry,
 } from "@maple/domain/clickhouse"
 import { orgClickHouseSchemaApplyRuns, orgClickHouseSettings } from "@maple/db"
+import { EdgeCacheService } from "@maple/query-engine/caching"
 import { eq } from "drizzle-orm"
 import { WorkerEnvironment } from "@maple/effect-cloudflare/worker-environment"
 import { Clock, Context, Duration, Effect, Layer, Option, Redacted, Ref, Schedule, Schema } from "effect"
@@ -59,6 +60,43 @@ type RuntimeBackendConfig = {
 }
 
 type ActiveRow = typeof orgClickHouseSettings.$inferSelect
+
+// Edge-cache bucket + TTL for the per-org runtime ClickHouse config lookup.
+// `resolveRuntimeConfig` runs on the hot path of every warehouse SQL execution
+// (and once per missing bucket in the cache fan-out), so a 5-min cross-request
+// entry removes the repeated Postgres round-trip.
+const ORG_CH_CONFIG_BUCKET = "org-clickhouse-config"
+const ORG_CH_CONFIG_TTL_SECONDS = 300
+
+/**
+ * JSON-safe projection of the settings row cached cross-request by
+ * `resolveRuntimeConfig`. Holds the ENCRYPTED password material
+ * (ciphertext/iv/tag) — never the plaintext — so decryption still happens
+ * per-request after the cache, keeping credentials out of Workers KV. `null`
+ * encodes "no BYO ClickHouse row" (the common managed-org case), cached too so
+ * managed orgs stop paying the Postgres round-trip just to learn "use Tinybird".
+ */
+const CachedChSettings = Schema.Struct({
+	schemaVersion: Schema.NullOr(Schema.String),
+	chUrl: Schema.String,
+	chUser: Schema.String,
+	chDatabase: Schema.String,
+	chPasswordCiphertext: Schema.NullOr(Schema.String),
+	chPasswordIv: Schema.NullOr(Schema.String),
+	chPasswordTag: Schema.NullOr(Schema.String),
+})
+type CachedChSettings = typeof CachedChSettings.Type
+const CachedChSettingsOrNull = Schema.NullOr(CachedChSettings)
+
+const toCachedChSettings = (row: ActiveRow): CachedChSettings => ({
+	schemaVersion: row.schemaVersion,
+	chUrl: row.chUrl,
+	chUser: row.chUser,
+	chDatabase: row.chDatabase,
+	chPasswordCiphertext: row.chPasswordCiphertext,
+	chPasswordIv: row.chPasswordIv,
+	chPasswordTag: row.chPasswordTag,
+})
 
 const ROOT_ROLE = Schema.decodeUnknownSync(RoleName)("root")
 const ORG_ADMIN_ROLE = Schema.decodeUnknownSync(RoleName)("org:admin")
@@ -651,6 +689,19 @@ export class OrgClickHouseSettingsService extends Context.Service<
 			return Option.fromNullishOr(rows[0])
 		})
 
+		// Bust the cross-request edge entry for an org's runtime config after any
+		// write to its settings row, so the next warehouse query re-resolves rather
+		// than serving the ≤5-min-stale value. The edge cache is optional (absent
+		// in tests / non-worker contexts) — a no-op when unavailable.
+		const invalidateRuntimeConfigCache = (orgId: OrgId): Effect.Effect<void> =>
+			Effect.serviceOption(EdgeCacheService).pipe(
+				Effect.flatMap((cache) =>
+					Option.isNone(cache)
+						? Effect.void
+						: cache.value.invalidate({ bucket: ORG_CH_CONFIG_BUCKET, key: orgId }),
+				),
+			)
+
 		const requireActiveRow = Effect.fn("OrgClickHouseSettingsService.requireActiveRow")(function* (
 			orgId: OrgId,
 		) {
@@ -664,7 +715,7 @@ export class OrgClickHouseSettingsService extends Context.Service<
 		})
 
 		const decryptStoredPassword = (
-			row: ActiveRow,
+			row: Pick<ActiveRow, "chPasswordCiphertext" | "chPasswordIv" | "chPasswordTag">,
 		): Effect.Effect<string, OrgClickHouseSettingsEncryptionError> =>
 			row.chPasswordCiphertext !== null && row.chPasswordIv !== null && row.chPasswordTag !== null
 				? decryptToken(
@@ -797,6 +848,7 @@ export class OrgClickHouseSettingsService extends Context.Service<
 				)
 				.pipe(Effect.mapError(toPersistenceError))
 
+			yield* invalidateRuntimeConfigCache(orgId)
 			const refreshed = yield* selectActiveRow(orgId)
 			return toResponse(Option.getOrUndefined(refreshed))
 		})
@@ -812,6 +864,7 @@ export class OrgClickHouseSettingsService extends Context.Service<
 					db.delete(orgClickHouseSettings).where(eq(orgClickHouseSettings.orgId, orgId)),
 				)
 				.pipe(Effect.mapError(toPersistenceError))
+			yield* invalidateRuntimeConfigCache(orgId)
 			return new OrgClickHouseSettingsDeleteResponse({ configured: false })
 		})
 
@@ -860,6 +913,7 @@ export class OrgClickHouseSettingsService extends Context.Service<
 							.where(eq(orgClickHouseSettings.orgId, orgId)),
 					)
 					.pipe(Effect.mapError(toPersistenceError))
+				yield* invalidateRuntimeConfigCache(orgId)
 				appliedSchemaVersion = clickHouseSchemaVersion
 				yield* Effect.annotateCurrentSpan("clickhouse.schemaVersion.healed", true)
 				yield* Effect.logInfo("Self-healed ClickHouse schema_version to current version").pipe(
@@ -1023,8 +1077,37 @@ export class OrgClickHouseSettingsService extends Context.Service<
 
 		const resolveRuntimeConfig = Effect.fn("OrgClickHouseSettingsService.resolveRuntimeConfig")(
 			function* (orgId: OrgId) {
-				const row = yield* selectActiveRow(orgId)
-				if (Option.isNone(row)) {
+				// `selectActiveRow` is a Postgres round-trip on the hot path of EVERY
+				// warehouse SQL execution, and the bucket-cache fan-out re-runs it once
+				// per missing range. Wrap it in the shared edge cache: its in-flight
+				// single-flight collapses the concurrent fan-out into one lookup, and the
+				// 5-min KV entry removes the cold round-trip on repeat loads. We cache the
+				// ENCRYPTED row projection (or `null`) and decrypt per-request below, so
+				// plaintext credentials never enter the cache.
+				const edgeCache = yield* Effect.serviceOption(EdgeCacheService)
+				const lookup = selectActiveRow(orgId).pipe(
+					Effect.map((row) => (Option.isSome(row) ? toCachedChSettings(row.value) : null)),
+				)
+				const cached = Option.isNone(edgeCache)
+					? yield* lookup
+					: yield* edgeCache.value
+							.getOrCompute(
+								{
+									bucket: ORG_CH_CONFIG_BUCKET,
+									key: orgId,
+									ttlSeconds: ORG_CH_CONFIG_TTL_SECONDS,
+									schema: CachedChSettingsOrNull,
+								},
+								lookup,
+							)
+							.pipe(
+								Effect.tap((result) =>
+									Effect.annotateCurrentSpan("clickhouse.config.cacheHit", result.hit),
+								),
+								Effect.map((result) => result.value),
+							)
+
+				if (cached === null) {
 					return Option.none<RuntimeBackendConfig>()
 				}
 				// Reads always use the org's ClickHouse when configured — we must NOT fall
@@ -1036,15 +1119,15 @@ export class OrgClickHouseSettingsService extends Context.Service<
 				// in sync.
 				yield* Effect.annotateCurrentSpan(
 					"clickhouse.schemaDrift",
-					row.value.schemaVersion !== clickHouseSchemaVersion,
+					cached.schemaVersion !== clickHouseSchemaVersion,
 				)
-				const password = yield* decryptStoredPassword(row.value)
+				const password = yield* decryptStoredPassword(cached)
 				return Option.some<RuntimeBackendConfig>({
 					backend: "clickhouse",
-					url: row.value.chUrl,
-					user: row.value.chUser,
+					url: cached.chUrl,
+					user: cached.chUser,
 					password,
-					database: row.value.chDatabase,
+					database: cached.chDatabase,
 				})
 			},
 		)
