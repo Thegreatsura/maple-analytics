@@ -22,7 +22,7 @@ import {
 import { mergeExactThroughput } from "@/api/warehouse/custom-charts"
 import type { ServiceDetailTimeSeriesPoint } from "@/api/warehouse/services"
 import { detectReleaseMarkers } from "@/lib/services/release-markers"
-import { CommitShaHoverCard } from "@/components/vcs/commit-sha-hover-card"
+import { CommitDeployMarker } from "@/components/vcs/commit-marker"
 import { applyTimeRangeSearch } from "@/components/time-range-picker/search"
 import { PageRefreshProvider } from "@/components/time-range-picker/page-refresh-context"
 import { TimeRangeHeaderControls } from "@/components/time-range-picker/time-range-header-controls"
@@ -294,26 +294,20 @@ function OverviewTab({ serviceName, effectiveStartTime, effectiveEndTime, enviro
 		return detectReleaseMarkers(timeline).map((m) => ({
 			x: m.bucket,
 			label: m.label,
-			// Full SHA so the marker's hover card can resolve the commit; `label`
-			// stays the short form rendered on the flag.
+			// Full SHA so the marker resolves the commit (for the flag's message and
+			// the hover card); `label` is the short-SHA fallback shown until it does.
 			sha: m.commitSha,
 			color: "var(--muted-foreground)",
 			strokeDasharray: "6 4",
 		}))
 	}, [releasesResult])
 
-	// A deploy marker's flag is a commit hover card: hovering it resolves the
-	// release's commit (when the repo is connected/synced) and otherwise falls back
-	// to the short SHA as plain text. Shared across all four synced charts.
+	// Each deploy marker is a full-line hover hitbox with a flag at the top: the flag
+	// shows the release commit's message (resolved when the repo is connected/synced,
+	// falling back to the short SHA), and hovering the line previews the full commit.
+	// Shared across all four synced charts.
 	const renderReferenceMarker = useCallback(
-		(line: ChartReferenceLine) => (
-			<CommitShaHoverCard
-				sha={line.sha ?? ""}
-				className="rounded-full border border-border/60 bg-card/95 px-1.5 py-0.5 font-mono text-[10px] leading-none text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
-			>
-				{line.label}
-			</CommitShaHoverCard>
-		),
+		(line: ChartReferenceLine) => <CommitDeployMarker line={line} />,
 		[],
 	)
 
