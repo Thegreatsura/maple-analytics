@@ -10,7 +10,7 @@ interface MeterRowProps {
 	icon: IconComponent
 	label: string
 	used: number
-	/** Use `Infinity` for track-only meters with no plan cap; renders as "Unlimited". */
+	/** Plan cap for this meter. Pass `Infinity` for an uncapped meter; renders as "Unlimited". */
 	limit: number
 	formatValue: (value: number) => string
 }
@@ -89,7 +89,7 @@ export function UsageMeters({ usage, limits }: UsageMetersProps) {
 				icon={ComputerIcon}
 				label="Browser Sessions"
 				used={usage.browserSessions}
-				limit={Infinity}
+				limit={limits.browserSessions}
 				formatValue={formatCount}
 			/>
 		</div>

@@ -2,7 +2,7 @@ export interface AggregatedUsage {
 	logsGB: number
 	tracesGB: number
 	metricsGB: number
-	/** Browser session count for the current billing cycle (track-only — no plan limit). */
+	/** Browser session count for the current billing cycle (capped by the plan limit). */
 	browserSessions: number
 }
 

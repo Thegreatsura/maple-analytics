@@ -27,6 +27,7 @@ function limitsFromCustomer(balances: BillingCustomer["balances"]): PlanLimits |
 		tracesGB: balances.traces?.granted ?? defaults.tracesGB,
 		metricsGB: balances.metrics?.granted ?? defaults.metricsGB,
 		retentionDays: balances.retention_days?.remaining ?? defaults.retentionDays,
+		browserSessions: balances.browser_sessions?.granted ?? defaults.browserSessions,
 	}
 }
 
