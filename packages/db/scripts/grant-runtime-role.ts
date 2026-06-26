@@ -38,8 +38,11 @@ import { fail, resolveDatabase, withBranchConnection } from "./planetscale-conne
  * Postgres role names we accept. The role is interpolated into DDL as a quoted
  * identifier (it cannot be a bind parameter), so we whitelist a conservative
  * identifier charset and reject everything else rather than trust the input.
+ * PlanetScale runtime roles are dotted (e.g. `pscale_api_<id>.<id>`); the `.` is
+ * safe because we always double-quote, where Postgres treats it as a literal
+ * character, not a schema separator.
  */
-const RUNTIME_ROLE_PATTERN = /^[A-Za-z_][A-Za-z0-9_$-]*$/
+const RUNTIME_ROLE_PATTERN = /^[A-Za-z_][A-Za-z0-9_$.-]*$/
 
 const quoteIdent = (role: string): string => {
 	if (!RUNTIME_ROLE_PATTERN.test(role)) {
