@@ -5,6 +5,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 
 import { useIntervalRefresh } from "@/hooks/use-interval-refresh"
+import { useMountEffect } from "@/hooks/use-mount-effect"
 
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@maple/ui/components/ui/alert"
 import { Badge } from "@maple/ui/components/ui/badge"
@@ -82,9 +83,15 @@ export interface AiTriageCardProps {
 	 * completed triage result (if any) so the caller can fold it into the preamble.
 	 */
 	onOpenChat?: (result: AiTriageRunDocument["result"]) => void
+	/**
+	 * Auto-start a diagnosis as soon as the runs query resolves to none — for the
+	 * "Ask Maple AI" landing page, where arriving IS the intent to diagnose. An
+	 * existing run (queued/running/completed/failed) is reused, never re-triggered.
+	 */
+	autoRun?: boolean
 }
 
-export function AiTriageCard({ incidentKind, incidentId, issueId, onOpenChat }: AiTriageCardProps) {
+export function AiTriageCard({ incidentKind, incidentId, issueId, onOpenChat, autoRun }: AiTriageCardProps) {
 	const reactivityKeys = ["aiTriageRuns", `aiTriage:${incidentKind}:${incidentId ?? issueId ?? ""}`]
 	const runsQueryAtom = MapleApiAtomClient.query("aiTriage", "listRuns", {
 		query:
@@ -159,55 +166,22 @@ export function AiTriageCard({ incidentKind, incidentId, issueId, onOpenChat }: 
 		)
 	}
 
-	// --- No run yet: focused CTA --------------------------------------------
+	// --- No run yet: focused CTA (or auto-start on the Ask-Maple-AI landing) --
 	if (run === null) {
 		return (
-			<Card>
-				<Empty className="py-8">
-					<EmptyHeader>
-						<EmptyMedia variant="icon">
-							<PulseIcon size={18} />
-						</EmptyMedia>
-						<EmptyTitle>No diagnosis yet</EmptyTitle>
-						<EmptyDescription>
-							See what's driving this {INCIDENT_NOUN[incidentKind]} — Maple reads the
-							traces, errors, and logs to find the likely cause.
-						</EmptyDescription>
-					</EmptyHeader>
-					<EmptyContent>
-						<Button
-							size="sm"
-							onClick={startRun}
-							disabled={incidentId === null || isStarting}
-						>
-							<PulseIcon className="size-3.5" />
-							Diagnose this {INCIDENT_NOUN[incidentKind]}
-						</Button>
-						{incidentId === null ? (
-							<p className="text-xs text-muted-foreground">No incident to diagnose yet.</p>
-						) : null}
-					</EmptyContent>
-				</Empty>
-			</Card>
+			<AiTriageEmptyState
+				incidentKind={incidentKind}
+				incidentId={incidentId}
+				isStarting={isStarting}
+				autoRun={autoRun ?? false}
+				onDiagnose={startRun}
+			/>
 		)
 	}
 
 	// --- Investigating -------------------------------------------------------
 	if (runActive) {
-		return (
-			<Card className="space-y-3 p-5">
-				<div className="flex items-center gap-2">
-					<Spinner className="size-4 text-muted-foreground" />
-					<Shimmer className="text-sm font-medium">
-						Investigating — reading traces, errors, and logs
-					</Shimmer>
-				</div>
-				<div className="space-y-2">
-					<Skeleton className="h-3 w-3/4" />
-					<Skeleton className="h-3 w-1/2" />
-				</div>
-			</Card>
-		)
+		return <InvestigatingCard />
 	}
 
 	// --- Failed --------------------------------------------------------------
@@ -246,6 +220,79 @@ export function AiTriageCard({ incidentKind, incidentId, issueId, onOpenChat }: 
 	}
 
 	return <DiagnosisReadout run={run} result={result} onOpenChat={onOpenChat} onRerun={startRun} rerunning={isStarting} />
+}
+
+/** The "investigating…" placeholder, shared by the active-run and auto-start states. */
+function InvestigatingCard() {
+	return (
+		<Card className="space-y-3 p-5">
+			<div className="flex items-center gap-2">
+				<Spinner className="size-4 text-muted-foreground" />
+				<Shimmer className="text-sm font-medium">
+					Investigating — reading traces, errors, and logs
+				</Shimmer>
+			</div>
+			<div className="space-y-2">
+				<Skeleton className="h-3 w-3/4" />
+				<Skeleton className="h-3 w-1/2" />
+			</div>
+		</Card>
+	)
+}
+
+/**
+ * Empty (no-run) state. Mounting here means the runs query already resolved to
+ * none, so `autoRun` can kick off a diagnosis on mount (useMountEffect, no raw
+ * effect) — that's the "Ask Maple AI" landing behavior. Otherwise it shows the
+ * focused "Diagnose" CTA.
+ */
+function AiTriageEmptyState({
+	incidentKind,
+	incidentId,
+	isStarting,
+	autoRun,
+	onDiagnose,
+}: {
+	incidentKind: AiTriageIncidentKind
+	incidentId: string | null
+	isStarting: boolean
+	autoRun: boolean
+	onDiagnose: () => void
+}) {
+	const shouldAutoRun = autoRun && incidentId !== null
+	useMountEffect(() => {
+		if (shouldAutoRun) onDiagnose()
+	})
+
+	// Once the auto-run fires, show the investigating placeholder rather than
+	// flashing the CTA while the run is being created.
+	if (shouldAutoRun) return <InvestigatingCard />
+
+	return (
+		<Card>
+			<Empty className="py-8">
+				<EmptyHeader>
+					<EmptyMedia variant="icon">
+						<PulseIcon size={18} />
+					</EmptyMedia>
+					<EmptyTitle>No diagnosis yet</EmptyTitle>
+					<EmptyDescription>
+						See what's driving this {INCIDENT_NOUN[incidentKind]} — Maple reads the traces,
+						errors, and logs to find the likely cause.
+					</EmptyDescription>
+				</EmptyHeader>
+				<EmptyContent>
+					<Button size="sm" onClick={onDiagnose} disabled={incidentId === null || isStarting}>
+						<PulseIcon className="size-3.5" />
+						Diagnose this {INCIDENT_NOUN[incidentKind]}
+					</Button>
+					{incidentId === null ? (
+						<p className="text-xs text-muted-foreground">No incident to diagnose yet.</p>
+					) : null}
+				</EmptyContent>
+			</Empty>
+		</Card>
+	)
 }
 
 function DiagnosisReadout({
