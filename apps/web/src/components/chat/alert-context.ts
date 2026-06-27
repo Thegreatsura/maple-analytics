@@ -1,3 +1,5 @@
+import { fromBase64Url, toBase64Url } from "@/lib/base64url"
+
 export interface AlertContext {
 	ruleId: string
 	ruleName: string
@@ -11,20 +13,9 @@ export interface AlertContext {
 	windowMinutes: number
 	groupKey: string | null
 	sampleCount: number | null
-}
-
-const fromBase64Url = (input: string): string => {
-	const padded = input.replace(/-/g, "+").replace(/_/g, "/")
-	const pad = padded.length % 4
-	const full = pad === 0 ? padded : padded + "=".repeat(4 - pad)
-	if (typeof atob !== "undefined") {
-		try {
-			return decodeURIComponent(escape(atob(full)))
-		} catch {
-			return atob(full)
-		}
-	}
-	return Buffer.from(full, "base64").toString("utf8")
+	/** Prior AI-triage findings, folded into the chat preamble so the agent starts from them. */
+	aiSummary?: string
+	aiSuspectedCause?: string
 }
 
 const isAlertContext = (value: unknown): value is AlertContext => {
@@ -42,8 +33,13 @@ const isAlertContext = (value: unknown): value is AlertContext => {
 	if (typeof v.windowMinutes !== "number") return false
 	if (v.groupKey !== null && typeof v.groupKey !== "string") return false
 	if (v.sampleCount !== null && typeof v.sampleCount !== "number") return false
+	if (v.aiSummary !== undefined && typeof v.aiSummary !== "string") return false
+	if (v.aiSuspectedCause !== undefined && typeof v.aiSuspectedCause !== "string") return false
 	return true
 }
+
+export const encodeAlertContextToSearchParam = (ctx: AlertContext): string =>
+	toBase64Url(JSON.stringify(ctx))
 
 export const decodeAlertContextFromSearchParam = (raw: string): AlertContext | undefined => {
 	try {
