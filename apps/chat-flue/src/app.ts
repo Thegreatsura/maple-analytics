@@ -142,9 +142,6 @@ app.get("/health", (c) => c.json({ ok: true }))
 // the addressed `"<orgId>:<tabId>"` instance — so a caller can never reach
 // another org's conversation.
 app.use("/agents/*", async (c, next) => {
-	const verified = await verifyRequest(c.req.raw, appEnv(c))
-	if (!verified) return c.json({ error: "Authentication required" }, 401)
-
 	// Deny-by-default: every /agents/* request must carry a resolvable
 	// "<orgId>:<tabId>" instance whose org matches the caller. The agent
 	// transports are `/agents/<name>/<id>`; a path without an instance id is
@@ -152,7 +149,26 @@ app.use("/agents/*", async (c, next) => {
 	const instanceId = instanceIdFromAgentPath(new URL(c.req.url).pathname)
 	if (!instanceId) return c.json({ error: "Missing agent instance id" }, 400)
 	const namedOrgId = orgIdFromInstanceId(instanceId)
-	if (!namedOrgId || namedOrgId !== verified.orgId) {
+	if (!namedOrgId) {
+		return c.json({ error: "Organization does not match the addressed agent" }, 403)
+	}
+
+	// Server-to-server seeding (apps/api opening an investigation on incident-open,
+	// no user present) authenticates with the internal-service token instead of a
+	// user session. The token is fully trusted — same model as `/workflows/*` — so
+	// the authorized org is taken from the instance id it addresses. This bypass
+	// runs BEFORE the user-session check so token callers aren't rejected for
+	// lacking a session.
+	if (verifyInternalServiceToken(c.req.raw, appEnv(c))) {
+		await next()
+		return
+	}
+
+	// User session: the resolved org must own the addressed instance, so a caller
+	// can never reach another org's conversation.
+	const verified = await verifyRequest(c.req.raw, appEnv(c))
+	if (!verified) return c.json({ error: "Authentication required" }, 401)
+	if (namedOrgId !== verified.orgId) {
 		return c.json({ error: "Organization does not match the addressed agent" }, 403)
 	}
 

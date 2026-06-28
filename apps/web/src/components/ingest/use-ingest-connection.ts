@@ -1,10 +1,10 @@
-import { useState } from "react"
-
-import { Result, useAtomValue } from "@/lib/effect-atom"
+import { Effect } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { Result, useAtomRefresh, useAtomValue } from "@/lib/effect-atom"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
 import { ingestUrl } from "@/lib/services/common/ingest-url"
 import { useEffectiveTimeRange } from "@/hooks/use-effective-time-range"
-import { useMountEffect } from "@/hooks/use-mount-effect"
+import { useIntervalRefresh } from "@/hooks/use-interval-refresh"
 import { getServiceOverviewResultAtom } from "@/lib/services/atoms/warehouse-query-atoms"
 
 export interface IngestConnection {
@@ -33,23 +33,16 @@ interface UseIngestConnectionOptions {
  */
 export function useIngestConnection({ poll = true }: UseIngestConnectionOptions = {}): IngestConnection {
 	const { startTime, endTime } = useEffectiveTimeRange(undefined, undefined, "1h")
-	const [pollCount, setPollCount] = useState(0)
 
 	const keysResult = useAtomValue(MapleApiAtomClient.query("ingestKeys", "get", {}))
 	const apiKey = Result.isSuccess(keysResult) ? keysResult.value.publicKey : ""
 
-	const overviewResult = useAtomValue(
-		getServiceOverviewResultAtom({
-			data: { startTime, endTime },
-			_poll: pollCount,
-		} as never),
-	)
+	const overviewAtom = getServiceOverviewResultAtom({ data: { startTime, endTime } })
+	const overviewResult = useAtomValue(overviewAtom)
+	const refresh = useAtomRefresh(overviewAtom)
 
-	useMountEffect(() => {
-		if (!poll) return
-		const interval = setInterval(() => setPollCount((c) => c + 1), 15000)
-		return () => clearInterval(interval)
-	})
+	// Keep the connection signal warm while the popover/checklist is mounted.
+	useIntervalRefresh(refresh, { intervalMs: 15000, enabled: poll })
 
 	const services = Result.isSuccess(overviewResult) ? overviewResult.value.data : []
 	const realServices = services.filter(
@@ -63,7 +56,7 @@ export function useIngestConnection({ poll = true }: UseIngestConnectionOptions 
 		serviceCount: realServices.length,
 		firstRealService,
 		apiKey,
-		refresh: () => setPollCount((c) => c + 1),
+		refresh,
 	}
 }
 
@@ -114,15 +107,17 @@ export async function sendTestEvent(apiKey: string): Promise<void> {
 		],
 	}
 
-	const response = await fetch(`${ingestUrl}/v1/traces`, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			Authorization: `Bearer ${apiKey}`,
-		},
-		body: JSON.stringify(payload),
-	})
-	if (!response.ok) {
-		throw new Error(`Ingest gateway returned ${response.status}`)
-	}
+	await Effect.gen(function* () {
+		const client = yield* HttpClient.HttpClient
+		const response = yield* client.execute(
+			HttpClientRequest.post(`${ingestUrl}/v1/traces`, {
+				headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+			}).pipe(HttpClientRequest.bodyText(JSON.stringify(payload))),
+		)
+		// HttpClient does not fail on non-2xx, so surface it explicitly — runPromise
+		// rejects, preserving the throw-on-failure contract the click handler relies on.
+		if (response.status < 200 || response.status >= 300) {
+			return yield* Effect.fail(new Error(`Ingest gateway returned ${response.status}`))
+		}
+	}).pipe(Effect.provide(FetchHttpClient.layer), Effect.runPromise)
 }
