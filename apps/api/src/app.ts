@@ -11,7 +11,6 @@ import { HttpErrorsLive } from "./routes/errors.http"
 import { HttpApiKeysLive } from "./routes/api-keys.http"
 import { HttpAuthLive, HttpAuthPublicLive } from "./routes/auth.http"
 import { HttpChatLive } from "./routes/chat.http"
-import { CodemodeInternalRouter } from "./routes/codemode-internal.http"
 import { HttpCloudflareLogpushLive } from "./routes/cloudflare-logpush.http"
 import { HttpDashboardsLive } from "./routes/dashboards.http"
 import { HttpDemoLive } from "./routes/demo.http"
@@ -237,7 +236,6 @@ export const AllRoutes = Layer.mergeAll(
 	OAuthDiscoveryRouter,
 	PrometheusScrapeProxyRouter,
 	ScraperInternalRouter,
-	CodemodeInternalRouter,
 	VcsWebhookRouter,
 	McpLive,
 	HealthRouter,
