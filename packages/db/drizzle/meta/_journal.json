@@ -57,6 +57,13 @@
       "when": 1783200003000,
       "tag": "0007_slippery_winter_soldier",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783109881592,
+      "tag": "0008_elite_butterfly",
+      "breakpoints": true
     }
   ]
 }
