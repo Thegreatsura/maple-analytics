@@ -3151,14 +3151,31 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
 					// transition remains "none" unless a branch below overrides it.
 					const carriedIncidentId = openIncident?.id ?? null
 
+					// `alert_rule_states` is Electric-synced: every write advances the shape
+					// log and wakes every connected client's live long-poll. Unchanged-state
+					// ticks therefore skip the upsert entirely, refreshing lastEvaluatedAt at
+					// most every STATE_HEARTBEAT_MS. The equality gate deliberately ignores
+					// lastValue/lastSampleCount — they float every tick for real metrics and
+					// nothing downstream reads their freshness (the web client and listRules
+					// consume only lastError + lastEvaluatedAt from this table); they catch up
+					// on every transition/heartbeat write.
 					const upsertState = (fields: {
 						consecutiveBreaches: number
 						consecutiveHealthy: number
 						lastStatus: string
 						lastValue: number | null
 						lastSampleCount: number
-					}) =>
-						dbExecute((db) =>
+					}) => {
+						const unchanged =
+							state != null &&
+							state.consecutiveBreaches === fields.consecutiveBreaches &&
+							state.consecutiveHealthy === fields.consecutiveHealthy &&
+							state.lastStatus === fields.lastStatus &&
+							state.lastError == null &&
+							state.lastEvaluatedAt != null &&
+							timestamp - state.lastEvaluatedAt.getTime() < STATE_HEARTBEAT_MS
+						if (unchanged) return Effect.void
+						return dbExecute((db) =>
 							db
 								.insert(alertRuleStates)
 								.values({
@@ -3180,6 +3197,7 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
 									},
 								}),
 						)
+					}
 
 					if (evaluation.status === "skipped") {
 						const consecutiveBreaches = state?.consecutiveBreaches ?? 0
@@ -3200,10 +3218,23 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
 						}
 					}
 
+					// Capped at the rule's thresholds: the counters are only ever compared
+					// with >= against *Required, so saturating keeps open/resolve behavior
+					// identical while letting steady-state ticks skip the state upsert above.
 					const consecutiveBreaches =
-						evaluation.status === "breached" ? (state?.consecutiveBreaches ?? 0) + 1 : 0
+						evaluation.status === "breached"
+							? Math.min(
+									(state?.consecutiveBreaches ?? 0) + 1,
+									normalized.consecutiveBreachesRequired,
+								)
+							: 0
 					const consecutiveHealthy =
-						evaluation.status === "healthy" ? (state?.consecutiveHealthy ?? 0) + 1 : 0
+						evaluation.status === "healthy"
+							? Math.min(
+									(state?.consecutiveHealthy ?? 0) + 1,
+									normalized.consecutiveHealthyRequired,
+								)
+							: 0
 
 					yield* upsertState({
 						consecutiveBreaches,
@@ -3674,6 +3705,10 @@ export class AlertsService extends Context.Service<AlertsService, AlertsServiceS
 			)
 
 			const SCHEDULER_LOCK_TTL_MS = 30_000
+
+			// Unchanged-state ticks skip the alert_rule_states upsert so the Electric
+			// shape stays quiet; lastEvaluatedAt is refreshed at most this often.
+			const STATE_HEARTBEAT_MS = 5 * 60_000
 
 			const claimRule = (ruleId: AlertRuleId, timestamp: number) =>
 				dbExecute((db) =>

@@ -577,6 +577,169 @@ describe("AlertsService", () => {
 		}).pipe(Effect.provide(makeLayer(testDb, makeWarehouseStub(state), { fetch: okFetch })))
 	})
 
+	it.effect("skips unchanged alert_rule_states writes and refreshes on the 5-minute heartbeat", () => {
+		const testDb = createTestDb(trackedDbs)
+		// Healthy from the start: errorRate 1 stays below the threshold of 5.
+		const state = {
+			tracesAggregateRows: [
+				{
+					count: 200,
+					avgDuration: 20,
+					p50Duration: 10,
+					p95Duration: 80,
+					p99Duration: 160,
+					errorRate: 1,
+					satisfiedCount: 195,
+					toleratingCount: 3,
+					apdexScore: 0.9825,
+				},
+			] as ReadonlyArray<Record<string, unknown>>,
+		}
+
+		const readState = (ruleId: string) =>
+			Effect.promise(() =>
+				queryFirstRow<{
+					consecutive_healthy: number
+					consecutive_breaches: number
+					last_status: string | null
+					last_evaluated_at: Date | string
+					updated_at: Date | string
+				}>(
+					testDb,
+					`select consecutive_healthy, consecutive_breaches, last_status, last_evaluated_at, updated_at
+					 from alert_rule_states where rule_id = $1 and group_key = '__total__'`,
+					[ruleId],
+				),
+			)
+		const ms = (value: Date | string | undefined) => new Date(value ?? 0).getTime()
+
+		return Effect.gen(function* () {
+			yield* TestClock.setTime(DEFAULT_CLOCK_EPOCH_MS)
+			const alerts = yield* AlertsService
+			const orgId = asOrgId("org_state_quiet")
+			const userId = asUserId("user_state_quiet")
+			const destination = yield* createWebhookDestination(alerts, orgId, userId)
+			const rule = yield* createErrorRateRule(alerts, orgId, userId, destination.id)
+
+			// Tick 1 (T+0): healthy=1 → writes. Tick 2 (T+1m): healthy=2 (capped at
+			// consecutiveHealthyRequired) → writes.
+			yield* alerts.runSchedulerTick()
+			yield* TestClock.adjust(Duration.minutes(1))
+			yield* alerts.runSchedulerTick()
+			const afterSecondTick = yield* readState(rule.id)
+			assert.strictEqual(afterSecondTick?.consecutive_healthy, 2)
+			assert.strictEqual(afterSecondTick?.last_status, "healthy")
+			assert.strictEqual(ms(afterSecondTick?.last_evaluated_at), DEFAULT_CLOCK_EPOCH_MS + 60_000)
+
+			// Ticks at T+2m..T+5m: state unchanged and within the heartbeat window
+			// (last write T+1m) → the upsert is skipped, the row stays byte-identical.
+			for (let i = 0; i < 4; i++) {
+				yield* TestClock.adjust(Duration.minutes(1))
+				yield* alerts.runSchedulerTick()
+			}
+			const afterQuietTicks = yield* readState(rule.id)
+			assert.strictEqual(afterQuietTicks?.consecutive_healthy, 2)
+			assert.strictEqual(ms(afterQuietTicks?.last_evaluated_at), DEFAULT_CLOCK_EPOCH_MS + 60_000)
+			assert.strictEqual(ms(afterQuietTicks?.updated_at), DEFAULT_CLOCK_EPOCH_MS + 60_000)
+
+			// Tick at T+6m: 5 minutes since the last write → heartbeat refreshes
+			// last_evaluated_at without changing the state.
+			yield* TestClock.adjust(Duration.minutes(1))
+			yield* alerts.runSchedulerTick()
+			const afterHeartbeat = yield* readState(rule.id)
+			assert.strictEqual(afterHeartbeat?.consecutive_healthy, 2)
+			assert.strictEqual(afterHeartbeat?.last_status, "healthy")
+			assert.strictEqual(ms(afterHeartbeat?.last_evaluated_at), DEFAULT_CLOCK_EPOCH_MS + 6 * 60_000)
+
+			// A transition writes immediately, even right after a heartbeat write:
+			// flip the warehouse to breaching and tick at T+7m.
+			state.tracesAggregateRows = [
+				{
+					count: 200,
+					avgDuration: 40,
+					p50Duration: 20,
+					p95Duration: 120,
+					p99Duration: 240,
+					errorRate: 10,
+					satisfiedCount: 180,
+					toleratingCount: 10,
+					apdexScore: 0.925,
+				},
+			]
+			yield* TestClock.adjust(Duration.minutes(1))
+			yield* alerts.runSchedulerTick()
+			const afterBreach = yield* readState(rule.id)
+			assert.strictEqual(afterBreach?.last_status, "breached")
+			assert.strictEqual(afterBreach?.consecutive_breaches, 1)
+			assert.strictEqual(afterBreach?.consecutive_healthy, 0)
+			assert.strictEqual(ms(afterBreach?.last_evaluated_at), DEFAULT_CLOCK_EPOCH_MS + 7 * 60_000)
+		}).pipe(Effect.provide(makeLayer(testDb, makeWarehouseStub(state), { fetch: okFetch })))
+	})
+
+	it.effect("caps the breach counter during an open incident while the incident row keeps updating", () => {
+		const testDb = createTestDb(trackedDbs)
+		const state = {
+			tracesAggregateRows: [
+				{
+					count: 200,
+					avgDuration: 40,
+					p50Duration: 20,
+					p95Duration: 120,
+					p99Duration: 240,
+					errorRate: 10,
+					satisfiedCount: 180,
+					toleratingCount: 10,
+					apdexScore: 0.925,
+				},
+			] as ReadonlyArray<Record<string, unknown>>,
+		}
+
+		const ms = (value: Date | string | undefined) => new Date(value ?? 0).getTime()
+
+		return Effect.gen(function* () {
+			yield* TestClock.setTime(DEFAULT_CLOCK_EPOCH_MS)
+			const alerts = yield* AlertsService
+			const orgId = asOrgId("org_state_cap")
+			const userId = asUserId("user_state_cap")
+			const destination = yield* createWebhookDestination(alerts, orgId, userId)
+			const rule = yield* createErrorRateRule(alerts, orgId, userId, destination.id)
+
+			// Two breach ticks open the incident (consecutiveBreachesRequired: 2).
+			yield* alerts.runSchedulerTick()
+			yield* TestClock.adjust(Duration.minutes(1))
+			yield* alerts.runSchedulerTick()
+
+			// Two more breach ticks: the counter saturates at 2, so the state row goes
+			// quiet while the incident row keeps tracking the ongoing breach.
+			yield* TestClock.adjust(Duration.minutes(1))
+			yield* alerts.runSchedulerTick()
+			yield* TestClock.adjust(Duration.minutes(1))
+			yield* alerts.runSchedulerTick()
+
+			const stateRow = yield* Effect.promise(() =>
+				queryFirstRow<{ consecutive_breaches: number; updated_at: Date | string }>(
+					testDb,
+					`select consecutive_breaches, updated_at from alert_rule_states
+					 where rule_id = $1 and group_key = '__total__'`,
+					[rule.id],
+				),
+			)
+			assert.strictEqual(stateRow?.consecutive_breaches, 2)
+			// Last state write was the tick that reached the cap (T+1m).
+			assert.strictEqual(ms(stateRow?.updated_at), DEFAULT_CLOCK_EPOCH_MS + 60_000)
+
+			const incidentRow = yield* Effect.promise(() =>
+				queryFirstRow<{ status: string; last_evaluated_at: Date | string }>(
+					testDb,
+					`select status, last_evaluated_at from alert_incidents where rule_id = $1`,
+					[rule.id],
+				),
+			)
+			assert.strictEqual(incidentRow?.status, "open")
+			assert.strictEqual(ms(incidentRow?.last_evaluated_at), DEFAULT_CLOCK_EPOCH_MS + 3 * 60_000)
+		}).pipe(Effect.provide(makeLayer(testDb, makeWarehouseStub(state), { fetch: okFetch })))
+	})
+
 	it.effect("sends signed webhook test notifications", () => {
 		const testDb = createTestDb(trackedDbs)
 		const requests: Array<{ headers: Headers; body: string }> = []
