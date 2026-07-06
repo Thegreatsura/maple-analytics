@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@maple/ui/components/ui
 import type { CloudflareZoneCacheBucket } from "@/api/warehouse/cloudflare-infra"
 import { formatNumber } from "@/lib/format"
 import { formatPercent } from "../format"
+import { EDGE_SERVED_STATUSES } from "./constants"
 
 /**
  * The zone's job, in one bar: how much traffic the edge answered without
@@ -13,17 +14,6 @@ import { formatPercent } from "../format"
  * (strongest = plain hit), everything else pools into a muted "origin"
  * remainder. Proportions are the window totals from the cache breakdown.
  */
-
-const EDGE_SEGMENTS: ReadonlyArray<{ status: string; color: string; label: string }> = [
-	{ status: "hit", color: "var(--primary)", label: "Hit" },
-	{ status: "stale", color: "color-mix(in oklab, var(--primary) 70%, transparent)", label: "Stale" },
-	{
-		status: "revalidated",
-		color: "color-mix(in oklab, var(--primary) 50%, transparent)",
-		label: "Revalidated",
-	},
-	{ status: "updating", color: "color-mix(in oklab, var(--primary) 35%, transparent)", label: "Updating" },
-]
 
 const ORIGIN_COLOR = "color-mix(in oklab, var(--muted-foreground) 28%, transparent)"
 
@@ -40,7 +30,7 @@ export function CloudflareEdgeShareBand({ cacheBuckets, className }: CloudflareE
 			totals.set(row.cacheStatus, (totals.get(row.cacheStatus) ?? 0) + row.requests)
 			sum += row.requests
 		}
-		const edge = EDGE_SEGMENTS.map((seg) => ({
+		const edge = EDGE_SERVED_STATUSES.map((seg) => ({
 			...seg,
 			requests: totals.get(seg.status) ?? 0,
 			share: sum > 0 ? (totals.get(seg.status) ?? 0) / sum : 0,
@@ -78,6 +68,7 @@ export function CloudflareEdgeShareBand({ cacheBuckets, className }: CloudflareE
 					<Tooltip key={seg.status}>
 						<TooltipTrigger
 							render={<div />}
+							tabIndex={0}
 							className="h-full min-w-[2px]"
 							style={{ width: `${seg.share * 100}%`, background: seg.color }}
 							aria-label={`${seg.label}: ${formatPercent(seg.share)}`}
@@ -90,6 +81,7 @@ export function CloudflareEdgeShareBand({ cacheBuckets, className }: CloudflareE
 				<Tooltip>
 					<TooltipTrigger
 						render={<div />}
+						tabIndex={0}
 						className="h-full flex-1"
 						style={{ background: ORIGIN_COLOR }}
 						aria-label={`Origin: ${formatPercent(originShare)}`}

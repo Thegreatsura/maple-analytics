@@ -19,6 +19,7 @@ import {
 	CloudflareZoneLatencyChart,
 	CloudflareZoneStatusChart,
 } from "@/components/infra/cloudflare/cloudflare-zone-detail-charts"
+import { chartBucketSeconds, errorRateTone } from "@/components/infra/cloudflare/constants"
 import {
 	cloudflareZoneDetailResultAtom,
 	cloudflareZonesResultAtom,
@@ -41,14 +42,6 @@ export const Route = effectRoute(createFileRoute("/infra/cloudflare/$zoneName"))
 })
 
 const ZONE_SERVICE_PREFIX = "cloudflare/"
-
-/** Same shape as the list page: ~100 points, floored at the poller's 5-minute batches. */
-function chartBucketSeconds(startTime: string, endTime: string): number {
-	const startMs = new Date(startTime.replace(" ", "T") + "Z").getTime()
-	const endMs = new Date(endTime.replace(" ", "T") + "Z").getTime()
-	const windowSeconds = Math.max((endMs - startMs) / 1000, 300)
-	return Math.max(300, Math.ceil(windowSeconds / 100 / 300) * 300)
-}
 
 function ZoneDetailPage() {
 	const { zoneName } = Route.useParams()
@@ -91,7 +84,7 @@ function ZoneDetailPage() {
 				<div className="space-y-6">
 					<PageHero
 						title={zoneName}
-						description="Edge analytics for this zone — status classes, cache behaviour, and latency percentiles where the plan exposes them."
+						description="How the edge answered this zone's traffic — status mix, cache behavior, and latency percentiles where your plan exposes them."
 						trailing={<HeroChip>zone</HeroChip>}
 					/>
 					<ZoneDetailContent zoneName={zoneName} startTime={startTime} endTime={endTime} />
@@ -127,10 +120,13 @@ function ZoneDetailContent({
 
 	return Result.builder(detailResult)
 		.onInitial(() => (
-			<div className="space-y-4">
+			<div className="space-y-6">
 				<StatRailLoading />
-				<Skeleton className="h-24 w-full" />
-				<Skeleton className="h-52 w-full" />
+				<Skeleton className="h-28 w-full" />
+				<div className="grid gap-4 lg:grid-cols-2">
+					<Skeleton className="h-56 w-full" />
+					<Skeleton className="h-56 w-full" />
+				</div>
 			</div>
 		))
 		.onError((err) => <QueryErrorState error={err} />)
@@ -165,7 +161,7 @@ function ZoneDetailContent({
 						<StatRailItem
 							eyebrow="5xx error rate"
 							value={formatPercent(errorRate)}
-							tone={errorRate >= 0.05 ? "crit" : errorRate >= 0.01 ? "warn" : "neutral"}
+							tone={errorRateTone(errorRate)}
 							compact
 						/>
 						<StatRailItem
@@ -181,22 +177,10 @@ function ZoneDetailContent({
 					</StatRail>
 					<CloudflareEdgeShareBand cacheBuckets={detail.cacheBuckets} />
 					<div className="grid gap-4 lg:grid-cols-2">
-						<CloudflareZoneStatusChart
-							buckets={detail.statusBuckets}
-							waiting={result.waiting}
-							syncId="cf-zone-detail"
-						/>
-						<CloudflareZoneCacheChart
-							buckets={detail.cacheBuckets}
-							waiting={result.waiting}
-							syncId="cf-zone-detail"
-						/>
+						<CloudflareZoneStatusChart buckets={detail.statusBuckets} syncId="cf-zone-detail" />
+						<CloudflareZoneCacheChart buckets={detail.cacheBuckets} syncId="cf-zone-detail" />
 					</div>
-					<CloudflareZoneLatencyChart
-						buckets={detail.latencyBuckets}
-						waiting={result.waiting}
-						syncId="cf-zone-detail"
-					/>
+					<CloudflareZoneLatencyChart buckets={detail.latencyBuckets} syncId="cf-zone-detail" />
 				</div>
 			)
 		})

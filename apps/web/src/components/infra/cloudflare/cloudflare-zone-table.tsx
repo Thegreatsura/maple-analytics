@@ -6,6 +6,7 @@ import type { CloudflareZoneRow } from "@/api/warehouse/cloudflare-infra"
 import { formatLatency, formatNumber } from "@/lib/format"
 import { ColumnHead, ROW_LINK_CLASS, TableShell, TableSkeleton, useTableSort } from "../primitives/data-table"
 import { formatPercent } from "../format"
+import { errorRateClass } from "./constants"
 import { formatBytes } from "./format"
 
 // Zone latency percentiles are plan-dependent (the poller only gets quantiles
@@ -183,13 +184,7 @@ export function CloudflareZoneTable({ zones, waiting }: CloudflareZoneTableProps
 					</div>
 					{numCell(formatNumber(zone.requests))}
 					<div
-						className={`w-[90px] text-right font-mono text-[12px] tabular-nums ${
-							zone.errorRate >= 0.05
-								? "text-destructive"
-								: zone.errorRate >= 0.01
-									? "text-amber-600 dark:text-amber-500"
-									: "text-foreground/80"
-						}`}
+						className={`w-[90px] text-right font-mono text-[12px] tabular-nums ${errorRateClass(zone.errorRate)}`}
 					>
 						{formatPercent(zone.errorRate)}
 					</div>

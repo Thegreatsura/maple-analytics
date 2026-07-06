@@ -1,4 +1,5 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import { useMemo } from "react"
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
 import { effectRoute } from "@effect-router/core"
 import { Schema } from "effect"
 import { Result, useAtomValue } from "@/lib/effect-atom"
@@ -15,6 +16,11 @@ import { CloudflareNotConnected } from "@/components/infra/cloudflare/cloudflare
 import { CloudflareWorkerTable, CloudflareWorkerTableLoading } from "@/components/infra/cloudflare/cloudflare-worker-table"
 import { CloudflareZoneChart } from "@/components/infra/cloudflare/cloudflare-zone-chart"
 import { CloudflareZoneTable, CloudflareZoneTableLoading } from "@/components/infra/cloudflare/cloudflare-zone-table"
+import { COLOR_PALETTE } from "@/components/infra/chart-utils"
+import {
+	OTHER_ZONES_COLOR,
+	chartBucketSeconds,
+} from "@/components/infra/cloudflare/constants"
 import {
 	cloudflareWorkersResultAtom,
 	cloudflareZonesResultAtom,
@@ -36,17 +42,6 @@ export const Route = effectRoute(createFileRoute("/infra/cloudflare/"))({
 	component: CloudflarePage,
 	validateSearch: Schema.toStandardSchemaV1(cloudflareSearchSchema),
 })
-
-/**
- * Bucket width for the timeseries charts: aim for ~100 points, floored at the
- * poller's 5-minute granularity and rounded to whole 5-minute steps.
- */
-function chartBucketSeconds(startTime: string, endTime: string): number {
-	const startMs = new Date(startTime.replace(" ", "T") + "Z").getTime()
-	const endMs = new Date(endTime.replace(" ", "T") + "Z").getTime()
-	const windowSeconds = Math.max((endMs - startMs) / 1000, 300)
-	return Math.max(300, Math.ceil(windowSeconds / 100 / 300) * 300)
-}
 
 function CloudflarePage() {
 	const search = Route.useSearch()
@@ -132,6 +127,20 @@ function CloudflareData({ startTime, endTime }: { startTime: string; endTime: st
 		.onSuccess((_, holder) => Boolean(holder.waiting))
 		.orElse(() => false)
 
+	// Stable zone→color assignment shared by all four charts and the legend:
+	// zones ordered by window request volume, capped at the palette size, the
+	// remainder pooled into one muted "Other zones" series.
+	const zoneSeries = useMemo(() => {
+		if (!timeseries) return null
+		const totals = new Map<string, number>()
+		for (const row of timeseries.buckets) {
+			totals.set(row.zoneName, (totals.get(row.zoneName) ?? 0) + row.requests)
+		}
+		const ordered = [...totals.entries()].toSorted((a, b) => b[1] - a[1]).map(([name]) => name)
+		const top = ordered.slice(0, COLOR_PALETTE.length)
+		return { top, otherCount: ordered.length - top.length }
+	}, [timeseries])
+
 	// Zones (HTTP edge analytics) and Workers (invocation analytics) are
 	// independent datasets — an org can have either without the other. The
 	// page-level "no traffic" empty state only applies when BOTH are settled
@@ -176,32 +185,71 @@ function CloudflareData({ startTime, endTime }: { startTime: string; endTime: st
 							{response.zones.length > 0 && (
 								<CloudflareKpiCards zones={response.zones} buckets={timeseries?.buckets} />
 							)}
-							{response.zones.length > 0 && timeseries && timeseries.buckets.length > 0 && (
-								<div className="grid gap-4 lg:grid-cols-2">
-									<CloudflareZoneChart
-										buckets={timeseries.buckets}
-										metric="requests"
-										waiting={timeseriesWaiting}
-										syncId="cf-zones"
-									/>
-									<CloudflareZoneChart
-										buckets={timeseries.buckets}
-										metric="errorRate"
-										waiting={timeseriesWaiting}
-										syncId="cf-zones"
-									/>
-									<CloudflareZoneChart
-										buckets={timeseries.buckets}
-										metric="cacheHitRate"
-										waiting={timeseriesWaiting}
-										syncId="cf-zones"
-									/>
-									<CloudflareZoneChart
-										buckets={timeseries.buckets}
-										metric="bytes"
-										waiting={timeseriesWaiting}
-										syncId="cf-zones"
-									/>
+							{response.zones.length > 0 && timeseries && timeseries.buckets.length > 0 && zoneSeries && (
+								<div className="space-y-2">
+									{(zoneSeries.top.length > 1 || zoneSeries.otherCount > 0) && (
+										<div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
+											{zoneSeries.top.map((name, idx) => (
+												<Link
+													key={name}
+													to="/infra/cloudflare/$zoneName"
+													params={{ zoneName: name }}
+													className="group inline-flex items-center gap-1.5"
+												>
+													<span
+														aria-hidden
+														className="size-1.5 rounded-full"
+														style={{ background: COLOR_PALETTE[idx % COLOR_PALETTE.length] }}
+													/>
+													<span className="text-[11px] text-muted-foreground transition-colors group-hover:text-foreground">
+														{name}
+													</span>
+												</Link>
+											))}
+											{zoneSeries.otherCount > 0 && (
+												<span className="inline-flex items-center gap-1.5">
+													<span
+														aria-hidden
+														className="size-1.5 rounded-full"
+														style={{ background: OTHER_ZONES_COLOR }}
+													/>
+													<span className="text-[11px] text-muted-foreground">
+														Other zones ({zoneSeries.otherCount})
+													</span>
+												</span>
+											)}
+										</div>
+									)}
+									<div className="grid gap-4 lg:grid-cols-2">
+										<CloudflareZoneChart
+											buckets={timeseries.buckets}
+											metric="requests"
+											topZones={zoneSeries.top}
+											waiting={timeseriesWaiting}
+											syncId="cf-zones"
+										/>
+										<CloudflareZoneChart
+											buckets={timeseries.buckets}
+											metric="errorRate"
+											topZones={zoneSeries.top}
+											waiting={timeseriesWaiting}
+											syncId="cf-zones"
+										/>
+										<CloudflareZoneChart
+											buckets={timeseries.buckets}
+											metric="cacheHitRate"
+											topZones={zoneSeries.top}
+											waiting={timeseriesWaiting}
+											syncId="cf-zones"
+										/>
+										<CloudflareZoneChart
+											buckets={timeseries.buckets}
+											metric="bytes"
+											topZones={zoneSeries.top}
+											waiting={timeseriesWaiting}
+											syncId="cf-zones"
+										/>
+									</div>
 								</div>
 							)}
 							<section className="space-y-3">
@@ -218,7 +266,16 @@ function CloudflareData({ startTime, endTime }: { startTime: string; endTime: st
 				})
 				.render()}
 			<section className="space-y-3">
-				<h2 className="text-sm font-medium text-foreground">Workers</h2>
+				<h2 className="text-sm font-medium text-foreground">
+					Workers
+					{Result.builder(workersResult)
+						.onSuccess((r) => (
+							<span className="ml-2 font-mono text-xs text-muted-foreground">
+								{r.workers.length}
+							</span>
+						))
+						.orElse(() => null)}
+				</h2>
 				{Result.builder(workersResult)
 					.onInitial(() => <CloudflareWorkerTableLoading />)
 					.onError((err) => <QueryErrorState error={err} />)

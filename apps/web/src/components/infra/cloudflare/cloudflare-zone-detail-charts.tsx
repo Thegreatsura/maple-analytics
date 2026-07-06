@@ -1,4 +1,4 @@
-import { useId, useMemo } from "react"
+import { useId, useMemo, type ReactNode } from "react"
 import { Area, AreaChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts"
 
 import {
@@ -15,34 +15,40 @@ import type {
 	CloudflareZoneStatusBucket,
 } from "@/api/warehouse/cloudflare-infra"
 import { formatLatency, formatNumber } from "@/lib/format"
-import { CHART_EMPTY_MESSAGE, CHART_GRID_DASH, transformRows } from "../chart-utils"
+import { CHART_EMPTY_MESSAGE, CHART_GRID_DASH, makeBucketLabeler, transformRows } from "../chart-utils"
+import {
+	CACHE_STATUS_COLORS,
+	CACHE_STATUS_ORDER,
+	STATUS_CLASS_COLORS,
+	STATUS_CLASS_ORDER,
+} from "./constants"
 
 const CHART_HEIGHT = 200
 
-// Status classes carry severity; cache statuses shade from "answered at the
-// edge" (primary) to "went to origin" (muted). Both are fixed, meaningful
-// mappings — not palette-by-index.
-const STATUS_CLASS_COLORS: Record<string, string> = {
-	"2xx": "var(--severity-info)",
-	"3xx": "var(--chart-2)",
-	"4xx": "var(--severity-warn)",
-	"5xx": "var(--severity-error)",
-	unknown: "color-mix(in oklab, var(--muted-foreground) 55%, transparent)",
-}
-
-const CACHE_STATUS_COLORS: Record<string, string> = {
-	hit: "var(--primary)",
-	stale: "color-mix(in oklab, var(--primary) 70%, transparent)",
-	revalidated: "color-mix(in oklab, var(--primary) 50%, transparent)",
-	updating: "color-mix(in oklab, var(--primary) 35%, transparent)",
-	miss: "var(--chart-3)",
-	expired: "var(--chart-4)",
-	dynamic: "color-mix(in oklab, var(--muted-foreground) 45%, transparent)",
-	none: "color-mix(in oklab, var(--muted-foreground) 35%, transparent)",
-	unknown: "color-mix(in oklab, var(--muted-foreground) 25%, transparent)",
-}
-
 const FALLBACK_SERIES_COLOR = "var(--chart-5)"
+
+/** Card frame shared by every detail chart: title on the left, legend on the right. */
+function ChartCard({
+	title,
+	legend,
+	children,
+	className,
+}: {
+	title: string
+	legend: ReactNode
+	children: ReactNode
+	className?: string
+}) {
+	return (
+		<div className={cn("rounded-md border bg-card", className)}>
+			<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 pt-2.5">
+				<span className="text-[11px] font-medium text-muted-foreground">{title}</span>
+				<div className="flex flex-wrap items-center gap-x-3 gap-y-1">{legend}</div>
+			</div>
+			{children}
+		</div>
+	)
+}
 
 interface StackedBreakdownChartProps {
 	title: string
@@ -50,14 +56,13 @@ interface StackedBreakdownChartProps {
 	colors: Record<string, string>
 	/** Fixed legend/stack order; unlisted series append after, alphabetically. */
 	order: ReadonlyArray<string>
-	waiting?: boolean
 	syncId?: string
 }
 
-function StackedBreakdownChart({ title, rows, colors, order, waiting, syncId }: StackedBreakdownChartProps) {
+function StackedBreakdownChart({ title, rows, colors, order, syncId }: StackedBreakdownChartProps) {
 	const gradientPrefix = useId().replace(/:/g, "")
 	const { data, series } = useMemo(() => {
-		const transformed = transformRows(rows)
+		const transformed = transformRows(rows, makeBucketLabeler(rows.map((r) => r.bucket)))
 		const rank = new Map(order.map((name, idx) => [name, idx]))
 		const sorted = [...transformed.series].sort(
 			(a, b) => (rank.get(a) ?? order.length) - (rank.get(b) ?? order.length) || a.localeCompare(b),
@@ -68,28 +73,27 @@ function StackedBreakdownChart({ title, rows, colors, order, waiting, syncId }: 
 	const seriesColor = (name: string) => colors[name] ?? FALLBACK_SERIES_COLOR
 
 	const config = useMemo<ChartConfig>(
-		() => Object.fromEntries(series.map((name) => [name, { label: name, color: seriesColor(name) }])),
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[series],
+		() =>
+			Object.fromEntries(
+				series.map((name) => [name, { label: name, color: colors[name] ?? FALLBACK_SERIES_COLOR }]),
+			),
+		[series, colors],
 	)
 
 	return (
-		<div className={cn("rounded-md border bg-card", waiting && "opacity-60 transition-opacity")}>
-			<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 pt-2.5">
-				<span className="text-[11px] font-medium text-muted-foreground">{title}</span>
-				<div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-					{series.map((s) => (
-						<span key={s} className="inline-flex items-center gap-1.5">
-							<span
-								aria-hidden
-								className="size-1.5 rounded-full"
-								style={{ background: seriesColor(s) }}
-							/>
-							<span className="text-[11px] text-muted-foreground">{s}</span>
-						</span>
-					))}
-				</div>
-			</div>
+		<ChartCard
+			title={title}
+			legend={series.map((s) => (
+				<span key={s} className="inline-flex items-center gap-1.5">
+					<span
+						aria-hidden
+						className="size-1.5 rounded-full"
+						style={{ background: seriesColor(s) }}
+					/>
+					<span className="text-[11px] text-muted-foreground">{s}</span>
+				</span>
+			))}
+		>
 			{data.length === 0 ? (
 				<div
 					className="flex items-center justify-center font-mono text-[11px] text-muted-foreground"
@@ -175,30 +179,15 @@ function StackedBreakdownChart({ title, rows, colors, order, waiting, syncId }: 
 					</AreaChart>
 				</ChartContainer>
 			)}
-		</div>
+		</ChartCard>
 	)
 }
 
-const STATUS_ORDER = ["2xx", "3xx", "4xx", "5xx", "unknown"]
-const CACHE_ORDER = [
-	"hit",
-	"stale",
-	"revalidated",
-	"updating",
-	"miss",
-	"expired",
-	"dynamic",
-	"none",
-	"unknown",
-]
-
 export function CloudflareZoneStatusChart({
 	buckets,
-	waiting,
 	syncId,
 }: {
 	buckets: ReadonlyArray<CloudflareZoneStatusBucket>
-	waiting?: boolean
 	syncId?: string
 }) {
 	const rows = useMemo(
@@ -210,8 +199,7 @@ export function CloudflareZoneStatusChart({
 			title="Requests by status class"
 			rows={rows}
 			colors={STATUS_CLASS_COLORS}
-			order={STATUS_ORDER}
-			waiting={waiting}
+			order={STATUS_CLASS_ORDER}
 			syncId={syncId}
 		/>
 	)
@@ -219,11 +207,9 @@ export function CloudflareZoneStatusChart({
 
 export function CloudflareZoneCacheChart({
 	buckets,
-	waiting,
 	syncId,
 }: {
 	buckets: ReadonlyArray<CloudflareZoneCacheBucket>
-	waiting?: boolean
 	syncId?: string
 }) {
 	const rows = useMemo(
@@ -235,8 +221,7 @@ export function CloudflareZoneCacheChart({
 			title="Requests by cache status"
 			rows={rows}
 			colors={CACHE_STATUS_COLORS}
-			order={CACHE_ORDER}
-			waiting={waiting}
+			order={CACHE_STATUS_ORDER}
 			syncId={syncId}
 		/>
 	)
@@ -258,19 +243,25 @@ const LATENCY_SERIES: ReadonlyArray<{
 	{ key: "originP99Ms", label: "Origin p99", color: "var(--chart-1)", dashed: true },
 ]
 
+function LatencyLegendSwatch({ color, dashed }: { color: string; dashed?: boolean }) {
+	if (dashed) {
+		return <span aria-hidden className="w-3 border-t border-dashed" style={{ borderColor: color }} />
+	}
+	return <span aria-hidden className="h-0.5 w-3 rounded-full" style={{ background: color }} />
+}
+
 export function CloudflareZoneLatencyChart({
 	buckets,
-	waiting,
 	syncId,
 }: {
 	buckets: ReadonlyArray<CloudflareZoneLatencyBucket>
-	waiting?: boolean
 	syncId?: string
 }) {
 	const { data, activeSeries } = useMemo(() => {
+		const labeler = makeBucketLabeler(buckets.map((b) => b.bucket))
 		const points = buckets.map((b) => ({
 			bucket: b.bucket,
-			time: new Date(b.bucket).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+			time: labeler(b.bucket),
 			...Object.fromEntries(LATENCY_SERIES.map((s) => [s.key, b[s.key]])),
 		}))
 		// Zones without plan-level quantiles (or without origin traffic) leave
@@ -279,33 +270,34 @@ export function CloudflareZoneLatencyChart({
 		return { data: points, activeSeries: active }
 	}, [buckets])
 
-	if (activeSeries.length === 0) return null
+	const config = useMemo<ChartConfig>(
+		() => Object.fromEntries(activeSeries.map((s) => [s.key, { label: s.label, color: s.color }])),
+		[activeSeries],
+	)
 
-	const config = Object.fromEntries(
-		activeSeries.map((s) => [s.key, { label: s.label, color: s.color }]),
-	) satisfies ChartConfig
+	// Latency quantiles are plan-gated on Cloudflare's side — say so instead of
+	// silently omitting the panel (the operator shouldn't wonder where it went).
+	if (activeSeries.length === 0) {
+		return (
+			<ChartCard title="Latency percentiles" legend={null}>
+				<p className="px-3 pb-3 pt-1.5 font-mono text-[11px] text-muted-foreground">
+					No timing quantiles for this window — Cloudflare only exposes zone latency percentiles
+					on some plans.
+				</p>
+			</ChartCard>
+		)
+	}
 
 	return (
-		<div className={cn("rounded-md border bg-card", waiting && "opacity-60 transition-opacity")}>
-			<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 pt-2.5">
-				<span className="text-[11px] font-medium text-muted-foreground">Latency percentiles</span>
-				<div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-					{activeSeries.map((s) => (
-						<span key={s.key} className="inline-flex items-center gap-1.5">
-							<span
-								aria-hidden
-								className={cn("h-0.5 w-3", s.dashed && "border-t border-dashed")}
-								style={
-									s.dashed
-										? { borderColor: s.color, height: 0 }
-										: { background: s.color }
-								}
-							/>
-							<span className="text-[11px] text-muted-foreground">{s.label}</span>
-						</span>
-					))}
-				</div>
-			</div>
+		<ChartCard
+			title="Latency percentiles"
+			legend={activeSeries.map((s) => (
+				<span key={s.key} className="inline-flex items-center gap-1.5">
+					<LatencyLegendSwatch color={s.color} dashed={s.dashed} />
+					<span className="text-[11px] text-muted-foreground">{s.label}</span>
+				</span>
+			))}
+		>
 			<ChartContainer config={config} className="w-full" style={{ height: CHART_HEIGHT }}>
 				<LineChart
 					data={data}
@@ -372,6 +364,6 @@ export function CloudflareZoneLatencyChart({
 					))}
 				</LineChart>
 			</ChartContainer>
-		</div>
+		</ChartCard>
 	)
 }

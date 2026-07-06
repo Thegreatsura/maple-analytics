@@ -4,6 +4,7 @@ import type { CloudflareWorkerRow } from "@/api/warehouse/cloudflare-infra"
 import { formatLatency, formatNumber } from "@/lib/format"
 import { ColumnHead, TableShell, TableSkeleton, useTableSort } from "../primitives/data-table"
 import { formatPercent } from "../format"
+import { errorRateClass } from "./constants"
 
 type SortKey =
 	| "scriptName"
@@ -144,13 +145,7 @@ export function CloudflareWorkerTable({ workers, waiting }: CloudflareWorkerTabl
 						{formatNumber(worker.errors)}
 					</div>
 					<div
-						className={`w-[90px] text-right font-mono text-[12px] tabular-nums ${
-							worker.errorRate >= 0.05
-								? "text-destructive"
-								: worker.errorRate >= 0.01
-									? "text-amber-600 dark:text-amber-500"
-									: "text-foreground/80"
-						}`}
+						className={`w-[90px] text-right font-mono text-[12px] tabular-nums ${errorRateClass(worker.errorRate)}`}
 					>
 						{formatPercent(worker.errorRate)}
 					</div>
