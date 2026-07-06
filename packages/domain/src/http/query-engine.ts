@@ -282,6 +282,85 @@ export class ServiceCloudflareStatsResponse extends Schema.Class<ServiceCloudfla
 	data: Schema.Array(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
+// Cloudflare infrastructure page (/infra/cloudflare): per-zone HTTP edge
+// analytics and per-Worker invocation analytics from the direct-integration
+// poller's metrics. Same conventions as ServiceCloudflareStats — no
+// `deploymentEnv` (the poller's metrics carry none), generic record rows,
+// counters + percentiles merged server-side for the rollup endpoints.
+export class CloudflareInfraZonesRequest extends Schema.Class<CloudflareInfraZonesRequest>(
+	"CloudflareInfraZonesRequest",
+)({
+	startTime: TinybirdDateTime,
+	endTime: TinybirdDateTime,
+}) {}
+
+export class CloudflareInfraZonesResponse extends Schema.Class<CloudflareInfraZonesResponse>(
+	"CloudflareInfraZonesResponse",
+)({
+	data: Schema.Array(Schema.Record(Schema.String, Schema.Unknown)),
+}) {}
+
+export class CloudflareInfraZoneTimeseriesRequest extends Schema.Class<CloudflareInfraZoneTimeseriesRequest>(
+	"CloudflareInfraZoneTimeseriesRequest",
+)({
+	startTime: TinybirdDateTime,
+	endTime: TinybirdDateTime,
+	bucketSeconds: Schema.Number,
+}) {}
+
+export class CloudflareInfraZoneTimeseriesResponse extends Schema.Class<CloudflareInfraZoneTimeseriesResponse>(
+	"CloudflareInfraZoneTimeseriesResponse",
+)({
+	data: Schema.Array(Schema.Record(Schema.String, Schema.Unknown)),
+}) {}
+
+// Zone detail page: bucketed breakdowns by HTTP status class and cache
+// status plus a latency-percentile timeseries, all scoped to one zone
+// pseudo-service (`cloudflare/{zoneName}`). One round-trip for the page.
+export class CloudflareInfraZoneDetailRequest extends Schema.Class<CloudflareInfraZoneDetailRequest>(
+	"CloudflareInfraZoneDetailRequest",
+)({
+	serviceName: Schema.String,
+	startTime: TinybirdDateTime,
+	endTime: TinybirdDateTime,
+	bucketSeconds: Schema.Number,
+}) {}
+
+export class CloudflareInfraZoneDetailResponse extends Schema.Class<CloudflareInfraZoneDetailResponse>(
+	"CloudflareInfraZoneDetailResponse",
+)({
+	statusBuckets: Schema.Array(Schema.Record(Schema.String, Schema.Unknown)),
+	cacheBuckets: Schema.Array(Schema.Record(Schema.String, Schema.Unknown)),
+	latencyBuckets: Schema.Array(Schema.Record(Schema.String, Schema.Unknown)),
+}) {}
+
+export class CloudflareInfraWorkersRequest extends Schema.Class<CloudflareInfraWorkersRequest>(
+	"CloudflareInfraWorkersRequest",
+)({
+	startTime: TinybirdDateTime,
+	endTime: TinybirdDateTime,
+}) {}
+
+export class CloudflareInfraWorkersResponse extends Schema.Class<CloudflareInfraWorkersResponse>(
+	"CloudflareInfraWorkersResponse",
+)({
+	data: Schema.Array(Schema.Record(Schema.String, Schema.Unknown)),
+}) {}
+
+export class CloudflareInfraWorkerTimeseriesRequest extends Schema.Class<CloudflareInfraWorkerTimeseriesRequest>(
+	"CloudflareInfraWorkerTimeseriesRequest",
+)({
+	startTime: TinybirdDateTime,
+	endTime: TinybirdDateTime,
+	bucketSeconds: Schema.Number,
+}) {}
+
+export class CloudflareInfraWorkerTimeseriesResponse extends Schema.Class<CloudflareInfraWorkerTimeseriesResponse>(
+	"CloudflareInfraWorkerTimeseriesResponse",
+)({
+	data: Schema.Array(Schema.Record(Schema.String, Schema.Unknown)),
+}) {}
+
 export class ServiceExternalEdgesRequest extends Schema.Class<ServiceExternalEdgesRequest>(
 	"ServiceExternalEdgesRequest",
 )({
@@ -1325,6 +1404,41 @@ export class QueryEngineApiGroup extends HttpApiGroup.make("queryEngine")
 		HttpApiEndpoint.post("serviceCloudflareStats", "/service-cloudflare-stats", {
 			payload: ServiceCloudflareStatsRequest,
 			success: ServiceCloudflareStatsResponse,
+			error: queryEngineEndpointErrors,
+		}),
+	)
+	.add(
+		HttpApiEndpoint.post("cloudflareInfraZones", "/cloudflare-infra-zones", {
+			payload: CloudflareInfraZonesRequest,
+			success: CloudflareInfraZonesResponse,
+			error: queryEngineEndpointErrors,
+		}),
+	)
+	.add(
+		HttpApiEndpoint.post("cloudflareInfraZoneTimeseries", "/cloudflare-infra-zone-timeseries", {
+			payload: CloudflareInfraZoneTimeseriesRequest,
+			success: CloudflareInfraZoneTimeseriesResponse,
+			error: queryEngineEndpointErrors,
+		}),
+	)
+	.add(
+		HttpApiEndpoint.post("cloudflareInfraZoneDetail", "/cloudflare-infra-zone-detail", {
+			payload: CloudflareInfraZoneDetailRequest,
+			success: CloudflareInfraZoneDetailResponse,
+			error: queryEngineEndpointErrors,
+		}),
+	)
+	.add(
+		HttpApiEndpoint.post("cloudflareInfraWorkers", "/cloudflare-infra-workers", {
+			payload: CloudflareInfraWorkersRequest,
+			success: CloudflareInfraWorkersResponse,
+			error: queryEngineEndpointErrors,
+		}),
+	)
+	.add(
+		HttpApiEndpoint.post("cloudflareInfraWorkerTimeseries", "/cloudflare-infra-worker-timeseries", {
+			payload: CloudflareInfraWorkerTimeseriesRequest,
+			success: CloudflareInfraWorkerTimeseriesResponse,
 			error: queryEngineEndpointErrors,
 		}),
 	)

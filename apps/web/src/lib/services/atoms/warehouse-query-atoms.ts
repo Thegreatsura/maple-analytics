@@ -54,6 +54,13 @@ import {
 	getServicePlatforms,
 } from "@/api/warehouse/service-map"
 import { getServiceWorkloads } from "@/api/warehouse/service-infra"
+import {
+	getCloudflareWorkers,
+	getCloudflareWorkerTimeseries,
+	getCloudflareZoneDetail,
+	getCloudflareZones,
+	getCloudflareZoneTimeseries,
+} from "@/api/warehouse/cloudflare-infra"
 import { getServiceHealthBaseline, getServiceOverview, getServicesFacets } from "@/api/warehouse/services"
 import {
 	getResourceAttributeKeys,
@@ -340,6 +347,28 @@ export const nodeFacetsResultAtom = makeQueryAtomFamily(getNodeFacets, {
 })
 
 export const workloadFacetsResultAtom = makeQueryAtomFamily(getWorkloadFacets, {
+	staleTime: 30_000,
+})
+
+// Cloudflare infrastructure page (/infra/cloudflare): per-zone HTTP edge
+// analytics + per-Worker invocation analytics from the direct integration.
+export const cloudflareZonesResultAtom = makeQueryAtomFamily(getCloudflareZones, {
+	staleTime: 30_000,
+})
+
+export const cloudflareZoneTimeseriesResultAtom = makeQueryAtomFamily(getCloudflareZoneTimeseries, {
+	staleTime: 30_000,
+})
+
+export const cloudflareZoneDetailResultAtom = makeQueryAtomFamily(getCloudflareZoneDetail, {
+	staleTime: 30_000,
+})
+
+export const cloudflareWorkersResultAtom = makeQueryAtomFamily(getCloudflareWorkers, {
+	staleTime: 30_000,
+})
+
+export const cloudflareWorkerTimeseriesResultAtom = makeQueryAtomFamily(getCloudflareWorkerTimeseries, {
 	staleTime: 30_000,
 })
 
