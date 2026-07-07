@@ -38,7 +38,7 @@ import {
 import { type LogBuffer, makeLogBuffer } from "../shared/flushable-logger.js"
 import { makeSpanBuffer, type SpanBuffer } from "../shared/flushable-tracer.js"
 import { withSessionLink } from "./session-link.js"
-import { setupStandaloneSession } from "./standalone-session.js"
+import { type ClientReplayConfig, startClientSession } from "./replay-loader.js"
 
 /** Default auto-flush cadence (ms), matching `Otlp.layerJson`'s 5s export interval. */
 const DEFAULT_AUTO_FLUSH_MS = 5_000
@@ -90,6 +90,12 @@ export interface MapleClientFlushableConfig {
 	 * the session rows), during SSR, or without an ingest key.
 	 */
 	readonly emitSessionMeta?: boolean | undefined
+	/**
+	 * rrweb session replay for this app, recorded by the shared Maple replay
+	 * engine (loaded lazily in a code-split chunk). Default enabled with
+	 * sampleRate 1 and inputs masked — set `{ enabled: false }` to opt out.
+	 */
+	readonly replay?: ClientReplayConfig | undefined
 }
 
 export interface FlushableTelemetry {
@@ -152,15 +158,15 @@ export const make = (config: MapleClientFlushableConfig): FlushableTelemetry => 
 		config.anticipatedErrorTags !== undefined && config.anticipatedErrorTags.length > 0
 			? new Set(config.anticipatedErrorTags)
 			: undefined
-	if (config.emitSessionMeta ?? true) {
-		setupStandaloneSession({
-			endpoint: config.endpoint,
-			ingestKey: config.ingestKey,
-			serviceName: config.serviceName,
-			environment: config.environment,
-			serviceVersion: config.serviceVersion,
-		})
-	}
+	startClientSession({
+		endpoint: config.endpoint,
+		ingestKey: config.ingestKey,
+		serviceName: config.serviceName,
+		environment: config.environment,
+		serviceVersion: config.serviceVersion,
+		replay: config.replay,
+		emitSessionMeta: config.emitSessionMeta,
+	})
 
 	const spans: SpanBuffer = makeSpanBuffer({ dropSpan, anticipatedErrorTags })
 	const logs: LogBuffer = makeLogBuffer({ excludeLogSpans: config.excludeLogSpans })

@@ -8,14 +8,30 @@ export interface MapleBrowserSessionSink {
 	readonly recordTraceId: (traceId: string) => void
 }
 
+// Trace ids observed during the active session. Read when the session
+// metadata is finalized so the session row links to its traces. Ids can be
+// contributed by two sources: the replay engine's own event capture and an
+// external tracer (notably the Effect client SDK) pushing ids in via the
+// published global sink.
+const observedTraceIds = new Set<string>()
+
+/** Record a trace id seen during the session. Idempotent per id. */
+export function recordTraceId(traceId: string): void {
+	observedTraceIds.add(traceId)
+}
+
+export function getObservedTraceIds(): string[] {
+	return Array.from(observedTraceIds)
+}
+
 /**
- * Publish the session sink on `globalThis` so other tracers in the page (e.g.
- * the Effect client SDK) can attach their trace ids to the active replay
- * session without a direct dependency on `@maple-dev/browser`. Reads are
- * lazy/per-span on the consumer side, so init ordering between SDKs does not
- * matter.
+ * Publish the session sink on `globalThis` so other tracers in the page can
+ * attach their trace ids to the active replay session without a direct
+ * dependency on the publishing SDK. Reads are lazy/per-span on the consumer
+ * side, so init ordering between SDKs does not matter.
  */
-export function publishSessionSink(sink: MapleBrowserSessionSink): void {
+export function publishSessionSink(sessionId: string): void {
+	const sink: MapleBrowserSessionSink = { sessionId, recordTraceId }
 	;(globalThis as Record<string, unknown>)[SESSION_SINK_KEY] = sink
 }
 

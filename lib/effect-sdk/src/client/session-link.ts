@@ -1,4 +1,4 @@
-import { getSessionId, readSessionSink } from "@maple/browser-session"
+import { getSessionId, readSessionSink, recordTraceId } from "@maple/browser-session"
 import { Effect, Layer, Tracer } from "effect"
 import { noteStandaloneSpan } from "./standalone-session.js"
 
@@ -44,6 +44,10 @@ export const withSessionLink = <ROut, E, RIn>(base: Layer.Layer<ROut, E, RIn>) =
 								// Feeds the standalone session's ended-row trace ids and
 								// detects idle rotation — see standalone-session.ts.
 								noteStandaloneSpan(sessionId, span.traceId)
+								// Also feed this SDK's bundled shared registry, so spans
+								// emitted before the lazily loaded replay engine publishes
+								// the sink still land on the engine's ended rows.
+								recordTraceId(span.traceId)
 							}
 						}
 						return span

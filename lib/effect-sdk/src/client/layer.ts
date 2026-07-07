@@ -3,7 +3,7 @@ import { Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { Otlp } from "effect/unstable/observability"
 import { withSessionLink } from "./session-link.js"
-import { setupStandaloneSession } from "./standalone-session.js"
+import { type ClientReplayConfig, startClientSession } from "./replay-loader.js"
 
 export interface MapleClientConfig {
 	/** The service name reported in traces, logs, and metrics. */
@@ -30,6 +30,12 @@ export interface MapleClientConfig {
 	 * the session rows), during SSR, or without an ingest key.
 	 */
 	readonly emitSessionMeta?: boolean | undefined
+	/**
+	 * rrweb session replay for this app, recorded by the shared Maple replay
+	 * engine (loaded lazily in a code-split chunk). Default enabled with
+	 * sampleRate 1 and inputs masked — set `{ enabled: false }` to opt out.
+	 */
+	readonly replay?: ClientReplayConfig | undefined
 	readonly maxBatchSize?: number | undefined
 	readonly loggerExportInterval?: Duration.Input | undefined
 	readonly metricsExportInterval?: Duration.Input | undefined
@@ -84,15 +90,15 @@ export const layer = (config: MapleClientConfig) => {
 	if (config.serviceNamespace) attributes["service.namespace"] = config.serviceNamespace
 	if (config.attributes) Object.assign(attributes, config.attributes)
 
-	if (config.emitSessionMeta ?? true) {
-		setupStandaloneSession({
-			endpoint: config.endpoint,
-			ingestKey: config.ingestKey,
-			serviceName: config.serviceName,
-			environment: config.environment,
-			serviceVersion: config.serviceVersion,
-		})
-	}
+	startClientSession({
+		endpoint: config.endpoint,
+		ingestKey: config.ingestKey,
+		serviceName: config.serviceName,
+		environment: config.environment,
+		serviceVersion: config.serviceVersion,
+		replay: config.replay,
+		emitSessionMeta: config.emitSessionMeta,
+	})
 
 	const base = Otlp.layerJson({
 		baseUrl: config.endpoint,

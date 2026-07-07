@@ -21,6 +21,7 @@ import {
 	postSessionMetaRow,
 	readSessionSink,
 } from "@maple/browser-session"
+import { getCurrentUserId } from "./user.js"
 
 /** Trace ids observed per standalone session — attached to its ended rows. */
 const observedBySession = new Map<string, Set<string>>()
@@ -49,6 +50,7 @@ const post = (status: "active" | "ended", keepalive: boolean): void => {
 			version: nextMetaVersion(),
 			status,
 			serviceName: options.serviceName,
+			userId: getCurrentUserId(),
 			environment: options.environment,
 			serviceVersion: options.serviceVersion,
 			traceIds: status === "ended" ? Array.from(observedBySession.get(sessionId) ?? []) : undefined,

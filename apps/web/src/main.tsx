@@ -17,11 +17,10 @@ import { clearChunkReloadGuard, shouldAttemptChunkReload } from "./lib/chunk-rel
 import "./styles.css"
 
 // Client telemetry for the dashboard itself comes from the effect-sdk client
-// tracer alone (see lib/services/common/otel-layer.ts): it instruments every
-// Effect HTTP request and stamps `session.id` from its own bundled browser
-// session, so spans stay session-grouped without `@maple-dev/browser`. That
-// also means maple-web no longer records rrweb replays of itself — its
-// sessions won't appear in the Sessions UI, only as session-grouped traces.
+// alone (see lib/services/common/otel-layer.ts): it instruments every Effect
+// HTTP request, stamps `session.id` from its own bundled browser session, and
+// records the rrweb session replay via the SDK's built-in replay engine
+// (lazy-loaded chunk, on by default) — no `@maple-dev/browser` needed.
 
 window.addEventListener("vite:preloadError", (event) => {
 	if (shouldAttemptChunkReload()) {
