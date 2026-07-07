@@ -1,5 +1,6 @@
 import { getSessionId, readSessionSink } from "@maple/browser-session"
 import { Effect, Layer, Tracer } from "effect"
+import { noteStandaloneSpan } from "./standalone-session.js"
 
 /**
  * Decorate the OTLP tracer so every span it creates carries `session.id` for
@@ -38,7 +39,12 @@ export const withSessionLink = <ROut, E, RIn>(base: Layer.Layer<ROut, E, RIn>) =
 							span.attribute("session.id", sink.sessionId)
 						} else {
 							const sessionId = getSessionId()
-							if (sessionId !== undefined) span.attribute("session.id", sessionId)
+							if (sessionId !== undefined) {
+								span.attribute("session.id", sessionId)
+								// Feeds the standalone session's ended-row trace ids and
+								// detects idle rotation — see standalone-session.ts.
+								noteStandaloneSpan(sessionId, span.traceId)
+							}
 						}
 						return span
 					},

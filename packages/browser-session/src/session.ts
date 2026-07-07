@@ -32,13 +32,22 @@ export interface SessionRecord {
 	 * rejects records where it is missing.
 	 */
 	chunkSeq: number
+	/**
+	 * Last session-metadata row version issued for this session. The backend
+	 * resolves each field with `argMax(field, Version)`, so versions must be
+	 * strictly increasing across every writer (either SDK, across reloads and
+	 * hide/resume cycles) for the latest row to win. Optional for
+	 * backwards-compat with records written before it existed — those already
+	 * used versions 1 (active) and 2 (ended), so the absent case resumes at 2.
+	 */
+	metaVersion?: number
 }
 
 /** In-memory fallback when sessionStorage is unavailable (private mode). */
 let ephemeral: SessionRecord | undefined
 
 function freshRecord(now: number): SessionRecord {
-	return { id: crypto.randomUUID(), startedAt: now, lastActivityAt: now, chunkSeq: 0 }
+	return { id: crypto.randomUUID(), startedAt: now, lastActivityAt: now, chunkSeq: 0, metaVersion: 0 }
 }
 
 function readRecord(): SessionRecord | undefined {
@@ -126,4 +135,19 @@ export function nextChunkSeq(): number {
 	const seq = record.chunkSeq
 	writeRecord({ ...record, chunkSeq: seq + 1 })
 	return seq
+}
+
+/**
+ * Take the next session-metadata row version for the current session.
+ * Monotonic per session across reloads, hide/resume cycles, and writers (both
+ * SDKs share the persisted counter), so `argMax(field, Version)` on the
+ * backend always resolves to the most recently posted row. Records written by
+ * older SDKs (no `metaVersion`) already posted versions 1 and 2, so the
+ * counter resumes at 3 for them; a fresh session starts at 1.
+ */
+export function nextMetaVersion(): number {
+	const record = readRecord() ?? freshRecord(Date.now())
+	const version = (record.metaVersion ?? 2) + 1
+	writeRecord({ ...record, metaVersion: version })
+	return version
 }

@@ -38,6 +38,7 @@ import {
 import { type LogBuffer, makeLogBuffer } from "../shared/flushable-logger.js"
 import { makeSpanBuffer, type SpanBuffer } from "../shared/flushable-tracer.js"
 import { withSessionLink } from "./session-link.js"
+import { setupStandaloneSession } from "./standalone-session.js"
 
 /** Default auto-flush cadence (ms), matching `Otlp.layerJson`'s 5s export interval. */
 const DEFAULT_AUTO_FLUSH_MS = 5_000
@@ -82,6 +83,13 @@ export interface MapleClientFlushableConfig {
 	 * `addEventListener` (SSR / non-DOM runtime).
 	 */
 	readonly flushOnUnload?: boolean | undefined
+	/**
+	 * Post session metadata rows for the standalone session so it appears in
+	 * Maple's Sessions UI (list entry + linked traces, no replay recording).
+	 * Default `true`; no-ops when `@maple-dev/browser` is on the page (it owns
+	 * the session rows), during SSR, or without an ingest key.
+	 */
+	readonly emitSessionMeta?: boolean | undefined
 }
 
 export interface FlushableTelemetry {
@@ -144,6 +152,16 @@ export const make = (config: MapleClientFlushableConfig): FlushableTelemetry => 
 		config.anticipatedErrorTags !== undefined && config.anticipatedErrorTags.length > 0
 			? new Set(config.anticipatedErrorTags)
 			: undefined
+	if (config.emitSessionMeta ?? true) {
+		setupStandaloneSession({
+			endpoint: config.endpoint,
+			ingestKey: config.ingestKey,
+			serviceName: config.serviceName,
+			environment: config.environment,
+			serviceVersion: config.serviceVersion,
+		})
+	}
+
 	const spans: SpanBuffer = makeSpanBuffer({ dropSpan, anticipatedErrorTags })
 	const logs: LogBuffer = makeLogBuffer({ excludeLogSpans: config.excludeLogSpans })
 	// `withSessionLink` overrides only the Tracer reference, keeping the logger.

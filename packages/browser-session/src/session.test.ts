@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { getSession, getSessionId, markActivity, nextChunkSeq } from "./session"
+import { getSession, getSessionId, markActivity, nextChunkSeq, nextMetaVersion } from "./session"
 
 // Minimal in-memory sessionStorage standing in for the browser's, so the
 // rotation logic can be exercised under Node with a controllable clock.
@@ -179,6 +179,36 @@ describe("nextChunkSeq", () => {
 		vi.advanceTimersByTime(31 * MINUTE)
 		getSession() // rotates
 		expect(nextChunkSeq()).toBe(0)
+	})
+})
+
+describe("nextMetaVersion", () => {
+	it("starts at 1 for a fresh session and increments monotonically", () => {
+		getSession()
+		expect(nextMetaVersion()).toBe(1)
+		expect(nextMetaVersion()).toBe(2)
+		expect(nextMetaVersion()).toBe(3)
+	})
+
+	it("resumes at 3 for a legacy record without the counter (v1 active + v2 ended already posted)", () => {
+		storage.setItem(
+			STORAGE_KEY,
+			JSON.stringify({ id: "legacy", startedAt: Date.now(), lastActivityAt: Date.now(), chunkSeq: 5 }),
+		)
+		expect(nextMetaVersion()).toBe(3)
+		expect(nextMetaVersion()).toBe(4)
+	})
+
+	it("survives a reload within the window and restarts for a rotated session", () => {
+		getSession()
+		nextMetaVersion() // 1
+		nextMetaVersion() // 2
+		vi.advanceTimersByTime(5 * MINUTE)
+		getSession() // reload within window keeps the counter
+		expect(nextMetaVersion()).toBe(3)
+		vi.advanceTimersByTime(31 * MINUTE)
+		getSession() // rotation resets it
+		expect(nextMetaVersion()).toBe(1)
 	})
 })
 

@@ -3,6 +3,7 @@ import { Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { Otlp } from "effect/unstable/observability"
 import { withSessionLink } from "./session-link.js"
+import { setupStandaloneSession } from "./standalone-session.js"
 
 export interface MapleClientConfig {
 	/** The service name reported in traces, logs, and metrics. */
@@ -22,6 +23,13 @@ export interface MapleClientConfig {
 	readonly environment?: string | undefined
 	/** Additional resource attributes merged into the telemetry resource. */
 	readonly attributes?: Record<string, unknown> | undefined
+	/**
+	 * Post session metadata rows for the standalone session so it appears in
+	 * Maple's Sessions UI (list entry + linked traces, no replay recording).
+	 * Default `true`; no-ops when `@maple-dev/browser` is on the page (it owns
+	 * the session rows), during SSR, or without an ingest key.
+	 */
+	readonly emitSessionMeta?: boolean | undefined
 	readonly maxBatchSize?: number | undefined
 	readonly loggerExportInterval?: Duration.Input | undefined
 	readonly metricsExportInterval?: Duration.Input | undefined
@@ -75,6 +83,16 @@ export const layer = (config: MapleClientConfig) => {
 	if (config.serviceVersion) attributes["deployment.commit_sha"] = config.serviceVersion
 	if (config.serviceNamespace) attributes["service.namespace"] = config.serviceNamespace
 	if (config.attributes) Object.assign(attributes, config.attributes)
+
+	if (config.emitSessionMeta ?? true) {
+		setupStandaloneSession({
+			endpoint: config.endpoint,
+			ingestKey: config.ingestKey,
+			serviceName: config.serviceName,
+			environment: config.environment,
+			serviceVersion: config.serviceVersion,
+		})
+	}
 
 	const base = Otlp.layerJson({
 		baseUrl: config.endpoint,
