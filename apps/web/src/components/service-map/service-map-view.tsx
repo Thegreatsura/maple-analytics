@@ -84,7 +84,7 @@ import {
 	ServiceMapParticleCanvas,
 	type ParticleRegistry,
 } from "./service-map-particles"
-import { getDbDescriptor } from "./service-map-db"
+import { resolveDbNodePresentation } from "./service-map-db"
 import {
 	buildFlowElements,
 	CLOUDFLARE_COLOR,
@@ -755,6 +755,8 @@ interface DatabaseDetailPanelProps {
 	durationSeconds: number
 	startTime: string
 	endTime: string
+	/** Scope the query summary to the map's selected environment; `undefined` = all. */
+	deploymentEnv?: string
 	onClose: () => void
 }
 
@@ -934,6 +936,7 @@ function DatabaseDetailPanel({
 	durationSeconds,
 	startTime,
 	endTime,
+	deploymentEnv,
 	onClose,
 }: DatabaseDetailPanelProps) {
 	const callers = dbEdges.filter((e) => e.dbSystem === dbSystem && e.dbNamespace === dbNamespace)
@@ -951,6 +954,7 @@ function DatabaseDetailPanel({
 				dbNamespace,
 				startTime,
 				endTime,
+				deploymentEnv,
 				bucketSeconds,
 				topN: 8,
 			},
@@ -969,7 +973,13 @@ function DatabaseDetailPanel({
 		: callers.some((caller) => caller.hasSampling)
 	const summaryWaiting = Boolean(summaryResult.waiting)
 
-	const { category, Icon: DbIcon, color: dbColor, branded: dbBranded } = getDbDescriptor(dbSystem)
+	const {
+		title: dbTitle,
+		badge: dbBadge,
+		Icon: DbIcon,
+		color: dbColor,
+		branded: dbBranded,
+	} = resolveDbNodePresentation(dbSystem, dbNamespace)
 
 	return (
 		<div className="flex flex-col h-full bg-background overflow-hidden">
@@ -986,10 +996,10 @@ function DatabaseDetailPanel({
 						style={dbBranded ? undefined : { color: dbColor }}
 					/>
 					<span className="text-sm font-semibold text-foreground truncate">
-						{dbNamespace || dbSystem}
+						{dbTitle}
 					</span>
 					<span className="text-[9px] font-medium tracking-wide text-muted-foreground/60 uppercase shrink-0">
-						{dbNamespace ? dbSystem : category}
+						{dbBadge}
 					</span>
 				</div>
 				<Button variant="ghost" size="icon-xs" onClick={onClose}>
@@ -1200,6 +1210,8 @@ function DatabaseDetailPanel({
 interface ServiceMapViewProps {
 	startTime: string
 	endTime: string
+	/** Deployment environment to scope the map to; `undefined` = all environments. */
+	deploymentEnv?: string
 }
 
 // --- Debug Layout Sliders ---
@@ -1334,6 +1346,7 @@ export function ServiceMapCanvas({
 	durationSeconds,
 	startTime,
 	endTime,
+	deploymentEnv,
 	layoutKey,
 }: {
 	edges: ServiceEdge[]
@@ -1348,6 +1361,8 @@ export function ServiceMapCanvas({
 	durationSeconds: number
 	startTime: string
 	endTime: string
+	/** Selected deployment environment (`undefined` = all); scopes the DB detail panel. */
+	deploymentEnv?: string
 	// Namespaces persisted drag positions / viewport. Lifted to a prop so the
 	// component renders without a Clerk session (e.g. the /service-map-bench
 	// perf harness, which runs in self-hosted mode with no ClerkProvider).
@@ -1859,6 +1874,7 @@ export function ServiceMapCanvas({
 								durationSeconds={durationSeconds}
 								startTime={startTime}
 								endTime={endTime}
+								deploymentEnv={deploymentEnv}
 								onClose={() => setSelectedServiceId(null)}
 							/>
 						) : (
@@ -1890,7 +1906,7 @@ export function ServiceMapCanvas({
 	)
 }
 
-export function ServiceMapView({ startTime, endTime }: ServiceMapViewProps) {
+export function ServiceMapView({ startTime, endTime, deploymentEnv }: ServiceMapViewProps) {
 	const orgId = useMapleOrganizationId();
 	const infraEnabled = useInfraEnabled()
 	const durationSeconds = useMemo(() => {
@@ -1899,11 +1915,21 @@ export function ServiceMapView({ startTime, endTime }: ServiceMapViewProps) {
 	}, [startTime, endTime])
 
 	const mapInput: { data: GetServiceMapInput } = useMemo(
-		() => ({ data: { startTime, endTime } }),
-		[startTime, endTime],
+		() => ({ data: { startTime, endTime, deploymentEnv } }),
+		[startTime, endTime, deploymentEnv],
 	)
 
 	const overviewInput: { data: GetServiceOverviewInput } = useMemo(
+		// getServiceOverview scopes by an environments array, not the singular field.
+		() => ({ data: { startTime, endTime, environments: deploymentEnv ? [deploymentEnv] : undefined } }),
+		[startTime, endTime, deploymentEnv],
+	)
+
+	// Cloudflare worker stats come from Cloudflare's own analytics (keyed by script,
+	// with no Maple deployment.environment dimension), so they can't be env-scoped —
+	// keep them on an env-less input so switching environments doesn't refetch the
+	// same all-account data.
+	const cloudflareInput: { data: GetServiceMapInput } = useMemo(
 		() => ({ data: { startTime, endTime } }),
 		[startTime, endTime],
 	)
@@ -1911,7 +1937,7 @@ export function ServiceMapView({ startTime, endTime }: ServiceMapViewProps) {
 	const mapResult = useRefreshableAtomValue(getServiceMapResultAtom(mapInput))
 	const overviewResult = useRefreshableAtomValue(getServiceOverviewResultAtom(overviewInput))
 	const dbEdgesResult = useRefreshableAtomValue(getServiceMapDbEdgesResultAtom(mapInput))
-	const cloudflareResult = useRefreshableAtomValue(getServiceMapCloudflareResultAtom(mapInput))
+	const cloudflareResult = useRefreshableAtomValue(getServiceMapCloudflareResultAtom(cloudflareInput))
 	const platformsResult = useRefreshableAtomValue(getServicePlatformsResultAtom(mapInput))
 
 	// Render map as soon as edges arrive — don't wait for overview metrics
@@ -1997,6 +2023,7 @@ export function ServiceMapView({ startTime, endTime }: ServiceMapViewProps) {
 				durationSeconds={durationSeconds}
 				startTime={startTime}
 				endTime={endTime}
+				deploymentEnv={deploymentEnv}
 				layoutKey={orgId ?? "default"}
 			/>
 		))
