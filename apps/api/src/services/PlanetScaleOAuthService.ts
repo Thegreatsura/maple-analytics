@@ -34,6 +34,8 @@ interface ResolvedPlanetScaleOAuthConfig {
 	readonly clientSecret: Redacted.Redacted<string>
 	readonly authorizeUrl: string
 	readonly tokenUrl: string
+	/** Space-delimited, resource-prefixed scopes sent in the authorize request. */
+	readonly scopes: string
 }
 
 const resolveConfig = Effect.fn("PlanetScaleOAuthService.resolveConfig")(function* (env: EnvShape) {
@@ -60,6 +62,7 @@ const resolveConfig = Effect.fn("PlanetScaleOAuthService.resolveConfig")(functio
 		clientSecret,
 		authorizeUrl: env.PLANETSCALE_OAUTH_AUTHORIZE_URL,
 		tokenUrl: env.PLANETSCALE_OAUTH_TOKEN_URL,
+		scopes: env.PLANETSCALE_OAUTH_SCOPES,
 	} satisfies ResolvedPlanetScaleOAuthConfig
 })
 
@@ -252,13 +255,16 @@ export class PlanetScaleOAuthService extends Context.Service<
 				}),
 			)
 
-			// No scope param — access scopes are configured on the PlanetScale OAuth
-			// application itself. No PKCE — PlanetScale OAuth apps are confidential
-			// clients authenticated by the client secret at token exchange.
+			// PlanetScale REQUIRES the scope param — the app's configured scopes are the
+			// allowed maximum, not an implicit default, so omitting it fails the authorize
+			// with `invalid_scope`. Scopes are resource-prefixed (`organization:read_databases`)
+			// and space-delimited. No PKCE — PlanetScale OAuth apps are confidential clients
+			// authenticated by the client secret at token exchange.
 			const params = new URLSearchParams({
 				client_id: config.clientId,
 				redirect_uri: options.callbackUrl,
 				response_type: "code",
+				scope: config.scopes,
 				state,
 			})
 			return { redirectUrl: `${config.authorizeUrl}?${params.toString()}`, state }

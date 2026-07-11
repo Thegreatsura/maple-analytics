@@ -152,8 +152,11 @@ describe("PlanetScaleOAuthService", () => {
 		}).pipe(Effect.provide(makeLayer(testDb, { PLANETSCALE_OAUTH_CLIENT_ID: "ps-client-id" })))
 	})
 
-	it.effect("startConnect builds an authorize URL (no scope, no PKCE) and persists a state row", () => {
+	it.effect("startConnect builds an authorize URL with the requested scope (no PKCE) and persists a state row", () => {
 		const testDb = createTestDb(trackedDbs)
+		// PlanetScale REQUIRES the scope param — the app's configured scopes are the
+		// allowed maximum, not an implicit default; omitting it fails with `invalid_scope`.
+		const scopes = "user:read_organizations organization:read_databases organization:read_branches"
 		return Effect.gen(function* () {
 			const service = yield* PlanetScaleOAuthService
 			const { redirectUrl, state } = yield* service.startConnect(
@@ -168,8 +171,8 @@ describe("PlanetScaleOAuthService", () => {
 			assert.strictEqual(url.searchParams.get("redirect_uri"), CALLBACK_URL)
 			assert.strictEqual(url.searchParams.get("response_type"), "code")
 			assert.strictEqual(url.searchParams.get("state"), state)
-			// Scopes live on the PlanetScale OAuth app; PKCE is not part of its flow.
-			assert.isNull(url.searchParams.get("scope"))
+			// Resource-prefixed, space-delimited scopes; PKCE is not part of PlanetScale's flow.
+			assert.strictEqual(url.searchParams.get("scope"), scopes)
 			assert.isNull(url.searchParams.get("code_challenge"))
 
 			const row = yield* Effect.promise(() =>
@@ -182,7 +185,7 @@ describe("PlanetScaleOAuthService", () => {
 			assert.strictEqual(row?.org_id, "org_a")
 			assert.strictEqual(row?.provider, "planetscale")
 			assert.strictEqual(row?.return_to, "/integrations")
-		}).pipe(Effect.provide(makeLayer(testDb, withOAuthApp)))
+		}).pipe(Effect.provide(makeLayer(testDb, { ...withOAuthApp, PLANETSCALE_OAUTH_SCOPES: scopes })))
 	})
 
 	it.effect("completeConnect exchanges the code, stores the grant, and returns the orgs", () => {
