@@ -206,6 +206,12 @@ export class PlanetScaleOAuthService extends Context.Service<
 				// A dead grant is a revoked-authorization failure, not a generic
 				// upstream one — the org picker keys its reconnect CTA on the tag.
 				if (response.status === 401 || response.status === 403) {
+					// Surface PlanetScale's own error body — `invalid_token` vs an
+					// insufficient-scope message points to very different causes.
+					yield* Effect.logError("PlanetScale rejected the OAuth token on /v1/organizations", {
+						status: response.status,
+						body: response.text.slice(0, 400),
+					})
 					return yield* Effect.fail(
 						new IntegrationsRevokedError({
 							message: `PlanetScale rejected the authorization (HTTP ${response.status}) when listing organizations — reconnect the integration`,
@@ -286,6 +292,18 @@ export class PlanetScaleOAuthService extends Context.Service<
 
 			const orgId = decodeOrgId(stateRow.orgId)
 			yield* Effect.annotateCurrentSpan({ orgId })
+
+			// Diagnostic: the exchange succeeds but the API rejects the token. Record
+			// the token's shape (secret-safe: prefix + length only) and what scopes
+			// PlanetScale actually granted — an opaque `pscale_oauth_` token vs a JWT,
+			// and the granted-scope string, disambiguate why /v1 says `invalid_token`.
+			yield* Effect.annotateCurrentSpan({
+				"planetscale.token.granted_scope": tokenResponse.scope ?? "(none)",
+				"planetscale.token.type": tokenResponse.token_type ?? "(none)",
+				"planetscale.token.prefix": tokenResponse.access_token.slice(0, 13),
+				"planetscale.token.length": tokenResponse.access_token.length,
+				"planetscale.token.looks_jwt": tokenResponse.access_token.split(".").length === 3,
+			})
 
 			// The background poller and scraper must renew indefinitely; a grant with
 			// no refresh token silently dies at the access-token expiry. Refuse it
