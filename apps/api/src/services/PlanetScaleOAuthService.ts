@@ -14,26 +14,14 @@ import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/
 import { Database } from "../lib/DatabaseLive"
 import { Env, type EnvShape } from "../lib/Env"
 import { msToDate } from "../lib/time"
-import {
-	makeOAuthConnectionHelpers,
-	OAUTH_STATE_TTL_MS,
-	type OAuthTokenResponse,
-	toUpstreamError,
-} from "./oauth/connection-helpers"
+import { makeOAuthConnectionHelpers, OAUTH_STATE_TTL_MS, toUpstreamError } from "./oauth/connection-helpers"
 
 const PLANETSCALE_PROVIDER = "planetscale"
 
 const decodeOrgId = Schema.decodeUnknownSync(OrgId)
 
-/**
- * v1 API credentials come in two shapes: legacy-exchange OAuth tokens are
- * `{token_id}:{token}` pairs sent RAW (service-token style — the only form the
- * v1 API honors; verified against PlanetScale's planetpets reference app), while
- * standard-flow tokens use the Bearer scheme. The stored access token carries
- * the `id:token` form in legacy mode, so the shape discriminates itself.
- */
-export const planetScaleAuthHeader = (accessToken: string): string =>
-	accessToken.includes(":") ? accessToken : `Bearer ${accessToken}`
+/** OAuth access tokens use the standard Bearer scheme (service tokens used `token id:secret`). */
+export const planetScaleBearerHeader = (accessToken: string): string => `Bearer ${accessToken}`
 
 const REQUEST_TIMEOUT = Duration.seconds(15)
 /**
@@ -47,64 +35,14 @@ const PAGE_SIZE = 100
 const MAX_PAGES = 10
 
 interface ResolvedPlanetScaleOAuthConfig {
-	/**
-	 * `legacy` = the org-scoped exchange (`/v1/organizations/{org}/oauth-applications/
-	 * {id}/token`, service-token-authenticated) minting `{token_id}:{token}` credentials
-	 * — the only flow whose tokens the v1 API accepts. `standard` = the documented
-	 * auth.planetscale.com endpoint, whose Bearer tokens the v1 API currently rejects
-	 * with `invalid_token` (verified live 2026-07-13); kept as the fallback so the
-	 * connect flow still runs (with a diagnosable error) when the legacy env is unset.
-	 */
-	readonly mode: "legacy" | "standard"
 	readonly clientId: string
 	/** Always present — PlanetScale OAuth apps are confidential clients (no PKCE). Redacted until the wire. */
 	readonly clientSecret: Redacted.Redacted<string>
 	readonly authorizeUrl: string
 	readonly tokenUrl: string
-	/** Space-delimited, resource-prefixed scopes sent in the standard authorize request. */
+	/** Space-delimited, resource-prefixed scopes sent in the authorize request. */
 	readonly scopes: string
-	readonly requestHeaders?: Record<string, string | Redacted.Redacted<string>>
-	readonly paramsInQuery?: boolean
-	readonly decodeTokenPayload?: (
-		text: string,
-	) => Effect.Effect<OAuthTokenResponse, IntegrationsUpstreamError>
 }
-
-/**
- * Legacy exchange response (`{id, token, plain_text_refresh_token, expires_at}`)
- * — adapted to the standard OAuth2 shape with the composite `id:token` as the
- * access token, which is exactly the v1 API's Authorization header value.
- */
-const LegacyOAuthTokenSchema = Schema.Struct({
-	id: Schema.String,
-	token: Schema.String,
-	plain_text_refresh_token: Schema.optionalKey(Schema.NullOr(Schema.String)),
-	expires_at: Schema.optionalKey(Schema.NullOr(Schema.String)),
-})
-const decodeLegacyToken = Schema.decodeUnknownEffect(Schema.fromJsonString(LegacyOAuthTokenSchema))
-
-const decodeLegacyTokenPayload = (
-	text: string,
-): Effect.Effect<OAuthTokenResponse, IntegrationsUpstreamError> =>
-	Effect.gen(function* () {
-		const legacy = yield* decodeLegacyToken(text).pipe(
-			Effect.mapError(() =>
-				toUpstreamError("PlanetScale token endpoint returned an unexpected payload"),
-			),
-		)
-		const now = yield* Clock.currentTimeMillis
-		const expiresAtMs = legacy.expires_at ? Date.parse(legacy.expires_at) : Number.NaN
-		return {
-			access_token: `${legacy.id}:${legacy.token}`,
-			token_type: "planetscale-legacy",
-			...(Number.isFinite(expiresAtMs)
-				? { expires_in: Math.max(0, Math.floor((expiresAtMs - now) / 1000)) }
-				: {}),
-			...(legacy.plain_text_refresh_token
-				? { refresh_token: legacy.plain_text_refresh_token }
-				: {}),
-		} satisfies OAuthTokenResponse
-	})
 
 const resolveConfig = Effect.fn("PlanetScaleOAuthService.resolveConfig")(function* (env: EnvShape) {
 	const clientId = yield* Option.match(env.PLANETSCALE_OAUTH_CLIENT_ID, {
@@ -125,48 +63,10 @@ const resolveConfig = Effect.fn("PlanetScaleOAuthService.resolveConfig")(functio
 			),
 		onSome: (value) => Effect.succeed(value),
 	})
-
-	const appOrg = env.PLANETSCALE_OAUTH_APP_ORG
-	const appId = env.PLANETSCALE_OAUTH_APP_ID
-	const serviceTokenId = env.PLANETSCALE_SERVICE_TOKEN_ID
-	const serviceToken = env.PLANETSCALE_SERVICE_TOKEN
-	if (
-		Option.isSome(appOrg) &&
-		Option.isSome(appId) &&
-		Option.isSome(serviceTokenId) &&
-		Option.isSome(serviceToken)
-	) {
-		const apiBase = env.MAPLE_PLANETSCALE_API_BASE_URL.replace(/\/$/, "")
-		return {
-			mode: "legacy",
-			clientId,
-			clientSecret,
-			authorizeUrl: Option.getOrElse(
-				env.PLANETSCALE_OAUTH_AUTHORIZE_URL,
-				() => "https://app.planetscale.com/oauth/authorize",
-			),
-			tokenUrl: `${apiBase}/v1/organizations/${appOrg.value}/oauth-applications/${appId.value}/token`,
-			scopes: env.PLANETSCALE_OAUTH_SCOPES,
-			// The org-scoped exchange authenticates with a service token (raw
-			// id:secret scheme) and takes the grant params in the query string.
-			requestHeaders: {
-				Authorization: Redacted.make(
-					`${serviceTokenId.value}:${Redacted.value(serviceToken.value)}`,
-				),
-			},
-			paramsInQuery: true,
-			decodeTokenPayload: decodeLegacyTokenPayload,
-		} satisfies ResolvedPlanetScaleOAuthConfig
-	}
-
 	return {
-		mode: "standard",
 		clientId,
 		clientSecret,
-		authorizeUrl: Option.getOrElse(
-			env.PLANETSCALE_OAUTH_AUTHORIZE_URL,
-			() => "https://auth.planetscale.com/oauth/authorize",
-		),
+		authorizeUrl: env.PLANETSCALE_OAUTH_AUTHORIZE_URL,
 		tokenUrl: env.PLANETSCALE_OAUTH_TOKEN_URL,
 		scopes: env.PLANETSCALE_OAUTH_SCOPES,
 	} satisfies ResolvedPlanetScaleOAuthConfig
@@ -188,13 +88,16 @@ const decodeOrganizationsPage = Schema.decodeUnknownEffect(
 	Schema.fromJsonString(OrganizationsPageSchema),
 )
 
-/**
- * `GET /oauth/token/info` is doorkeeper-style: a VALID presented token answers
- * 200 with the token's details (scope, expires_in, resource_owner_id — no RFC
- * 7662 `active` field), an invalid one answers 401 `invalid_token`. The verdict
- * is therefore the status code, not a body field. Verified live 2026-07-13.
- */
-type TokenIntrospectionVerdict = "valid" | "invalid" | "unknown"
+/** `GET /oauth/token/info` (doorkeeper introspection) — only the fields we log. */
+const TokenIntrospectionSchema = Schema.Struct({
+	active: Schema.Boolean,
+	scope: Schema.optionalKey(Schema.NullOr(Schema.String)),
+	/** Unix seconds. */
+	exp: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+})
+const decodeTokenIntrospection = Schema.decodeUnknownEffect(
+	Schema.fromJsonString(TokenIntrospectionSchema),
+)
 
 const CurrentUserSchema = Schema.Struct({
 	id: Schema.String,
@@ -288,7 +191,7 @@ export class PlanetScaleOAuthService extends Context.Service<
 			return yield* Effect.gen(function* () {
 				const request = HttpClientRequest.get(`${apiBase}${path}`).pipe(
 					HttpClientRequest.setHeaders({
-						Authorization: planetScaleAuthHeader(accessToken),
+						Authorization: planetScaleBearerHeader(accessToken),
 						Accept: "application/json",
 					}),
 				)
@@ -319,39 +222,27 @@ export class PlanetScaleOAuthService extends Context.Service<
 			return yield* Effect.gen(function* () {
 				const request = HttpClientRequest.get(env.PLANETSCALE_OAUTH_TOKEN_INFO_URL).pipe(
 					HttpClientRequest.setHeaders({
-						Authorization: planetScaleAuthHeader(accessToken),
+						Authorization: planetScaleBearerHeader(accessToken),
 						Accept: "application/json",
 					}),
 				)
 				const res = yield* httpClient.execute(request)
 				const text = yield* res.text
-				if (res.status >= 200 && res.status < 300) {
-					// The token-info body carries scope/expiry/owner ids, never the token
-					// itself — safe (and load-bearing) to log for diagnosis.
-					yield* Effect.logInfo("PlanetScale auth server accepted the token on introspection", {
-						body: text.slice(0, 300),
-					})
-					return "valid" satisfies TokenIntrospectionVerdict
-				}
-				if (res.status === 401 || res.status === 403) {
-					yield* Effect.logError("PlanetScale auth server rejected the token on introspection", {
+				if (res.status < 200 || res.status >= 300) {
+					yield* Effect.logWarning("PlanetScale token introspection returned a non-2xx status", {
 						status: res.status,
-						body: text.slice(0, 200),
 					})
-					return "invalid" satisfies TokenIntrospectionVerdict
+					return Option.none<typeof TokenIntrospectionSchema.Type>()
 				}
-				yield* Effect.logWarning("PlanetScale token introspection returned an unexpected status", {
-					status: res.status,
-				})
-				return "unknown" satisfies TokenIntrospectionVerdict
+				return Option.some(yield* decodeTokenIntrospection(text))
 			}).pipe(
 				Effect.timeoutOrElse({
 					duration: REQUEST_TIMEOUT,
-					orElse: () => Effect.succeed("unknown" satisfies TokenIntrospectionVerdict),
+					orElse: () => Effect.succeedNone,
 				}),
 				Effect.catchCause((cause) =>
 					Effect.logWarning("PlanetScale token introspection failed", { cause }).pipe(
-						Effect.as("unknown" satisfies TokenIntrospectionVerdict),
+						Effect.as(Option.none<typeof TokenIntrospectionSchema.Type>()),
 					),
 				),
 			)
@@ -424,18 +315,16 @@ export class PlanetScaleOAuthService extends Context.Service<
 				}),
 			)
 
-			// STANDARD authorize (auth.planetscale.com) REQUIRES the scope param — the
-			// app's configured scopes are the allowed maximum, not an implicit default,
-			// so omitting it fails with `invalid_scope`. LEGACY authorize
-			// (app.planetscale.com) is the opposite: the app registration's scopes apply
-			// and no scope param is sent (matches PlanetScale's planetpets reference
-			// app). No PKCE in either — PlanetScale OAuth apps are confidential clients
+			// PlanetScale REQUIRES the scope param — the app's configured scopes are the
+			// allowed maximum, not an implicit default, so omitting it fails the authorize
+			// with `invalid_scope`. Scopes are resource-prefixed (`organization:read_databases`)
+			// and space-delimited. No PKCE — PlanetScale OAuth apps are confidential clients
 			// authenticated by the client secret at token exchange.
 			const params = new URLSearchParams({
 				client_id: config.clientId,
 				redirect_uri: options.callbackUrl,
 				response_type: "code",
-				...(config.mode === "standard" ? { scope: config.scopes } : {}),
+				scope: config.scopes,
 				state,
 			})
 			return { redirectUrl: `${config.authorizeUrl}?${params.toString()}`, state }
@@ -463,12 +352,9 @@ export class PlanetScaleOAuthService extends Context.Service<
 			// PlanetScale actually granted — an opaque `pscale_oauth_` token vs a JWT,
 			// and the granted-scope string, disambiguate why /v1 says `invalid_token`.
 			yield* Effect.annotateCurrentSpan({
-				"planetscale.oauth.mode": config.mode,
 				"planetscale.token.granted_scope": tokenResponse.scope ?? "(none)",
 				"planetscale.token.type": tokenResponse.token_type ?? "(none)",
-				"planetscale.token.prefix": tokenResponse.access_token.includes(":")
-					? "(legacy id:token)"
-					: tokenResponse.access_token.slice(0, 13),
+				"planetscale.token.prefix": tokenResponse.access_token.slice(0, 13),
 				"planetscale.token.length": tokenResponse.access_token.length,
 				"planetscale.token.looks_jwt": tokenResponse.access_token.split(".").length === 3,
 				"planetscale.token.expires_in": tokenResponse.expires_in ?? "(none)",
@@ -513,9 +399,22 @@ export class PlanetScaleOAuthService extends Context.Service<
 							return yield* Effect.fail(retried.failure)
 						}
 
-						const verdict = yield* introspectToken(tokenResponse.access_token)
-						yield* Effect.annotateCurrentSpan({ "planetscale.token.introspection": verdict })
-						if (verdict === "valid") {
+						const info = yield* introspectToken(tokenResponse.access_token)
+						const nowSeconds = (yield* Clock.currentTimeMillis) / 1000
+						yield* Option.match(info, {
+							onNone: () =>
+								Effect.logError(
+									"PlanetScale API rejected the fresh token; introspection was unavailable",
+								),
+							onSome: (value) =>
+								Effect.logError("PlanetScale API rejected the fresh token; introspection result", {
+									active: value.active,
+									scope: value.scope ?? null,
+									expiresInSeconds:
+										value.exp != null ? Math.round(value.exp - nowSeconds) : null,
+								}),
+						})
+						if (Option.isSome(info) && info.value.active) {
 							return yield* Effect.fail(
 								toUpstreamError(
 									"PlanetScale's API rejected the new access token even though PlanetScale's auth server reports it as valid. Reconnecting won't help — try again in a few minutes, and contact support if it persists.",

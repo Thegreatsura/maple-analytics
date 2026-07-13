@@ -22,7 +22,7 @@ import { Cause, Clock, Context, Duration, Effect, Layer, Schema } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { Database } from "../lib/DatabaseLive"
 import { Env } from "../lib/Env"
-import { PlanetScaleOAuthService, planetScaleAuthHeader } from "./PlanetScaleOAuthService"
+import { PlanetScaleOAuthService, planetScaleBearerHeader } from "./PlanetScaleOAuthService"
 
 /**
  * PlanetScale management-API poller: keeps the org's database/branch inventory
@@ -241,7 +241,7 @@ export class PlanetScaleService extends Context.Service<PlanetScaleService, Plan
 			const authorizationFor = (connection: PlanetScaleConnectionRow) =>
 				psOAuth
 					.getValidAccessToken(decodeOrgIdSync(connection.orgId))
-					.pipe(Effect.map(({ accessToken }) => planetScaleAuthHeader(accessToken)))
+					.pipe(Effect.map(({ accessToken }) => planetScaleBearerHeader(accessToken)))
 
 			/**
 			 * Claim the org's inventory anchor row for this tick. A non-"claimed"

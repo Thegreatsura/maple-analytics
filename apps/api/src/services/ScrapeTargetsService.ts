@@ -35,7 +35,7 @@ import {
 import { safeFetch, validateExternalUrl } from "../lib/url-validator"
 import { decodeDiscoveryConfig, DiscoveryConfigSchema } from "./planetscale/discovery-config"
 import { PlanetScaleDiscoveryService, planetScaleDiscoveryUrl } from "./PlanetScaleDiscoveryService"
-import { PlanetScaleOAuthService, planetScaleAuthHeader } from "./PlanetScaleOAuthService"
+import { PlanetScaleOAuthService, planetScaleBearerHeader } from "./PlanetScaleOAuthService"
 
 type ScrapeTargetRow = typeof scrapeTargets.$inferSelect
 
@@ -435,7 +435,7 @@ export class ScrapeTargetsService extends Context.Service<ScrapeTargetsService, 
 				const { accessToken } = yield* psOAuth
 					.getValidAccessToken(Schema.decodeUnknownSync(OrgId)(row.orgId))
 					.pipe(Effect.catchTags(catchOAuthTokenFailure))
-				return { Authorization: planetScaleAuthHeader(accessToken) }
+				return { Authorization: planetScaleBearerHeader(accessToken) }
 			})
 
 			const list = Effect.fn("ScrapeTargetsService.list")(function* (orgId: OrgId) {
