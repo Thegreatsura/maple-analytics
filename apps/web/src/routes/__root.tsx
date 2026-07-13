@@ -132,15 +132,7 @@ function ClerkReverseRedirects() {
 		if (!isSignedIn || !orgId || isCustomerLoading) return
 		if (customerError || !isUsableCustomer(customer)) return
 		setKnownSelectedPlan(selectedPlan)
-	}, [
-		isSignedIn,
-		orgId,
-		isCustomerLoading,
-		customerError,
-		customer,
-		selectedPlan,
-		setKnownSelectedPlan,
-	])
+	}, [isSignedIn, orgId, isCustomerLoading, customerError, customer, selectedPlan, setKnownSelectedPlan])
 
 	if (isSignedIn && pathname === "/sign-in") {
 		const target = getRedirectTarget(searchStr)
