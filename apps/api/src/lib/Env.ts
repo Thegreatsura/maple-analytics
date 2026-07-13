@@ -170,9 +170,15 @@ const envConfig = Config.all({
 	),
 	PLANETSCALE_OAUTH_CLIENT_ID: optionalString("PLANETSCALE_OAUTH_CLIENT_ID"),
 	PLANETSCALE_OAUTH_CLIENT_SECRET: optionalRedacted("PLANETSCALE_OAUTH_CLIENT_SECRET"),
+	// CANONICAL authorize host per PlanetScale's own OAuth discovery doc
+	// (https://auth.planetscale.com/.well-known/oauth-authorization-server →
+	// authorization_endpoint). Their public docs cite auth.planetscale.com/oauth/authorize
+	// instead — that alias renders a working consent screen but emits codes whose
+	// resulting tokens the v1 API rejects with 401 `invalid_token` even though
+	// /oauth/token/info introspects them as valid (verified live 2026-07-13).
 	PLANETSCALE_OAUTH_AUTHORIZE_URL: stringWithDefault(
 		"PLANETSCALE_OAUTH_AUTHORIZE_URL",
-		"https://auth.planetscale.com/oauth/authorize",
+		"https://app.planetscale.com/oauth/authorize",
 	),
 	PLANETSCALE_OAUTH_TOKEN_URL: stringWithDefault(
 		"PLANETSCALE_OAUTH_TOKEN_URL",

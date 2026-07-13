@@ -204,7 +204,9 @@ describe("PlanetScaleOAuthService", () => {
 			)
 
 			const url = new URL(redirectUrl)
-			assert.strictEqual(url.origin + url.pathname, "https://auth.planetscale.com/oauth/authorize")
+			// The canonical authorize host from PlanetScale's OAuth discovery doc —
+			// the auth.planetscale.com alias mints tokens the v1 API rejects.
+			assert.strictEqual(url.origin + url.pathname, "https://app.planetscale.com/oauth/authorize")
 			assert.strictEqual(url.searchParams.get("client_id"), "ps-client-id")
 			assert.strictEqual(url.searchParams.get("redirect_uri"), CALLBACK_URL)
 			assert.strictEqual(url.searchParams.get("response_type"), "code")
