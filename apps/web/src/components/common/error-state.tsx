@@ -12,6 +12,8 @@ import { cn } from "@maple/ui/lib/utils"
  *
  * - `panel` — centered block for main content areas (tables, detail views,
  *   chart cards).
+ * - `row` — horizontal banner for slot-height sections (stat-card strips,
+ *   toolbars) where a tall centered panel would distort the page rhythm.
  * - `inline` — compact left-aligned block for narrow chrome (filter sidebars,
  *   sub-sections).
  */
@@ -21,7 +23,7 @@ interface ErrorStateProps {
 	title?: string
 	/** Renders a "Try again" action wired to this callback (e.g. an atom refresh). */
 	onRetry?: () => void
-	variant?: "panel" | "inline"
+	variant?: "panel" | "row" | "inline"
 	className?: string
 }
 
@@ -50,6 +52,28 @@ export function ErrorState({ error, title, onRetry, variant = "panel", className
 		)
 	}
 
+	if (variant === "row") {
+		return (
+			<div
+				className={cn(
+					"flex flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border border-dashed px-4 py-4",
+					className,
+				)}
+			>
+				<ErrorTraceGlyph compact />
+				<div className="min-w-0 flex-1 basis-56 space-y-0.5">
+					<p className="text-sm font-medium text-foreground">{heading}</p>
+					<p className="line-clamp-2 text-xs text-muted-foreground">{formatted.description}</p>
+				</div>
+				{onRetry && (
+					<Button size="sm" variant="outline" className="shrink-0" onClick={onRetry}>
+						Try again
+					</Button>
+				)}
+			</div>
+		)
+	}
+
 	return (
 		<div
 			className={cn(
@@ -72,9 +96,16 @@ export function ErrorState({ error, title, onRetry, variant = "panel", className
 }
 
 /** Mini trace waterfall with an errored span — the crash screen's motif at icon scale. */
-function ErrorTraceGlyph() {
+function ErrorTraceGlyph({ compact = false }: { compact?: boolean }) {
 	return (
-		<svg width={88} height={30} viewBox="0 0 88 30" fill="none" aria-hidden="true">
+		<svg
+			width={compact ? 56 : 88}
+			height={compact ? 19 : 30}
+			viewBox="0 0 88 30"
+			fill="none"
+			aria-hidden="true"
+			className="shrink-0"
+		>
 			<rect x={0} y={0} width={88} height={6} rx={3} className="fill-muted-foreground/25" />
 			<rect x={12} y={12} width={50} height={6} rx={3} className="fill-muted-foreground/25" />
 			<rect x={26} y={24} width={28} height={6} rx={3} className="fill-destructive" />
