@@ -88,16 +88,13 @@ const decodeOrganizationsPage = Schema.decodeUnknownEffect(
 	Schema.fromJsonString(OrganizationsPageSchema),
 )
 
-/** `GET /oauth/token/info` (doorkeeper introspection) — only the fields we log. */
-const TokenIntrospectionSchema = Schema.Struct({
-	active: Schema.Boolean,
-	scope: Schema.optionalKey(Schema.NullOr(Schema.String)),
-	/** Unix seconds. */
-	exp: Schema.optionalKey(Schema.NullOr(Schema.Number)),
-})
-const decodeTokenIntrospection = Schema.decodeUnknownEffect(
-	Schema.fromJsonString(TokenIntrospectionSchema),
-)
+/**
+ * `GET /oauth/token/info` is doorkeeper-style: a VALID presented token answers
+ * 200 with the token's details (scope, expires_in, resource_owner_id — no RFC
+ * 7662 `active` field), an invalid one answers 401 `invalid_token`. The verdict
+ * is therefore the status code, not a body field. Verified live 2026-07-13.
+ */
+type TokenIntrospectionVerdict = "valid" | "invalid" | "unknown"
 
 const CurrentUserSchema = Schema.Struct({
 	id: Schema.String,
@@ -228,21 +225,33 @@ export class PlanetScaleOAuthService extends Context.Service<
 				)
 				const res = yield* httpClient.execute(request)
 				const text = yield* res.text
-				if (res.status < 200 || res.status >= 300) {
-					yield* Effect.logWarning("PlanetScale token introspection returned a non-2xx status", {
-						status: res.status,
+				if (res.status >= 200 && res.status < 300) {
+					// The token-info body carries scope/expiry/owner ids, never the token
+					// itself — safe (and load-bearing) to log for diagnosis.
+					yield* Effect.logInfo("PlanetScale auth server accepted the token on introspection", {
+						body: text.slice(0, 300),
 					})
-					return Option.none<typeof TokenIntrospectionSchema.Type>()
+					return "valid" satisfies TokenIntrospectionVerdict
 				}
-				return Option.some(yield* decodeTokenIntrospection(text))
+				if (res.status === 401 || res.status === 403) {
+					yield* Effect.logError("PlanetScale auth server rejected the token on introspection", {
+						status: res.status,
+						body: text.slice(0, 200),
+					})
+					return "invalid" satisfies TokenIntrospectionVerdict
+				}
+				yield* Effect.logWarning("PlanetScale token introspection returned an unexpected status", {
+					status: res.status,
+				})
+				return "unknown" satisfies TokenIntrospectionVerdict
 			}).pipe(
 				Effect.timeoutOrElse({
 					duration: REQUEST_TIMEOUT,
-					orElse: () => Effect.succeedNone,
+					orElse: () => Effect.succeed("unknown" satisfies TokenIntrospectionVerdict),
 				}),
 				Effect.catchCause((cause) =>
 					Effect.logWarning("PlanetScale token introspection failed", { cause }).pipe(
-						Effect.as(Option.none<typeof TokenIntrospectionSchema.Type>()),
+						Effect.as("unknown" satisfies TokenIntrospectionVerdict),
 					),
 				),
 			)
@@ -399,22 +408,9 @@ export class PlanetScaleOAuthService extends Context.Service<
 							return yield* Effect.fail(retried.failure)
 						}
 
-						const info = yield* introspectToken(tokenResponse.access_token)
-						const nowSeconds = (yield* Clock.currentTimeMillis) / 1000
-						yield* Option.match(info, {
-							onNone: () =>
-								Effect.logError(
-									"PlanetScale API rejected the fresh token; introspection was unavailable",
-								),
-							onSome: (value) =>
-								Effect.logError("PlanetScale API rejected the fresh token; introspection result", {
-									active: value.active,
-									scope: value.scope ?? null,
-									expiresInSeconds:
-										value.exp != null ? Math.round(value.exp - nowSeconds) : null,
-								}),
-						})
-						if (Option.isSome(info) && info.value.active) {
+						const verdict = yield* introspectToken(tokenResponse.access_token)
+						yield* Effect.annotateCurrentSpan({ "planetscale.token.introspection": verdict })
+						if (verdict === "valid") {
 							return yield* Effect.fail(
 								toUpstreamError(
 									"PlanetScale's API rejected the new access token even though PlanetScale's auth server reports it as valid. Reconnecting won't help — try again in a few minutes, and contact support if it persists.",

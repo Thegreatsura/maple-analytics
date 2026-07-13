@@ -29,8 +29,11 @@ interface MockOptions {
 	readonly shortLivedAccessToken?: boolean
 	/** First N `/v1/organizations` calls answer 401 `invalid_token` (doorkeeper body). */
 	readonly organizationsUnauthorizedTimes?: number
-	/** `/oauth/token/info` response; omitted → 500 (introspection unavailable). */
-	readonly introspection?: { active: boolean }
+	/**
+	 * `/oauth/token/info` verdict (doorkeeper semantics: valid → 200 with token
+	 * details, invalid → 401); omitted → 500 (introspection unavailable).
+	 */
+	readonly introspection?: "valid" | "invalid"
 }
 
 /**
@@ -49,10 +52,18 @@ const mockPlanetScaleFetch = (options: MockOptions = {}): typeof globalThis.fetc
 			if (!options.introspection) {
 				return jsonResponse({ code: "internal" }, 500)
 			}
+			if (options.introspection === "invalid") {
+				return jsonResponse(
+					{ error: "invalid_token", error_description: "The access token is invalid" },
+					401,
+				)
+			}
+			// Doorkeeper answers a valid token with its details — no `active` field.
 			return jsonResponse({
-				active: options.introspection.active,
-				scope: "user:read_organizations",
-				exp: 1_700_000_000,
+				resource_owner_id: "psuser_1",
+				scope: ["user:read_organizations"],
+				expires_in: 2_629_746,
+				application: { uid: "ps-client-id" },
 			})
 		}
 		if (url.includes("/oauth/token")) {
@@ -374,7 +385,7 @@ describe("PlanetScaleOAuthService", () => {
 			Effect.provide(
 				Layer.mergeAll(
 					makeLayer(testDb, withOAuthApp),
-					withMockFetch({ organizationsUnauthorizedTimes: 2, introspection: { active: false } }),
+					withMockFetch({ organizationsUnauthorizedTimes: 2, introspection: "invalid" }),
 				),
 			),
 		)
@@ -404,7 +415,7 @@ describe("PlanetScaleOAuthService", () => {
 			Effect.provide(
 				Layer.mergeAll(
 					makeLayer(testDb, withOAuthApp),
-					withMockFetch({ organizationsUnauthorizedTimes: 2, introspection: { active: true } }),
+					withMockFetch({ organizationsUnauthorizedTimes: 2, introspection: "valid" }),
 				),
 			),
 		)
