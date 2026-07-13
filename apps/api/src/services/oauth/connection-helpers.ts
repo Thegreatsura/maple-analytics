@@ -54,6 +54,17 @@ export interface OAuthTokenEndpointConfig {
 	readonly clientId: string
 	/** null for a public (PKCE-only) client. Stays Redacted until the token POST body. */
 	readonly clientSecret: Redacted.Redacted<string> | null
+	/**
+	 * Extra headers on token-endpoint requests (e.g. PlanetScale's legacy exchange
+	 * authenticates with a service token). Redacted values unwrap at the wire.
+	 */
+	readonly requestHeaders?: Record<string, string | Redacted.Redacted<string>>
+	/** Send the grant params in the URL query string instead of a form body (PlanetScale legacy). */
+	readonly paramsInQuery?: boolean
+	/** Provider-specific token payload decoder; defaults to the standard OAuth2 JSON shape. */
+	readonly decodeTokenPayload?: (
+		text: string,
+	) => Effect.Effect<OAuthTokenResponse, IntegrationsUpstreamError>
 }
 
 export interface MakeOAuthConnectionHelpersOptions {
@@ -209,12 +220,27 @@ export const makeOAuthConnectionHelpers = (options: MakeOAuthConnectionHelpersOp
 					.returning({ id: oauthConnections.id }),
 			).pipe(Effect.map((result) => ({ disconnected: result.length > 0 })))
 
-		/** POST an `application/x-www-form-urlencoded` body and return the raw status + text. */
+		/**
+		 * POST the params as an `application/x-www-form-urlencoded` body (or, for
+		 * providers whose token endpoint wants them there, the URL query string)
+		 * and return the raw status + text.
+		 */
 		const postForm = Effect.fn("OAuthConnectionHelpers.postForm")(
-			function* (url: string, params: Record<string, string>) {
-				const request = HttpClientRequest.post(url, {
-					headers: { accept: "application/json" },
-				}).pipe(HttpClientRequest.bodyUrlParams(params))
+			function* (
+				url: string,
+				params: Record<string, string>,
+				options: Pick<OAuthTokenEndpointConfig, "requestHeaders" | "paramsInQuery"> = {},
+			) {
+				const headers: Record<string, string> = { accept: "application/json" }
+				for (const [name, value] of Object.entries(options.requestHeaders ?? {})) {
+					headers[name] = typeof value === "string" ? value : Redacted.value(value)
+				}
+				const target = options.paramsInQuery
+					? `${url}${url.includes("?") ? "&" : "?"}${new URLSearchParams(params).toString()}`
+					: url
+				const request = options.paramsInQuery
+					? HttpClientRequest.post(target, { headers })
+					: HttpClientRequest.post(target, { headers }).pipe(HttpClientRequest.bodyUrlParams(params))
 				const response = yield* httpClient.execute(request)
 				const text = yield* response.text
 				return { status: response.status, text }
@@ -251,20 +277,24 @@ export const makeOAuthConnectionHelpers = (options: MakeOAuthConnectionHelpersOp
 				redirectUri: string,
 				extraParams: Record<string, string> = {},
 			) {
-				const { status, text } = yield* postForm(config.tokenUrl, {
-					grant_type: "authorization_code",
-					code,
-					redirect_uri: redirectUri,
-					client_id: config.clientId,
-					...(config.clientSecret ? { client_secret: Redacted.value(config.clientSecret) } : {}),
-					...extraParams,
-				})
+				const { status, text } = yield* postForm(
+					config.tokenUrl,
+					{
+						grant_type: "authorization_code",
+						code,
+						redirect_uri: redirectUri,
+						client_id: config.clientId,
+						...(config.clientSecret ? { client_secret: Redacted.value(config.clientSecret) } : {}),
+						...extraParams,
+					},
+					config,
+				)
 				if (status < 200 || status >= 300) {
 					return yield* Effect.fail(
 						toUpstreamError(`Token exchange failed: ${text || status}`, status),
 					)
 				}
-				return yield* parseTokenPayload(text)
+				return yield* (config.decodeTokenPayload ?? parseTokenPayload)(text)
 			},
 		)
 
@@ -275,12 +305,16 @@ export const makeOAuthConnectionHelpers = (options: MakeOAuthConnectionHelpersOp
 		 */
 		const refreshAccessToken = Effect.fn("OAuthConnectionHelpers.refreshAccessToken")(
 			function* (config: OAuthTokenEndpointConfig, refreshToken: string) {
-				const { status, text } = yield* postForm(config.tokenUrl, {
-					grant_type: "refresh_token",
-					refresh_token: refreshToken,
-					client_id: config.clientId,
-					...(config.clientSecret ? { client_secret: Redacted.value(config.clientSecret) } : {}),
-				})
+				const { status, text } = yield* postForm(
+					config.tokenUrl,
+					{
+						grant_type: "refresh_token",
+						refresh_token: refreshToken,
+						client_id: config.clientId,
+						...(config.clientSecret ? { client_secret: Redacted.value(config.clientSecret) } : {}),
+					},
+					config,
+				)
 				if (status === 400 || status === 401) {
 					return yield* Effect.fail(
 						new IntegrationsRevokedError({
@@ -291,7 +325,7 @@ export const makeOAuthConnectionHelpers = (options: MakeOAuthConnectionHelpersOp
 				if (status < 200 || status >= 300) {
 					return yield* Effect.fail(toUpstreamError(`Token refresh failed with ${status}`, status))
 				}
-				return yield* parseTokenPayload(text)
+				return yield* (config.decodeTokenPayload ?? parseTokenPayload)(text)
 			},
 		)
 

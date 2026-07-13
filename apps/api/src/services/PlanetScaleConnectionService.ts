@@ -25,7 +25,7 @@ import { decryptAes256Gcm, encryptAes256Gcm, parseBase64Aes256GcmKey } from "../
 import { Database } from "../lib/DatabaseLive"
 import { Env } from "../lib/Env"
 import { decodeDiscoveryConfig } from "./planetscale/discovery-config"
-import { PlanetScaleOAuthService, planetScaleBearerHeader } from "./PlanetScaleOAuthService"
+import { PlanetScaleOAuthService, planetScaleAuthHeader } from "./PlanetScaleOAuthService"
 import { ScrapeTargetsService } from "./ScrapeTargetsService"
 
 /**
@@ -171,12 +171,12 @@ export class PlanetScaleConnectionService extends Context.Service<
 			accessToken: string,
 		) {
 			const org = encodeURIComponent(organization)
-			const bearer = planetScaleBearerHeader(accessToken)
+			const authHeader = planetScaleAuthHeader(accessToken)
 			const [orgStatus, metricsStatus, databasesStatus] = yield* Effect.all(
 				[
-					probeStatus(`/v1/organizations/${org}`, bearer),
-					probeStatus(`/v1/organizations/${org}/metrics`, bearer),
-					probeStatus(`/v1/organizations/${org}/databases?per_page=1`, bearer),
+					probeStatus(`/v1/organizations/${org}`, authHeader),
+					probeStatus(`/v1/organizations/${org}/metrics`, authHeader),
+					probeStatus(`/v1/organizations/${org}/databases?per_page=1`, authHeader),
 				],
 				{ concurrency: 3 },
 			)

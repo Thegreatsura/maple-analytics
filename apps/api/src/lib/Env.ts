@@ -61,10 +61,26 @@ export interface EnvShape {
 	readonly PLANETSCALE_OAUTH_CLIENT_ID: Option.Option<string>
 	/** Required alongside the client id — PlanetScale OAuth apps are confidential clients. */
 	readonly PLANETSCALE_OAUTH_CLIENT_SECRET: Option.Option<Redacted.Redacted<string>>
-	readonly PLANETSCALE_OAUTH_AUTHORIZE_URL: string
+	/** Defaults by flow mode (legacy → app.planetscale.com, standard → auth.planetscale.com). */
+	readonly PLANETSCALE_OAUTH_AUTHORIZE_URL: Option.Option<string>
 	readonly PLANETSCALE_OAUTH_TOKEN_URL: string
 	/** OAuth token introspection (`/oauth/token/info`) — consulted when the v1 API rejects a fresh token. */
 	readonly PLANETSCALE_OAUTH_TOKEN_INFO_URL: string
+	/**
+	 * Legacy (v1-API-compatible) OAuth flow — REQUIRED for the integration to work
+	 * today. PlanetScale's v1 API only honors OAuth tokens minted by the org-scoped
+	 * exchange (`POST /v1/organizations/{org}/oauth-applications/{id}/token`, service-
+	 * token-authenticated, used as `Authorization: {token_id}:{token}`); tokens from
+	 * the documented auth.planetscale.com endpoint introspect as valid there but the
+	 * v1 API answers 401 `invalid_token` (verified live 2026-07-13, matches the
+	 * planetscale/planetpets reference app). All four must be set to enable it:
+	 * the slug of the PlanetScale org that owns the OAuth app, the app id (from the
+	 * app's settings URL), and a service token from that org with `write_oauth_tokens`.
+	 */
+	readonly PLANETSCALE_OAUTH_APP_ORG: Option.Option<string>
+	readonly PLANETSCALE_OAUTH_APP_ID: Option.Option<string>
+	readonly PLANETSCALE_SERVICE_TOKEN_ID: Option.Option<string>
+	readonly PLANETSCALE_SERVICE_TOKEN: Option.Option<Redacted.Redacted<string>>
 	/**
 	 * Space-delimited, resource-prefixed OAuth scopes requested at authorize time
 	 * (e.g. `organization:read_databases`). PlanetScale REQUIRES an explicit scope
@@ -170,10 +186,11 @@ const envConfig = Config.all({
 	),
 	PLANETSCALE_OAUTH_CLIENT_ID: optionalString("PLANETSCALE_OAUTH_CLIENT_ID"),
 	PLANETSCALE_OAUTH_CLIENT_SECRET: optionalRedacted("PLANETSCALE_OAUTH_CLIENT_SECRET"),
-	PLANETSCALE_OAUTH_AUTHORIZE_URL: stringWithDefault(
-		"PLANETSCALE_OAUTH_AUTHORIZE_URL",
-		"https://auth.planetscale.com/oauth/authorize",
-	),
+	PLANETSCALE_OAUTH_AUTHORIZE_URL: optionalString("PLANETSCALE_OAUTH_AUTHORIZE_URL"),
+	PLANETSCALE_OAUTH_APP_ORG: optionalString("PLANETSCALE_OAUTH_APP_ORG"),
+	PLANETSCALE_OAUTH_APP_ID: optionalString("PLANETSCALE_OAUTH_APP_ID"),
+	PLANETSCALE_SERVICE_TOKEN_ID: optionalString("PLANETSCALE_SERVICE_TOKEN_ID"),
+	PLANETSCALE_SERVICE_TOKEN: optionalRedacted("PLANETSCALE_SERVICE_TOKEN"),
 	PLANETSCALE_OAUTH_TOKEN_URL: stringWithDefault(
 		"PLANETSCALE_OAUTH_TOKEN_URL",
 		"https://auth.planetscale.com/oauth/token",

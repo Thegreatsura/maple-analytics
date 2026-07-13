@@ -223,6 +223,11 @@ export const createMapleApi = async ({ stage, domains }: CreateMapleApiOptions) 
 			...optionalPlain("PLANETSCALE_OAUTH_AUTHORIZE_URL"),
 			...optionalPlain("PLANETSCALE_OAUTH_TOKEN_URL"),
 			...optionalPlain("PLANETSCALE_OAUTH_TOKEN_INFO_URL"),
+			// Legacy (v1-API-compatible) exchange — the flow that actually works; see Env.ts.
+			...optionalPlain("PLANETSCALE_OAUTH_APP_ORG"),
+			...optionalPlain("PLANETSCALE_OAUTH_APP_ID"),
+			...optionalPlain("PLANETSCALE_SERVICE_TOKEN_ID"),
+			...optionalSecret("PLANETSCALE_SERVICE_TOKEN"),
 			...optionalPlain("MAPLE_PLANETSCALE_API_BASE_URL"),
 		},
 	})

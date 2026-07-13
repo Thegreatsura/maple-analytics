@@ -29,8 +29,11 @@ interface MockOptions {
 	readonly shortLivedAccessToken?: boolean
 	/** First N `/v1/organizations` calls answer 401 `invalid_token` (doorkeeper body). */
 	readonly organizationsUnauthorizedTimes?: number
-	/** `/oauth/token/info` response; omitted → 500 (introspection unavailable). */
-	readonly introspection?: { active: boolean }
+	/**
+	 * `/oauth/token/info` verdict (doorkeeper semantics: valid → 200 with token
+	 * details, invalid → 401); omitted → 500 (introspection unavailable).
+	 */
+	readonly introspection?: "valid" | "invalid"
 }
 
 /**
@@ -49,10 +52,18 @@ const mockPlanetScaleFetch = (options: MockOptions = {}): typeof globalThis.fetc
 			if (!options.introspection) {
 				return jsonResponse({ code: "internal" }, 500)
 			}
+			if (options.introspection === "invalid") {
+				return jsonResponse(
+					{ error: "invalid_token", error_description: "The access token is invalid" },
+					401,
+				)
+			}
+			// Doorkeeper answers a valid token with its details — no `active` field.
 			return jsonResponse({
-				active: options.introspection.active,
-				scope: "user:read_organizations",
-				exp: 1_700_000_000,
+				resource_owner_id: "psuser_1",
+				scope: ["user:read_organizations"],
+				expires_in: 2_629_746,
+				application: { uid: "ps-client-id" },
 			})
 		}
 		if (url.includes("/oauth/token")) {
@@ -121,6 +132,88 @@ const mockPlanetScaleFetch = (options: MockOptions = {}): typeof globalThis.fetc
 const withMockFetch = (options: MockOptions = {}) =>
 	Layer.succeed(FetchHttpClient.Fetch, mockPlanetScaleFetch(options))
 
+// ---------------------------------------------------------------------------
+// Legacy (v1-API-compatible) flow: org-scoped exchange authenticated with a
+// service token, grant params in the query string, tokens used as raw
+// `{id}:{token}` Authorization values. Mirrors planetscale/planetpets.
+// ---------------------------------------------------------------------------
+
+const LEGACY_SERVICE_AUTH = "st-id:st-secret"
+const legacyTokenAuth = (mint: number) => `oauthtok_${mint}:ps-oauth-secret-${mint}`
+
+interface LegacyMockOptions {
+	readonly organizations?: ReadonlyArray<{ id: string; name: string }>
+	/** First minted token is already expired (forces refresh on first later use). */
+	readonly shortLivedAccessToken?: boolean
+	readonly counters?: { refreshes: number }
+}
+
+const requestAuthHeader = (input: RequestInfo | URL, init?: RequestInit) => {
+	if (init?.headers) return new Headers(init.headers).get("authorization")
+	return input instanceof Request ? input.headers.get("authorization") : null
+}
+
+const mockLegacyPlanetScaleFetch = (
+	options: LegacyMockOptions = {},
+): typeof globalThis.fetch => {
+	let mintCount = 0
+	return async (input, init) => {
+		const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+		const auth = requestAuthHeader(input, init)
+		const organizations = options.organizations ?? [{ id: "psorg_1", name: "acme" }]
+		// Exchange/refresh — MUST come before the /v1/organizations match (the
+		// org-scoped token path nests under it).
+		if (url.includes("/oauth-applications/")) {
+			if (auth !== LEGACY_SERVICE_AUTH) {
+				return jsonResponse({ code: "unauthorized" }, 401)
+			}
+			// Grant params travel in the query string on this endpoint.
+			const params = new URL(url).searchParams
+			if (
+				params.get("client_id") !== "ps-client-id" ||
+				params.get("client_secret") !== "ps-client-secret"
+			) {
+				return jsonResponse({ code: "unexpected_client" }, 422)
+			}
+			const grantType = params.get("grant_type")
+			if (grantType === "refresh_token") {
+				if (options.counters) options.counters.refreshes += 1
+				if (params.get("refresh_token") !== `ps-refresh-${mintCount}`) {
+					return jsonResponse({ code: "invalid_refresh_token" }, 400)
+				}
+			} else if (
+				grantType !== "authorization_code" ||
+				!params.get("code") ||
+				!params.get("redirect_uri")
+			) {
+				return jsonResponse({ code: "unexpected_grant" }, 422)
+			}
+			mintCount += 1
+			const expired = options.shortLivedAccessToken === true && mintCount === 1
+			return jsonResponse({
+				id: `oauthtok_${mintCount}`,
+				token: `ps-oauth-secret-${mintCount}`,
+				plain_text_refresh_token: `ps-refresh-${mintCount}`,
+				// TestClock time starts at the epoch, so +30s is inside the refresh leeway.
+				expires_at: expired ? "1970-01-01T00:00:30.000Z" : "2099-01-01T00:00:00.000Z",
+			})
+		}
+		// v1 API accepts ONLY the raw id:token pair of the latest mint.
+		if (url.includes("/v1/user")) {
+			if (auth !== legacyTokenAuth(mintCount)) return jsonResponse({ code: "unauthorized" }, 401)
+			return jsonResponse({ id: "psuser_1", email: "dev@acme.test" })
+		}
+		if (url.includes("/v1/organizations")) {
+			if (auth !== legacyTokenAuth(mintCount)) return jsonResponse({ code: "unauthorized" }, 401)
+			return jsonResponse({ data: organizations })
+		}
+		return jsonResponse({ code: "not_found" }, 404)
+	}
+}
+
+const withLegacyMockFetch = (options: LegacyMockOptions = {}) =>
+	Layer.succeed(FetchHttpClient.Fetch, mockLegacyPlanetScaleFetch(options))
+
 const baseConfig = {
 	PORT: "3472",
 	TINYBIRD_HOST: "https://api.tinybird.co",
@@ -146,6 +239,14 @@ const makeLayer = (testDb: TestDb, extra: Record<string, string> = {}) =>
 const withOAuthApp = {
 	PLANETSCALE_OAUTH_CLIENT_ID: "ps-client-id",
 	PLANETSCALE_OAUTH_CLIENT_SECRET: "ps-client-secret",
+}
+
+const withLegacyExchange = {
+	...withOAuthApp,
+	PLANETSCALE_OAUTH_APP_ORG: "maple-org",
+	PLANETSCALE_OAUTH_APP_ID: "app_123",
+	PLANETSCALE_SERVICE_TOKEN_ID: "st-id",
+	PLANETSCALE_SERVICE_TOKEN: "st-secret",
 }
 
 const asOrgId = Schema.decodeUnknownSync(OrgId)
@@ -374,7 +475,7 @@ describe("PlanetScaleOAuthService", () => {
 			Effect.provide(
 				Layer.mergeAll(
 					makeLayer(testDb, withOAuthApp),
-					withMockFetch({ organizationsUnauthorizedTimes: 2, introspection: { active: false } }),
+					withMockFetch({ organizationsUnauthorizedTimes: 2, introspection: "invalid" }),
 				),
 			),
 		)
@@ -404,7 +505,7 @@ describe("PlanetScaleOAuthService", () => {
 			Effect.provide(
 				Layer.mergeAll(
 					makeLayer(testDb, withOAuthApp),
-					withMockFetch({ organizationsUnauthorizedTimes: 2, introspection: { active: true } }),
+					withMockFetch({ organizationsUnauthorizedTimes: 2, introspection: "valid" }),
 				),
 			),
 		)
@@ -533,6 +634,76 @@ describe("PlanetScaleOAuthService", () => {
 				Layer.mergeAll(
 					makeLayer(testDb, withOAuthApp),
 					withMockFetch({ shortLivedAccessToken: true, refreshAlwaysFails: true }),
+				),
+			),
+		)
+	})
+
+	it.effect("startConnect (legacy) authorizes at app.planetscale.com without a scope param", () => {
+		const testDb = createTestDb(trackedDbs)
+		return Effect.gen(function* () {
+			const service = yield* PlanetScaleOAuthService
+			const { redirectUrl, state } = yield* service.startConnect(
+				asOrgId("org_a"),
+				asUserId("user_a"),
+				{ callbackUrl: CALLBACK_URL },
+			)
+			const url = new URL(redirectUrl)
+			assert.strictEqual(url.origin + url.pathname, "https://app.planetscale.com/oauth/authorize")
+			assert.strictEqual(url.searchParams.get("client_id"), "ps-client-id")
+			assert.strictEqual(url.searchParams.get("redirect_uri"), CALLBACK_URL)
+			assert.strictEqual(url.searchParams.get("state"), state)
+			// Legacy authorize takes the scopes from the app registration — a scope
+			// param is a standard-flow concept and must not be sent here.
+			assert.isNull(url.searchParams.get("scope"))
+		}).pipe(Effect.provide(makeLayer(testDb, withLegacyExchange)))
+	})
+
+	it.effect("completeConnect (legacy) exchanges via the org-scoped endpoint and uses id:token credentials", () => {
+		const testDb = createTestDb(trackedDbs)
+		return Effect.gen(function* () {
+			const service = yield* PlanetScaleOAuthService
+			const { state } = yield* service.startConnect(asOrgId("org_a"), asUserId("user_a"), {
+				callbackUrl: CALLBACK_URL,
+			})
+			// The mock enforces the full legacy wire contract: service-token header +
+			// query-string grant params on the exchange, raw id:token on /v1 calls —
+			// any deviation 401s/422s and fails this test.
+			const result = yield* service.completeConnect("auth-code", state)
+			assert.strictEqual(result.orgId, "org_a")
+			assert.deepStrictEqual(
+				result.organizations.map((org) => org.name),
+				["acme"],
+			)
+			assert.isTrue(yield* service.hasConnection(asOrgId("org_a")))
+
+			const { accessToken } = yield* service.getValidAccessToken(asOrgId("org_a"))
+			assert.strictEqual(accessToken, "oauthtok_1:ps-oauth-secret-1")
+		}).pipe(
+			Effect.provide(Layer.mergeAll(makeLayer(testDb, withLegacyExchange), withLegacyMockFetch())),
+		)
+	})
+
+	it.effect("getValidAccessToken (legacy) refreshes through the org-scoped endpoint", () => {
+		const testDb = createTestDb(trackedDbs)
+		const counters = { refreshes: 0 }
+		return Effect.gen(function* () {
+			const service = yield* PlanetScaleOAuthService
+			const { state } = yield* service.startConnect(asOrgId("org_a"), asUserId("user_a"), {
+				callbackUrl: CALLBACK_URL,
+			})
+			yield* service.completeConnect("auth-code", state)
+
+			// The first mint is already expired, so the next token use must refresh —
+			// via the same service-token-authenticated org-scoped endpoint.
+			const { accessToken } = yield* service.getValidAccessToken(asOrgId("org_a"))
+			assert.strictEqual(accessToken, "oauthtok_2:ps-oauth-secret-2")
+			assert.strictEqual(counters.refreshes, 1)
+		}).pipe(
+			Effect.provide(
+				Layer.mergeAll(
+					makeLayer(testDb, withLegacyExchange),
+					withLegacyMockFetch({ shortLivedAccessToken: true, counters }),
 				),
 			),
 		)

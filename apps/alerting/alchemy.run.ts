@@ -104,6 +104,12 @@ export const createAlertingWorker = async ({ stage, mapleDb }: CreateAlertingWor
 			...optionalPlain("PLANETSCALE_OAUTH_AUTHORIZE_URL"),
 			...optionalPlain("PLANETSCALE_OAUTH_TOKEN_URL"),
 			...optionalPlain("MAPLE_PLANETSCALE_API_BASE_URL"),
+			// Legacy (v1-API-compatible) exchange — refresh goes through the same
+			// org-scoped endpoint, so the poller needs these too; see apps/api Env.ts.
+			...optionalPlain("PLANETSCALE_OAUTH_APP_ORG"),
+			...optionalPlain("PLANETSCALE_OAUTH_APP_ID"),
+			...optionalPlain("PLANETSCALE_SERVICE_TOKEN_ID"),
+			...optionalSecret("PLANETSCALE_SERVICE_TOKEN"),
 		},
 	})
 
