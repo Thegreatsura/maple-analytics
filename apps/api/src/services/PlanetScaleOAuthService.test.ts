@@ -1,5 +1,5 @@
 import { afterEach, assert, describe, it } from "@effect/vitest"
-import { ConfigProvider, Effect, Layer, Schema } from "effect"
+import { ConfigProvider, Effect, Fiber, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { FetchHttpClient } from "effect/unstable/http"
 import { OrgId, UserId } from "@maple/domain/http"
@@ -27,6 +27,10 @@ interface MockOptions {
 	readonly refreshAlwaysFails?: boolean
 	/** Exchange returns an immediately-expiring access token (forces refresh on first use). */
 	readonly shortLivedAccessToken?: boolean
+	/** First N `/v1/organizations` calls answer 401 `invalid_token` (doorkeeper body). */
+	readonly organizationsUnauthorizedTimes?: number
+	/** `/oauth/token/info` response; omitted → 500 (introspection unavailable). */
+	readonly introspection?: { active: boolean }
 }
 
 /**
@@ -35,11 +39,22 @@ interface MockOptions {
  * `FetchHttpClient.Fetch` reference (same isolation pattern as the Cloudflare
  * OAuth tests).
  */
-const mockPlanetScaleFetch =
-	(options: MockOptions = {}): typeof globalThis.fetch =>
-	async (input, init) => {
+const mockPlanetScaleFetch = (options: MockOptions = {}): typeof globalThis.fetch => {
+	let orgRejectionsRemaining = options.organizationsUnauthorizedTimes ?? 0
+	return async (input, init) => {
 		const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
 		const organizations = options.organizations ?? [{ id: "psorg_1", name: "acme" }]
+		// Must precede the token-endpoint match — "/oauth/token/info" contains "/oauth/token".
+		if (url.includes("/oauth/token/info")) {
+			if (!options.introspection) {
+				return jsonResponse({ code: "internal" }, 500)
+			}
+			return jsonResponse({
+				active: options.introspection.active,
+				scope: "user:read_organizations",
+				exp: 1_700_000_000,
+			})
+		}
 		if (url.includes("/oauth/token")) {
 			const text = await new Request(url, {
 				method: "POST",
@@ -86,10 +101,22 @@ const mockPlanetScaleFetch =
 			return jsonResponse({ id: "psuser_1", email: "dev@acme.test" })
 		}
 		if (url.includes("/v1/organizations")) {
+			if (orgRejectionsRemaining > 0) {
+				orgRejectionsRemaining -= 1
+				return jsonResponse(
+					{
+						error: "invalid_token",
+						error_description: "The access token is invalid",
+						state: "unauthorized",
+					},
+					401,
+				)
+			}
 			return jsonResponse({ data: organizations })
 		}
 		return jsonResponse({ code: "not_found" }, 404)
 	}
+}
 
 const withMockFetch = (options: MockOptions = {}) =>
 	Layer.succeed(FetchHttpClient.Fetch, mockPlanetScaleFetch(options))
@@ -298,6 +325,87 @@ describe("PlanetScaleOAuthService", () => {
 		}).pipe(
 			Effect.provide(
 				Layer.mergeAll(makeLayer(testDb, withOAuthApp), withMockFetch({ withoutRefreshToken: true })),
+			),
+		)
+	})
+
+	it.effect("completeConnect retries the org listing once when the API rejects the fresh token", () => {
+		const testDb = createTestDb(trackedDbs)
+		return Effect.gen(function* () {
+			const service = yield* PlanetScaleOAuthService
+			const { state } = yield* service.startConnect(asOrgId("org_a"), asUserId("user_a"), {
+				callbackUrl: CALLBACK_URL,
+			})
+			// The first listing 401s (auth→API propagation lag); the retry after the
+			// 2s backoff succeeds and the connect completes normally.
+			const fiber = yield* Effect.forkChild(service.completeConnect("auth-code", state), {
+				startImmediately: true,
+			})
+			yield* TestClock.adjust("2 seconds")
+			const result = yield* Fiber.join(fiber)
+			assert.strictEqual(result.orgId, "org_a")
+			assert.isTrue(yield* service.hasConnection(asOrgId("org_a")))
+		}).pipe(
+			Effect.provide(
+				Layer.mergeAll(
+					makeLayer(testDb, withOAuthApp),
+					withMockFetch({ organizationsUnauthorizedTimes: 1 }),
+				),
+			),
+		)
+	})
+
+	it.effect("completeConnect stays revoked when the auth server also reports the token dead", () => {
+		const testDb = createTestDb(trackedDbs)
+		return Effect.gen(function* () {
+			const service = yield* PlanetScaleOAuthService
+			const { state } = yield* service.startConnect(asOrgId("org_a"), asUserId("user_a"), {
+				callbackUrl: CALLBACK_URL,
+			})
+			const fiber = yield* Effect.forkChild(
+				service.completeConnect("auth-code", state).pipe(Effect.flip),
+				{ startImmediately: true },
+			)
+			yield* TestClock.adjust("2 seconds")
+			const error = yield* Fiber.join(fiber)
+			assert.strictEqual(error._tag, "@maple/http/errors/IntegrationsRevokedError")
+			assert.isFalse(yield* service.hasConnection(asOrgId("org_a")))
+		}).pipe(
+			Effect.provide(
+				Layer.mergeAll(
+					makeLayer(testDb, withOAuthApp),
+					withMockFetch({ organizationsUnauthorizedTimes: 2, introspection: { active: false } }),
+				),
+			),
+		)
+	})
+
+	it.effect("completeConnect reports upstream (not revoked) when the auth server says the token is valid", () => {
+		const testDb = createTestDb(trackedDbs)
+		return Effect.gen(function* () {
+			const service = yield* PlanetScaleOAuthService
+			const { state } = yield* service.startConnect(asOrgId("org_a"), asUserId("user_a"), {
+				callbackUrl: CALLBACK_URL,
+			})
+			// The v1 API keeps rejecting a token the auth server introspects as
+			// active — "reconnect" would be a lie, so this must NOT be RevokedError.
+			const fiber = yield* Effect.forkChild(
+				service.completeConnect("auth-code", state).pipe(Effect.flip),
+				{ startImmediately: true },
+			)
+			yield* TestClock.adjust("2 seconds")
+			const error = yield* Fiber.join(fiber)
+			assert.strictEqual(error._tag, "@maple/http/errors/IntegrationsUpstreamError")
+			if (error._tag === "@maple/http/errors/IntegrationsUpstreamError") {
+				assert.include(error.message, "auth server reports it as valid")
+			}
+			assert.isFalse(yield* service.hasConnection(asOrgId("org_a")))
+		}).pipe(
+			Effect.provide(
+				Layer.mergeAll(
+					makeLayer(testDb, withOAuthApp),
+					withMockFetch({ organizationsUnauthorizedTimes: 2, introspection: { active: true } }),
+				),
 			),
 		)
 	})

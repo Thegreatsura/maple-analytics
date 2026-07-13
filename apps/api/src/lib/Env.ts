@@ -63,6 +63,8 @@ export interface EnvShape {
 	readonly PLANETSCALE_OAUTH_CLIENT_SECRET: Option.Option<Redacted.Redacted<string>>
 	readonly PLANETSCALE_OAUTH_AUTHORIZE_URL: string
 	readonly PLANETSCALE_OAUTH_TOKEN_URL: string
+	/** OAuth token introspection (`/oauth/token/info`) — consulted when the v1 API rejects a fresh token. */
+	readonly PLANETSCALE_OAUTH_TOKEN_INFO_URL: string
 	/**
 	 * Space-delimited, resource-prefixed OAuth scopes requested at authorize time
 	 * (e.g. `organization:read_databases`). PlanetScale REQUIRES an explicit scope
@@ -175,6 +177,10 @@ const envConfig = Config.all({
 	PLANETSCALE_OAUTH_TOKEN_URL: stringWithDefault(
 		"PLANETSCALE_OAUTH_TOKEN_URL",
 		"https://auth.planetscale.com/oauth/token",
+	),
+	PLANETSCALE_OAUTH_TOKEN_INFO_URL: stringWithDefault(
+		"PLANETSCALE_OAUTH_TOKEN_INFO_URL",
+		"https://auth.planetscale.com/oauth/token/info",
 	),
 	// PlanetScale scopes are resource-prefixed (`<resource>:<action>`) and MUST be
 	// sent in the authorize request — the app's configured scopes are the allowed
