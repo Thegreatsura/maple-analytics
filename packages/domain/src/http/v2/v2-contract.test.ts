@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { Schema } from "effect"
-import { V2ApiKey } from "./api-keys"
+import { V2ApiKey, V2ApiKeyMutationResponse, V2ApiKeyWithSecret } from "./api-keys"
 import { requiredScopeForRequest, scopeAllows, V2Scope } from "./auth"
 import { decodeOffsetCursor, encodeOffsetCursor, isoTimestamp, paginateArray } from "./envelopes"
 import { notFound, permissionError, V2NotFoundError } from "./errors"
@@ -34,6 +34,57 @@ describe("V2ApiKey wire format", () => {
 		expect(wire.key_prefix).toBe("maple_ak_abc...")
 		expect(wire.created_at).toBe("2026-07-15T00:00:00.000Z")
 		expect("keyPrefix" in wire).toBe(false)
+	})
+
+	it("keeps txid on mutation responses but out of the base resource", () => {
+		const base = {
+			id: encodePublicId("key", UUID),
+			object: "api_key" as const,
+			name: "ci",
+			description: null,
+			key_prefix: "maple_ak_abc...",
+			kind: "standard" as const,
+			scopes: null,
+			revoked: false,
+			revoked_at: null,
+			last_used_at: null,
+			expires_at: null,
+			created_at: "2026-07-15T00:00:00.000Z",
+			created_by: "user_123",
+			created_by_email: null,
+		}
+		const withSecret = Schema.decodeUnknownSync(V2ApiKeyWithSecret)({
+			...base,
+			secret: "maple_ak_secret",
+			txid: "81234",
+		})
+		const revoked = Schema.decodeUnknownSync(V2ApiKeyMutationResponse)({ ...base, txid: "81235" })
+
+		expect(Schema.encodeSync(V2ApiKeyWithSecret)(withSecret).txid).toBe("81234")
+		expect(Schema.encodeSync(V2ApiKeyMutationResponse)(revoked).txid).toBe("81235")
+		expect("txid" in Schema.encodeSync(V2ApiKey)(Schema.decodeUnknownSync(V2ApiKey)(base))).toBe(false)
+	})
+
+	it("rejects non-Postgres transaction IDs", () => {
+		expect(() =>
+			Schema.decodeUnknownSync(V2ApiKeyMutationResponse)({
+				id: encodePublicId("key", UUID),
+				object: "api_key",
+				name: "ci",
+				description: null,
+				key_prefix: "maple_ak_abc...",
+				kind: "standard",
+				scopes: null,
+				revoked: true,
+				revoked_at: "2026-07-15T00:00:00.000Z",
+				last_used_at: null,
+				expires_at: null,
+				created_at: "2026-07-15T00:00:00.000Z",
+				created_by: "user_123",
+				created_by_email: null,
+				txid: "not-a-txid",
+			}),
+		).toThrow()
 	})
 })
 

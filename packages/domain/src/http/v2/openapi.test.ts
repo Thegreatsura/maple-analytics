@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { Schema } from "effect"
 import { OpenApi } from "effect/unstable/httpapi"
 import { MapleApiV2 } from "./api"
-import { V2ApiKey, V2ApiKeyCreateParams, V2ApiKeyWithSecret } from "./api-keys"
+import { V2ApiKey, V2ApiKeyCreateParams, V2ApiKeyMutationResponse, V2ApiKeyWithSecret } from "./api-keys"
 
 /**
  * Contract freeze: the public v2 OpenAPI surface (paths + methods) is asserted
@@ -88,7 +88,16 @@ describe("MapleApiV2 OpenAPI", () => {
 
 	it("uses clean, unprefixed component schema names", () => {
 		const names = Object.keys(schemas)
-		expect(names).toEqual(expect.arrayContaining(["ApiKey", "ApiKeyWithSecret", "ApiKeyCreateParams", "ApiKeyList", "Scope"]))
+		expect(names).toEqual(
+			expect.arrayContaining([
+				"ApiKey",
+				"ApiKeyWithSecret",
+				"ApiKeyMutationResponse",
+				"ApiKeyCreateParams",
+				"ApiKeyList",
+				"Scope",
+			]),
+		)
 		expect(names).toEqual(
 			expect.arrayContaining([
 				"InvalidRequestError",
@@ -123,6 +132,15 @@ describe("MapleApiV2 OpenAPI", () => {
 		expect(withSecret.title).toBe("API Key (with secret)")
 		expect(withSecret.properties.secret.description).toContain("once")
 		expect(() => Schema.decodeUnknownSync(V2ApiKeyWithSecret)(withSecret.examples[0])).not.toThrow()
+		expect(withSecret.properties.txid.$ref).toBe("#/components/schemas/_maple_PostgresTransactionId")
+		expect(schemas["_maple_PostgresTransactionId"].allOf).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ description: expect.stringContaining("reconcile") }),
+			]),
+		)
+
+		const mutation = schemas["ApiKeyMutationResponse"]
+		expect(() => Schema.decodeUnknownSync(V2ApiKeyMutationResponse)(mutation.examples[0])).not.toThrow()
 
 		const createParams = schemas["ApiKeyCreateParams"]
 		expect(createParams.examples).toHaveLength(1)

@@ -116,6 +116,7 @@ describe("v2 api_keys over HTTP", () => {
 		expect(body.data[0].id.startsWith("key_")).toBe(true)
 		expect(body.data[0].key_prefix.startsWith("maple_ak_")).toBe(true)
 		expect(typeof body.data[0].created_at).toBe("string")
+		expect("txid" in body.data[0]).toBe(false)
 		await harness.dispose()
 	})
 
@@ -164,23 +165,27 @@ describe("v2 api_keys over HTTP", () => {
 		expect(created.body.scopes).toEqual(["telemetry:read"])
 		expect(created.body.secret.startsWith("maple_ak_")).toBe(true)
 		expect(created.body.expires_at).not.toBeNull()
+		expect(created.body.txid).toMatch(/^\d+$/)
 
 		const id: string = created.body.id
 		const retrieved = await harness.request("GET", `/v2/api_keys/${id}`, { token: root.secret })
 		expect(retrieved.status).toBe(200)
 		expect(retrieved.body.id).toBe(id)
 		expect("secret" in retrieved.body).toBe(false)
+		expect("txid" in retrieved.body).toBe(false)
 
 		const rolled = await harness.request("POST", `/v2/api_keys/${id}/roll`, { token: root.secret })
 		expect(rolled.status).toBe(200)
 		expect(rolled.body.scopes).toEqual(["telemetry:read"])
 		expect(rolled.body.id).not.toBe(id)
+		expect(rolled.body.txid).toMatch(/^\d+$/)
 
 		const revoked = await harness.request("DELETE", `/v2/api_keys/${rolled.body.id}`, {
 			token: root.secret,
 		})
 		expect(revoked.status).toBe(200)
 		expect(revoked.body.revoked).toBe(true)
+		expect(revoked.body.txid).toMatch(/^\d+$/)
 		await harness.dispose()
 	})
 

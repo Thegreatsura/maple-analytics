@@ -1,7 +1,7 @@
-import { useAtomRefresh, useAtomSet } from "@/lib/effect-atom"
+import { useAtomSet } from "@/lib/effect-atom"
 import { useState } from "react"
 import { Exit } from "effect"
-import { CreateApiKeyRequest, type ApiKeyKind } from "@maple/domain/http"
+import type { ApiKeyKind } from "@maple/domain/http"
 import { toast } from "sonner"
 
 import { Button } from "@maple/ui/components/ui/button"
@@ -16,7 +16,9 @@ import {
 	DialogPanel,
 	DialogTitle,
 } from "@maple/ui/components/ui/dialog"
-import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
+import { useApiKeyMutationSync } from "@/hooks/use-api-keys"
+import { MapleApiV2AtomClient } from "@/lib/services/common/v2-atom-client"
+import { buildApiKeyCreatePayload } from "./api-key-create-payload"
 import { ApiKeySecretReveal } from "./api-key-secret-reveal"
 
 interface CreateApiKeyDialogProps {
@@ -32,26 +34,22 @@ export function CreateApiKeyDialog({ open, onOpenChange, onCreated, kind }: Crea
 	const [isCreating, setIsCreating] = useState(false)
 	const [newSecret, setNewSecret] = useState<string | null>(null)
 
-	const listQueryAtom = MapleApiAtomClient.query("apiKeys", "list", {})
-	const refreshKeys = useAtomRefresh(listQueryAtom)
-	const createMutation = useAtomSet(MapleApiAtomClient.mutation("apiKeys", "create"), {
+	const { prepareForMutation, reconcileTxid } = useApiKeyMutationSync()
+	const createMutation = useAtomSet(MapleApiV2AtomClient.mutation("apiKeys", "create"), {
 		mode: "promiseExit",
 	})
 
 	async function handleCreate() {
 		if (!newName.trim()) return
 		setIsCreating(true)
+		prepareForMutation()
 		const result = await createMutation({
-			payload: new CreateApiKeyRequest({
-				name: newName.trim(),
-				description: newDescription.trim() || undefined,
-				kind,
-			}),
+			payload: buildApiKeyCreatePayload(newName, newDescription, kind),
 		})
 		if (Exit.isSuccess(result)) {
 			setNewSecret(result.value.secret)
-			refreshKeys()
 			onCreated?.(result.value.secret)
+			void reconcileTxid(result.value.txid)
 		} else {
 			toast.error("Failed to create API key")
 		}
