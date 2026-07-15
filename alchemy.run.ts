@@ -1,7 +1,6 @@
 import { appendFileSync } from "node:fs"
 import * as Alchemy from "alchemy"
 import * as Cloudflare from "alchemy/Cloudflare"
-import * as Output from "alchemy/Output"
 import * as RemovalPolicy from "alchemy/RemovalPolicy"
 import * as Effect from "effect/Effect"
 import { formatMapleStage, parseMapleStage, resolveMapleDomains } from "@maple/infra/cloudflare"
@@ -46,14 +45,6 @@ const createProductionSharedResources = (stage: ReturnType<typeof parseMapleStag
 			return {}
 		}
 
-		const emailRouting = yield* Cloudflare.Email.Routing("email-routing-maple-dev", {
-			zone: "maple.dev",
-		}).pipe(RemovalPolicy.retain())
-		const sendingSubdomain = yield* Cloudflare.Email.SendingSubdomain("email-sending-noreply", {
-			zoneId: emailRouting.zoneId,
-			name: "noreply.maple.dev",
-		}).pipe(RemovalPolicy.retain())
-
 		const ingestEndpoint = (process.env.MAPLE_ENDPOINT?.trim() || "https://ingest.maple.dev").replace(
 			/\/+$/,
 			"",
@@ -80,17 +71,7 @@ const createProductionSharedResources = (stage: ReturnType<typeof parseMapleStag
 			},
 		).pipe(RemovalPolicy.retain())
 
-		// The binding descriptor is lazy so enabling the sending subdomain is an
-		// explicit dependency of both Workers that send transactional email.
-		const emailBinding = sendingSubdomain.enabled.pipe(
-			Output.mapEffect(() =>
-				Cloudflare.Email.SendEmail("email", {
-					allowedSenderAddresses: ["notifications@noreply.maple.dev"],
-				}),
-			),
-		)
-
-		return { emailBinding, logsDestination, tracesDestination }
+		return { logsDestination, tracesDestination }
 	})
 
 export default Alchemy.Stack(
@@ -121,7 +102,6 @@ export default Alchemy.Stack(
 		const { worker: api, db: mapleDb } = yield* createMapleApi({
 			stage,
 			domains,
-			emailBinding: shared.emailBinding,
 		})
 		const chatFlue = yield* createChatFlueWorker({
 			stage,
@@ -155,7 +135,6 @@ export default Alchemy.Stack(
 			stage,
 			domains,
 			mapleDb,
-			emailBinding: shared.emailBinding,
 		})
 
 		const summary = {

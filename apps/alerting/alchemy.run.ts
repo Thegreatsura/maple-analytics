@@ -1,5 +1,4 @@
 import path from "node:path"
-import type { Input } from "alchemy"
 import * as Cloudflare from "alchemy/Cloudflare"
 import * as Effect from "effect/Effect"
 import * as Redacted from "effect/Redacted"
@@ -34,11 +33,9 @@ export interface CreateAlertingWorkerOptions {
 	domains: MapleDomains
 	/** Managed per-branch Hyperdrive from the api factory; undefined on ref stages (stg/prd). */
 	mapleDb: Cloudflare.Hyperdrive.Connection | undefined
-	/** Shared production binding derived from the retained sending subdomain. */
-	emailBinding?: Input<Cloudflare.Email.SendEmail>
 }
 
-export const createAlertingWorker = ({ stage, mapleDb, emailBinding }: CreateAlertingWorkerOptions) =>
+export const createAlertingWorker = ({ stage, mapleDb }: CreateAlertingWorkerOptions) =>
 	Effect.gen(function* () {
 		const hyperdriveRefId = resolveHyperdriveRefId(stage)
 		// Cross-script binding to the AI triage Workflow hosted by the api worker —
@@ -67,11 +64,9 @@ export const createAlertingWorker = ({ stage, mapleDb, emailBinding }: CreateAle
 				// Ref stages attach MAPLE_DB via worker.bind below.
 				...(mapleDb ? { MAPLE_DB: mapleDb } : {}),
 				AI_TRIAGE_WORKFLOW: aiTriageWorkflow,
-				EMAIL:
-					emailBinding ??
-					Cloudflare.Email.SendEmail("email", {
-						allowedSenderAddresses: ["notifications@noreply.maple.dev"],
-					}),
+				EMAIL: Cloudflare.Email.SendEmail("email", {
+					allowedSenderAddresses: ["notifications@noreply.maple.dev"],
+				}),
 				TINYBIRD_HOST: requireEnv("TINYBIRD_HOST"),
 				TINYBIRD_TOKEN: Redacted.make(requireEnv("TINYBIRD_TOKEN")),
 				MAPLE_AUTH_MODE: process.env.MAPLE_AUTH_MODE?.trim() || "self_hosted",

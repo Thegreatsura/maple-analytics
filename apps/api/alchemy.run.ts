@@ -1,5 +1,4 @@
 import path from "node:path"
-import type { Input } from "alchemy"
 import * as Cloudflare from "alchemy/Cloudflare"
 import type { Rpc } from "alchemy/Rpc"
 import * as Effect from "effect/Effect"
@@ -35,14 +34,12 @@ const optionalSecret = (key: string): Record<string, Redacted.Redacted<string>> 
 export interface CreateMapleApiOptions {
 	stage: MapleStage
 	domains: MapleDomains
-	/** Shared production binding derived from the retained sending subdomain. */
-	emailBinding?: Input<Cloudflare.Email.SendEmail>
 }
 
 /** Alchemy resource type carried across the chat-flue service binding. */
 export type MapleApiWorker = Cloudflare.Worker & Rpc<MapleApiRpcShape>
 
-export const createMapleApi = ({ stage, domains, emailBinding }: CreateMapleApiOptions) =>
+export const createMapleApi = ({ stage, domains }: CreateMapleApiOptions) =>
 	Effect.gen(function* () {
 		// MAPLE_DB Hyperdrive comes in two flavors:
 		//
@@ -140,11 +137,9 @@ export const createMapleApi = ({ stage, domains, emailBinding }: CreateMapleApiO
 				VCS_SYNC_QUEUE: vcsSyncQueue,
 				CLICKHOUSE_SCHEMA_APPLY_WORKFLOW: schemaApplyWorkflow,
 				AI_TRIAGE_WORKFLOW: aiTriageWorkflow,
-				EMAIL:
-					emailBinding ??
-					Cloudflare.Email.SendEmail("email", {
-						allowedSenderAddresses: ["notifications@noreply.maple.dev"],
-					}),
+				EMAIL: Cloudflare.Email.SendEmail("email", {
+					allowedSenderAddresses: ["notifications@noreply.maple.dev"],
+				}),
 				TINYBIRD_HOST: requireEnv("TINYBIRD_HOST"),
 				TINYBIRD_TOKEN: Redacted.make(requireEnv("TINYBIRD_TOKEN")),
 				...optionalPlain("CLICKHOUSE_URL"),
