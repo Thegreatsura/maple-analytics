@@ -22,7 +22,15 @@ import { Label } from "@maple/ui/components/ui/label"
 import { Skeleton } from "@maple/ui/components/ui/skeleton"
 import { toast } from "sonner"
 
-import { CheckIcon, CircleWarningIcon, LoaderIcon, PlanetScaleIcon } from "@/components/icons"
+import {
+	ChartLineIcon,
+	CheckIcon,
+	CircleWarningIcon,
+	LoaderIcon,
+	MagnifierIcon,
+	NetworkNodesIcon,
+	PlanetScaleIcon,
+} from "@/components/icons"
 import { cn } from "@maple/ui/utils"
 import { Result, useAtomRefresh, useAtomSet, useAtomValue } from "@/lib/effect-atom"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
@@ -202,9 +210,21 @@ export function PlanetScaleIntegrationCard() {
 				title="Connect your PlanetScale organization"
 				description="Authorize Maple in PlanetScale and databases, branches, query insights, and webhooks connect instantly. Branch metrics take one more paste: a read-only service token, since PlanetScale only exposes its metrics endpoints to service tokens."
 				features={[
-					"Databases appear on the service map with live health",
-					"Branch metrics collected automatically — nothing to run",
-					"Branch filters keep preview branches out",
+					{
+						icon: NetworkNodesIcon,
+						title: "Service map",
+						description: "Databases join the map, linked to the services that query them.",
+					},
+					{
+						icon: MagnifierIcon,
+						title: "Query insights",
+						description: "Top queries per branch — calls, rows read, and time per query.",
+					},
+					{
+						icon: ChartLineIcon,
+						title: "Branch health",
+						description: "CPU, memory, connections, and replication lag per branch.",
+					},
 				]}
 				footer="You'll authorize Maple in a PlanetScale popup; a read_metrics_endpoints service token completes metrics afterwards."
 			>

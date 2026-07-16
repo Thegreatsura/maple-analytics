@@ -53,7 +53,9 @@ import { Switch } from "@maple/ui/components/ui/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@maple/ui/components/ui/tooltip"
 import { cn } from "@maple/ui/lib/utils"
 import {
+	BellIcon,
 	BoltIcon,
+	ChartBarIcon,
 	CircleCheckIcon,
 	CircleInfoIcon,
 	CircleWarningIcon,
@@ -193,6 +195,23 @@ const COPY = {
 	description: "Scrape Prometheus exporters and inspect scheduled scrape health.",
 	emptyTitle: "No scrape targets",
 	emptyDescription: "Add a Prometheus exporter endpoint to start scraping metrics.",
+	features: [
+		{
+			icon: ChartBarIcon,
+			title: "Metrics explorer",
+			description: "Scraped metrics land alongside your OTel metrics, ready to chart.",
+		},
+		{
+			icon: BellIcon,
+			title: "Dashboards & alerts",
+			description: "Build dashboard widgets and threshold alerts on any scraped metric.",
+		},
+		{
+			icon: PulseIcon,
+			title: "Scrape health",
+			description: "Every run is checked on a schedule, with per-target history.",
+		},
+	],
 } as const
 
 /**
@@ -432,6 +451,7 @@ export function ScrapeTargetsSection({
 						iconClassName={emptyEntry?.iconClassName}
 						title={copy.emptyTitle}
 						description={copy.emptyDescription}
+						features={copy.features}
 					>
 						<Button onClick={openAddDialog}>
 							<PlusIcon size={16} />
