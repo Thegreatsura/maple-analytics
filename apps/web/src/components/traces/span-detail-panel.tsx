@@ -27,7 +27,7 @@ import { cn } from "@maple/ui/utils"
 import { getCacheInfo, cacheResultStyles } from "@maple/ui/lib/cache"
 import { getCloudPlatform, outcomeBadgeStyle } from "@maple/ui/lib/cloud-platforms"
 import { GlobeIcon } from "@maple/ui/components/icons"
-import { getServiceLegendColor } from "@maple/ui/lib/colors"
+import { getServiceColor } from "@maple/ui/lib/colors"
 import type { SpanNode, SpanDetailResult } from "@/api/warehouse/traces"
 import { disabledResultAtom } from "@/lib/services/atoms/disabled-result-atom"
 import { getSpanDetailResultAtom, listLogsResultAtom } from "@/lib/services/atoms/warehouse-query-atoms"
@@ -40,7 +40,6 @@ import { InfraCorrelationPanel, infraCorrelationWindow } from "@/components/infr
 
 interface SpanDetailPanelProps {
 	span: SpanNode
-	services: string[]
 	onClose: () => void
 }
 
@@ -265,7 +264,7 @@ function SpanLogs({ traceId, spanId, timeZone }: { traceId: string; spanId: stri
 	)
 }
 
-export function SpanDetailPanel({ span, services, onClose }: SpanDetailPanelProps) {
+export function SpanDetailPanel({ span, onClose }: SpanDetailPanelProps) {
 	const { effectiveTimezone } = useTimezonePreference()
 	const cacheInfo = getCacheInfo(span.spanAttributes)
 	const statusStyle = statusStyles[span.statusCode] ?? statusStyles.Unset
@@ -318,7 +317,7 @@ export function SpanDetailPanel({ span, services, onClose }: SpanDetailPanelProp
 						<Badge
 							variant="outline"
 							className="font-mono text-[10px]"
-							style={{ color: getServiceLegendColor(span.serviceName, services) }}
+							style={{ color: getServiceColor(span.serviceName) }}
 						>
 							<CopyableValue value={span.serviceName}>{span.serviceName}</CopyableValue>
 						</Badge>

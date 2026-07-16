@@ -5,7 +5,7 @@ import { Badge } from "../ui/badge"
 import { Button } from "../ui/button"
 import { cn } from "../../lib/utils"
 import { formatDuration } from "../../lib/format"
-import { getServiceLegendColor } from "../../lib/colors"
+import { getServiceColor } from "../../lib/colors"
 import { getCacheInfo, cacheResultStyles } from "../../lib/cache"
 import { getHttpInfo, HTTP_METHOD_COLORS } from "../../lib/http"
 import { getCloudPlatform, outcomeBadgeStyle } from "../../lib/cloud-platforms"
@@ -17,7 +17,6 @@ interface SpanRowProps {
 	span: SpanNode
 	totalDurationMs: number
 	traceStartTime: string
-	services: string[]
 	expanded: boolean
 	onToggle: (span: SpanNode) => void
 	isSelected?: boolean
@@ -42,7 +41,6 @@ function SpanRowImpl({
 	span,
 	totalDurationMs,
 	traceStartTime,
-	services,
 	expanded,
 	onToggle,
 	isSelected,
@@ -178,7 +176,7 @@ function SpanRowImpl({
 							aria-label={platform.label}
 						/>
 					)}
-					<span style={{ color: getServiceLegendColor(span.serviceName, services) }}>
+					<span style={{ color: getServiceColor(span.serviceName) }}>
 						{span.serviceName}
 					</span>
 					<span className="text-muted-foreground">·</span>

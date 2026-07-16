@@ -15,6 +15,7 @@ import { formatRelativeTime } from "@/lib/format"
 import { HttpSpanLabel } from "@maple/ui/components/traces/http-span-label"
 import { useInfiniteTraces, FETCH_THRESHOLD } from "@/hooks/use-infinite-traces"
 import { useListNavigation } from "@/hooks/use-list-navigation"
+import { ServiceDot } from "@maple/ui/components/service-dot"
 
 interface TracesTableViewProps {
 	allData: Trace[]
@@ -254,6 +255,7 @@ function TracesTableView({
 								className="max-w-full font-mono text-[10px]"
 								title={service}
 							>
+								<ServiceDot serviceName={service} className="size-1.5" />
 								<span className="truncate">{service}</span>
 							</Badge>
 						))}

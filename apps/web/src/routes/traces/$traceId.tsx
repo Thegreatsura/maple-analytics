@@ -17,7 +17,7 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@maple/ui/
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@maple/ui/components/ui/sheet"
 import { useIsMobile } from "@maple/ui/hooks/use-media-query"
 import { formatDuration } from "@/lib/format"
-import { getServiceLegendColor } from "@maple/ui/lib/colors"
+import { getServiceColor } from "@maple/ui/lib/colors"
 import { type Span, type SpanNode, type SpanHierarchyResponse } from "@/api/warehouse/traces"
 import { getSpanHierarchyResultAtom } from "@/lib/services/atoms/warehouse-query-atoms"
 import { findSpanById } from "@maple/ui/components/traces/flow-utils"
@@ -281,7 +281,7 @@ function TraceDetailContent({
 								key={service}
 								variant="outline"
 								className="font-mono text-xs"
-								style={{ color: getServiceLegendColor(service, services) }}
+								style={{ color: getServiceColor(service) }}
 							>
 								{service}
 							</Badge>
@@ -388,7 +388,6 @@ function TraceDetailContent({
 								{selectedSpan && (
 									<SpanDetailPanel
 										span={selectedSpan}
-										services={services}
 										onClose={handleCloseSpanDetails}
 									/>
 								)}
@@ -410,7 +409,6 @@ function TraceDetailContent({
 								<ResizablePanel defaultSize={40} minSize={25}>
 									<SpanDetailPanel
 										span={selectedSpan}
-										services={services}
 										onClose={handleCloseSpanDetails}
 									/>
 								</ResizablePanel>

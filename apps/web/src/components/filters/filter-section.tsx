@@ -2,6 +2,7 @@ import * as React from "react"
 import { ChevronDownIcon, XmarkIcon, MagnifierIcon, type IconComponent } from "@/components/icons"
 
 import { cn } from "@maple/ui/utils"
+import { getServiceColor } from "@maple/ui/colors"
 import { Checkbox } from "@maple/ui/components/ui/checkbox"
 import { Label } from "@maple/ui/components/ui/label"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@maple/ui/components/ui/collapsible"
@@ -31,7 +32,7 @@ interface FilterSectionBaseProps {
 
 interface FilterSectionProps extends FilterSectionBaseProps {}
 
-interface SearchableFilterSectionProps extends Omit<FilterSectionBaseProps, "colorMap"> {}
+interface SearchableFilterSectionProps extends FilterSectionBaseProps {}
 
 function FilterSectionBase({
 	title,
@@ -134,7 +135,7 @@ function FilterSectionBase({
 									>
 										{colorMap?.[option.name] && (
 											<span
-												className="size-2.5 rounded-full shrink-0"
+												className="size-2.5 rounded-[35%] [corner-shape:squircle] shrink-0"
 												style={{ backgroundColor: colorMap[option.name] }}
 											/>
 										)}
@@ -161,6 +162,11 @@ function FilterSectionBase({
 			</CollapsibleContent>
 		</Collapsible>
 	)
+}
+
+/** Option-name → deterministic service color, for Service facets' swatches. */
+export function serviceColorMap(options: ReadonlyArray<FilterOption>): Record<string, string> {
+	return Object.fromEntries(options.map((o) => [o.name, getServiceColor(o.name)]))
 }
 
 export function FilterSection(props: FilterSectionProps) {
