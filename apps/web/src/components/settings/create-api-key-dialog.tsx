@@ -120,7 +120,9 @@ export function CreateApiKeyDialog({ open, onOpenChange, onCreated, kind }: Crea
 		<Dialog open={open} onOpenChange={handleClose}>
 			<DialogContent>
 				{createdKey ? (
-					<>
+					// Fresh element (vs the form fragment) so the success view remounts and
+					// its @starting-style entrance fires on the form→created swap.
+					<div className="flex min-h-0 flex-col transition-[opacity,translate] duration-200 ease-out-expo starting:opacity-0 starting:translate-y-1 motion-reduce:starting:translate-y-0">
 						<DialogHeader>
 							<DialogTitle>API key created</DialogTitle>
 							<DialogDescription>
@@ -147,7 +149,7 @@ export function CreateApiKeyDialog({ open, onOpenChange, onCreated, kind }: Crea
 								Done
 							</Button>
 						</DialogFooter>
-					</>
+					</div>
 				) : (
 					<>
 						<DialogHeader>
