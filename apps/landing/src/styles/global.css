@@ -65,6 +65,22 @@
 	display: block;
 }
 
+/* Mobile: the sidebar (the only tab switcher) is hidden below md, and the
+   Service Map graph doesn't fit a phone — pin the mock to the Overview
+   dashboard regardless of the checked radio. */
+@media (max-width: 767px) {
+	.app-mock .mock-view,
+	.app-mock .mock-crumb {
+		display: none !important;
+	}
+	.app-mock .mock-view-overview {
+		display: block !important;
+	}
+	.app-mock .mock-crumb-overview {
+		display: inline !important;
+	}
+}
+
 .app-mock:has(.mock-radio-map:checked) nav .mock-nav-map,
 .app-mock:has(.mock-radio-overview:checked) nav .mock-nav-overview,
 .app-mock:has(.mock-radio-services:checked) nav .mock-nav-services,

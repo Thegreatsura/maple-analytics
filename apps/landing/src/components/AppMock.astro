@@ -63,8 +63,6 @@ function mapServiceColor(label: string): string {
 }
 
 interface Pt { x: number; y: number }
-const mapNodeRight = (n: MapNode): Pt => ({ x: MAP_COL_X[n.col] + MAP_NODE_W, y: MAP_ROWS_PER_COL[n.col][n.row] });
-const mapNodeLeft  = (n: MapNode): Pt => ({ x: MAP_COL_X[n.col],              y: MAP_ROWS_PER_COL[n.col][n.row] });
 
 function smoothStepPath(a: Pt, b: Pt, r = 12): string {
     if (Math.abs(a.y - b.y) < 0.5) return `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
@@ -86,14 +84,22 @@ function strokeWidthFor(callCount: number | undefined): number {
     return Math.min(8, Math.max(2, 2 + Math.log10(callCount) * 2));
 }
 
-const mapNodeById = Object.fromEntries(mapNodes.map((n) => [n.id, n]));
+// The map view is desktop-only: below md the mock is pinned to the Overview
+// dashboard (see the mobile override in global.css), so a single wide layout
+// suffices.
+interface MapLayoutNode extends MapNode { x: number; y: number }
+const mapPlacedNodes: MapLayoutNode[] = mapNodes.map((n) => ({
+    ...n,
+    x: MAP_COL_X[n.col],
+    y: MAP_ROWS_PER_COL[n.col][n.row] - MAP_NODE_H / 2,
+}));
+const mapPlacedById = Object.fromEntries(mapPlacedNodes.map((n) => [n.id, n]));
+
 const mapEdgeRender = mapEdges.map((e, i) => {
-    const fromNode = mapNodeById[e.from];
-    const toNode = mapNodeById[e.to];
-    const a = mapNodeRight(fromNode);
-    const b = mapNodeLeft(toNode);
-    const midX = (a.x + b.x) / 2;
-    const labelY = a.y + (b.y - a.y) / 2;
+    const fromNode = mapPlacedById[e.from];
+    const toNode = mapPlacedById[e.to];
+    const a: Pt = { x: fromNode.x + MAP_NODE_W, y: fromNode.y + MAP_NODE_H / 2 };
+    const b: Pt = { x: toNode.x, y: toNode.y + MAP_NODE_H / 2 };
     return {
         ...e,
         gradId: `mockmap-${uid}-${i}`,
@@ -103,8 +109,6 @@ const mapEdgeRender = mapEdges.map((e, i) => {
         targetColor: toNode.db ? "var(--severity-info)" : mapServiceColor(toNode.label),
         sourcePt: a,
         targetPt: b,
-        labelX: midX,
-        labelY,
     };
 });
 
@@ -386,9 +390,9 @@ function sparkPoints(spark: number[]): string {
                     })}
 
                     <!-- Nodes — exact ServiceMapNode.tsx markup inside foreignObject -->
-                    {mapNodes.map((n) => {
-                        const x = MAP_COL_X[n.col];
-                        const y = MAP_ROWS_PER_COL[n.col][n.row] - MAP_NODE_H / 2;
+                    {mapPlacedNodes.map((n) => {
+                        const x = n.x;
+                        const y = n.y;
                         const errNum = n.err ? parseFloat(n.err) : 0;
                         const healthDotCls = errNum > 5 ? "bg-severity-error" : errNum > 1 ? "bg-severity-warn" : "bg-severity-info";
                         const errCls = errNum > 5 ? "text-severity-error" : errNum > 1 ? "text-severity-warn" : "text-fg";
@@ -498,18 +502,18 @@ function sparkPoints(spark: number[]): string {
         </div>
 
         <!-- ===== OVERVIEW VIEW ===== -->
-        <div class="mock-view mock-view-overview flex-1 p-3 md:p-4 space-y-2.5 overflow-hidden">
+        <div class="mock-view mock-view-overview flex-1 p-3 md:p-4 space-y-2.5 overflow-hidden max-md:max-h-[440px] max-md:overflow-y-auto max-md:overscroll-y-contain">
             <!-- Page header -->
             <div class="flex items-end justify-between gap-2">
                 <div>
                     <div class="font-display text-sm md:text-base text-fg font-semibold leading-tight">Dashboard</div>
                     <div class="text-[9px] text-fg-muted">Observability overview for your services.</div>
                 </div>
-                <div class="flex items-center gap-1.5">
-                    <span class="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-0.5 text-[9px] text-fg">production
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <span class="hidden sm:inline-flex items-center gap-1 rounded-lg border border-border px-2 py-0.5 text-[9px] text-fg">production
                         <svg class="w-2 h-2 text-fg-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
                     </span>
-                    <span class="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-0.5 text-[9px] text-fg">
+                    <span class="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-border px-2 py-0.5 text-[9px] text-fg">
                         <svg class="w-2.5 h-2.5 text-fg-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                         Last 24 hours
                     </span>
@@ -522,7 +526,7 @@ function sparkPoints(spark: number[]): string {
                 <span class="text-[10px] text-fg-muted">/ 4 rules watching</span>
             </div>
             <!-- Health strip: Services · Healthy · Degraded · Unhealthy -->
-            <div class="grid grid-cols-4 gap-px bg-border border border-border rounded-lg overflow-hidden">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-px bg-border border border-border rounded-lg overflow-hidden">
                 <div class="bg-bg-elevated px-2.5 py-1.5">
                     <div class="text-[8px] text-fg-muted">Services</div>
                     <div class="text-sm text-fg font-bold">22</div>
@@ -564,7 +568,7 @@ function sparkPoints(spark: number[]): string {
                 </div>
             </div>
             <!-- Chart row (matches real: Request Volume with legend, Error Rate with headline %) -->
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <div class="rounded-lg border border-border bg-bg p-2.5">
                     <div class="flex items-center justify-between mb-1.5">
                         <div class="text-[8px] text-fg-muted uppercase tracking-wider">Request Volume</div>
@@ -987,7 +991,7 @@ function sparkPoints(spark: number[]): string {
                 </div>
             </div>
             <!-- Service detail style: 2x2 chart grid -->
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <div class="rounded-lg border border-border bg-bg p-2.5">
                     <div class="text-[9px] text-fg-muted font-mono mb-1.5">http.server.duration <span class="text-fg-muted/60">· p95</span></div>
                     <div class="flex items-end gap-[2px] h-14">
