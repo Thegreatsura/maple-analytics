@@ -1,5 +1,5 @@
 import * as React from "react"
-import { ChevronDownIcon, XmarkIcon, MagnifierIcon } from "@/components/icons"
+import { ChevronDownIcon, XmarkIcon, MagnifierIcon, type IconComponent } from "@/components/icons"
 
 import { cn } from "@maple/ui/utils"
 import { Checkbox } from "@maple/ui/components/ui/checkbox"
@@ -25,6 +25,8 @@ interface FilterSectionBaseProps {
 	defaultOpen?: boolean
 	maxVisible?: number
 	colorMap?: Record<string, string>
+	/** Option-name → icon, rendered before the label (like colorMap's swatch). */
+	getOptionIcon?: (name: string) => IconComponent | undefined
 }
 
 interface FilterSectionProps extends FilterSectionBaseProps {}
@@ -40,6 +42,7 @@ function FilterSectionBase({
 	maxVisible = 5,
 	searchable,
 	colorMap,
+	getOptionIcon,
 }: FilterSectionBaseProps & { searchable: boolean }) {
 	const [isOpen, setIsOpen] = React.useState(defaultOpen)
 	const [showAll, setShowAll] = React.useState(false)
@@ -115,31 +118,35 @@ function FilterSectionBase({
 					{visibleOptions.length === 0 ? (
 						<p className="text-xs text-muted-foreground py-1">No matches found</p>
 					) : (
-						visibleOptions.map((option) => (
-							<div key={option.name} className="flex items-center gap-2">
-								<Checkbox
-									id={`${title}-${option.name}`}
-									checked={selected.includes(option.name)}
-									onCheckedChange={() => toggleOption(option.name)}
-								/>
-								<Label
-									htmlFor={`${title}-${option.name}`}
-									className="flex-1 min-w-0 flex items-center gap-1.5 cursor-pointer text-xs text-foreground font-normal"
-									title={option.name}
-								>
-									{colorMap?.[option.name] && (
-										<span
-											className="size-2.5 rounded-full shrink-0"
-											style={{ backgroundColor: colorMap[option.name] }}
-										/>
-									)}
-									<span className="truncate">{option.name}</span>
-								</Label>
-								<span className="text-xs text-muted-foreground tabular-nums">
-									{option.count.toLocaleString()}
-								</span>
-							</div>
-						))
+						visibleOptions.map((option) => {
+							const OptionIcon = getOptionIcon?.(option.name)
+							return (
+								<div key={option.name} className="flex items-center gap-2">
+									<Checkbox
+										id={`${title}-${option.name}`}
+										checked={selected.includes(option.name)}
+										onCheckedChange={() => toggleOption(option.name)}
+									/>
+									<Label
+										htmlFor={`${title}-${option.name}`}
+										className="flex-1 min-w-0 flex items-center gap-1.5 cursor-pointer text-xs text-foreground font-normal"
+										title={option.name}
+									>
+										{colorMap?.[option.name] && (
+											<span
+												className="size-2.5 rounded-full shrink-0"
+												style={{ backgroundColor: colorMap[option.name] }}
+											/>
+										)}
+										{OptionIcon && <OptionIcon className="size-3.5 shrink-0" />}
+										<span className="truncate">{option.name}</span>
+									</Label>
+									<span className="text-xs text-muted-foreground tabular-nums">
+										{option.count.toLocaleString()}
+									</span>
+								</div>
+							)
+						})
 					)}
 					{hasMore && (
 						<button
