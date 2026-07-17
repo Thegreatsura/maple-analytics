@@ -26,9 +26,6 @@ import { PageRefreshProvider } from "@/components/time-range-picker/page-refresh
 import { TimeRangeHeaderControls } from "@/components/time-range-picker/time-range-header-controls"
 import { Button } from "@maple/ui/components/ui/button"
 import { BellIcon } from "@/components/icons"
-import { LogsTable } from "@/components/logs/logs-table"
-import { LogsVolumeChart } from "@/components/logs/logs-volume-chart"
-import { TracesTable } from "@/components/traces/traces-table"
 import { ServiceDependenciesTab } from "@/components/services/service-dependencies-tab"
 import { ServiceOperationsTab } from "@/components/services/service-operations-tab"
 import { ServiceDependencyStrip } from "@/components/services/service-dependency-strip"
@@ -46,7 +43,7 @@ import { ServiceDot } from "@maple/ui/components/service-dot"
 // dependency identity every render, busting the marker cache.
 const EMPTY_RELEASES: ReadonlyArray<ReleasePoint> = []
 
-const ServiceDetailTab = Schema.Literals(["overview", "operations", "traces", "logs", "dependencies"])
+const ServiceDetailTab = Schema.Literals(["overview", "operations", "dependencies"])
 type ServiceDetailTabValue = Schema.Schema.Type<typeof ServiceDetailTab>
 const decodeServiceDetailTab = Schema.decodeUnknownOption(ServiceDetailTab)
 
@@ -54,7 +51,10 @@ const serviceDetailSearchSchema = Schema.Struct({
 	startTime: Schema.optional(Schema.String),
 	endTime: Schema.optional(Schema.String),
 	timePreset: Schema.optional(Schema.String),
-	tab: Schema.optional(ServiceDetailTab),
+	// Plain string, narrowed via decodeServiceDetailTab at the use site — an
+	// unknown value (e.g. a stale `?tab=traces` link) falls back to Overview
+	// instead of failing route search validation.
+	tab: Schema.optional(Schema.String),
 	// Scopes the Overview charts to a single deployment environment (carried from
 	// the clicked service-list row, or chosen via the env switcher). Single-element
 	// by convention; `undefined` = all environments. Uses the JSON-string-tolerant
@@ -147,7 +147,10 @@ function ServiceDetailContent() {
 		[navigate],
 	)
 
-	const activeTab: ServiceDetailTabValue = search.tab ?? "overview"
+	const activeTab: ServiceDetailTabValue = Option.getOrElse(
+		decodeServiceDetailTab(search.tab),
+		(): ServiceDetailTabValue => "overview",
+	)
 	const handleTabChange = useCallback(
 		(value: unknown) => {
 			const next = Option.getOrElse(
@@ -213,18 +216,6 @@ function ServiceDetailContent() {
 								Operations
 							</TabsTrigger>
 							<TabsTrigger
-								value="traces"
-								className="h-6 flex-1 px-2.5 text-xs font-medium sm:h-6 sm:flex-initial sm:text-xs"
-							>
-								Traces
-							</TabsTrigger>
-							<TabsTrigger
-								value="logs"
-								className="h-6 flex-1 px-2.5 text-xs font-medium sm:h-6 sm:flex-initial sm:text-xs"
-							>
-								Logs
-							</TabsTrigger>
-							<TabsTrigger
 								value="dependencies"
 								className="h-6 flex-1 px-2.5 text-xs font-medium sm:h-6 sm:flex-initial sm:text-xs"
 							>
@@ -284,46 +275,6 @@ function ServiceDetailContent() {
 					endTime={search.endTime}
 					timePreset={search.timePreset}
 				/>
-			)}
-			{activeTab === "traces" && (
-				<TracesTable
-					filters={{
-						services: [serviceName],
-						deploymentEnvs: search.environments,
-						startTime: search.startTime,
-						endTime: search.endTime,
-						timePreset: search.timePreset,
-					}}
-				/>
-			)}
-			{activeTab === "logs" && (
-				<div className="flex min-h-0 flex-1 flex-col gap-3">
-					<LogsVolumeChart
-						filters={{
-							services: [serviceName],
-							deploymentEnvs: search.environments,
-							startTime: search.startTime,
-							endTime: search.endTime,
-							timePreset: search.timePreset,
-						}}
-						onTimeRangeSelect={(range) =>
-							handleTimeChange(
-								{ startTime: range.startTime, endTime: range.endTime },
-								{ replace: true },
-							)
-						}
-					/>
-					<LogsTable
-						embedded
-						filters={{
-							services: [serviceName],
-							deploymentEnvs: search.environments,
-							startTime: search.startTime,
-							endTime: search.endTime,
-							timePreset: search.timePreset,
-						}}
-					/>
-				</div>
 			)}
 			{activeTab === "dependencies" && (
 				<ServiceDependenciesTab
