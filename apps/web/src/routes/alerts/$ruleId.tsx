@@ -674,7 +674,7 @@ function RuleDetailContent() {
 						</Empty>
 					))
 					.onSuccess(() => (
-						<div className="space-y-6 content-enter">
+						<div className="space-y-6">
 							<div className="flex items-center justify-between">
 								<div>
 									<h2 className="text-lg font-semibold">History</h2>

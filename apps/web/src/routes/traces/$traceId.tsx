@@ -267,7 +267,7 @@ function TraceDetailContent({
 				</div>
 			}
 		>
-			<div className="flex flex-1 flex-col gap-y-3 min-h-0 content-enter">
+			<div className="flex flex-1 flex-col gap-y-3 min-h-0">
 				<TraceAnatomyStrip
 					spans={data.spans}
 					totalDurationMs={data.totalDurationMs}
@@ -325,7 +325,6 @@ function TraceDetailContent({
 										onClose={handleCloseSpanDetails}
 										traceStartTime={traceStartTime}
 										totalDurationMs={data.totalDurationMs}
-										className="panel-enter"
 									/>
 								</ResizablePanel>
 							</>

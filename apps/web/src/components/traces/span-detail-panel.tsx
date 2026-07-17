@@ -282,14 +282,14 @@ function SpanLogs({ traceId, spanId, timeZone }: { traceId: string; spanId: stri
 
 					if (logs.length === 0) {
 						return (
-							<div className="p-4 text-center text-sm text-muted-foreground content-enter">
+							<div className="p-4 text-center text-sm text-muted-foreground">
 								No logs found for this span
 							</div>
 						)
 					}
 
 					return (
-						<div className="divide-y content-enter">
+						<div className="divide-y">
 							{logs.map((log, i) => (
 								<LogEntry
 									key={`${log.timestamp}-${i}`}
@@ -512,7 +512,7 @@ export function SpanDetailPanel({
 
 				<TabsContent value="details" className="flex-1 min-h-0 mt-0">
 					<ScrollArea className="h-full">
-						<div className="p-3 space-y-3 content-enter">
+						<div className="p-3 space-y-3">
 							{/* Timing + identifiers, with the span's position inside the trace */}
 							<div className="space-y-1">
 								<h4 className="text-xs font-medium text-muted-foreground">Span</h4>
@@ -608,7 +608,7 @@ export function SpanDetailPanel({
 				{hasInfra && (
 					<TabsContent value="infrastructure" className="flex-1 min-h-0 mt-0">
 						<ScrollArea className="h-full">
-							<div className="p-3 content-enter">
+							<div className="p-3">
 								<InfraCorrelationPanel
 									resourceAttributes={infraAttrs}
 									{...infraCorrelationWindow(span.startTime, {

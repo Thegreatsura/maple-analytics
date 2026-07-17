@@ -445,7 +445,7 @@ function LogsTableView({
 
 	return (
 		<>
-			<div className={`flex-1 min-h-0 flex flex-col content-enter ${waiting ? "opacity-60" : ""}`}>
+			<div className={`flex-1 min-h-0 flex flex-col transition-opacity ${waiting ? "opacity-60" : ""}`}>
 				{!onLogClick && !embedded && <LogsTableToolbar />}
 				<div className="flex-1 min-h-0 relative">
 					<div
