@@ -30,6 +30,13 @@ jobs:
 
             - run: bun turbo typecheck test build --filter='!@maple/ingest'
 
+            # Guard the code-split web bundle: initial-load gzip budget and no
+            # chat/replay code in the startup graph. Reads the dist/ the turbo
+            # build step just produced (or restored from cache).
+            - name: Web bundle budget
+              run: bun run check:bundle
+              working-directory: apps/web
+
     knip:
         name: Knip
         runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -105,9 +112,11 @@ jobs:
             - name: Build web workspace deps
               run: bun turbo build --filter=@maple/web^...
 
-            # Headless Chromium + its system libs for the rendering benchmark.
-            - name: Install Playwright Chromium
-              run: bunx playwright install --with-deps chromium
+            # Headless browsers + their system libs for the rendering benchmark
+            # and the @cross-browser smoke projects (firefox/webkit fail to
+            # launch in 1ms if only chromium is installed).
+            - name: Install Playwright browsers
+              run: bunx playwright install --with-deps chromium firefox webkit
               working-directory: apps/web
 
             # Boots a self-hosted dev server (see playwright.config.ts) and runs the
