@@ -283,6 +283,26 @@
 	}
 }
 
+/* Entrance for a side panel mounting next to existing content: fade plus a
+   slight slide from its own edge. Under reduced motion the slide is dropped
+   and only the fade remains. */
+@utility panel-enter {
+	transition:
+		opacity 200ms var(--ease-out-expo),
+		translate 200ms var(--ease-out-expo);
+	@starting-style {
+		opacity: 0;
+		translate: 12px 0;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		transition: opacity 200ms var(--ease-out-expo);
+		@starting-style {
+			opacity: 0;
+			translate: none;
+		}
+	}
+}
+
 @layer base {
 	* {
 		@apply border-border outline-ring/50;
