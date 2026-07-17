@@ -30,7 +30,6 @@ import { ServiceDependenciesTab } from "@/components/services/service-dependenci
 import { ServiceDependencyStrip } from "@/components/services/service-dependency-strip"
 import { ServiceEnvironmentSwitcher } from "@/components/services/service-environment-switcher"
 import { ServiceErrorsPanel } from "@/components/services/service-errors-panel"
-import { ServiceHealthStrip } from "@/components/services/service-health-strip"
 import { ServiceRecentDeploys } from "@/components/services/service-recent-deploys"
 import { OptionalStringArrayParam } from "@/lib/search-params"
 import { ServiceDot } from "@maple/ui/components/service-dot"
@@ -362,14 +361,6 @@ function OverviewTab({
 
 	return (
 		<div className="flex flex-col gap-3">
-			<ServiceHealthStrip
-				serviceName={serviceName}
-				points={basePoints}
-				isLoading={isDetailLoading}
-				effectiveStartTime={effectiveStartTime}
-				effectiveEndTime={effectiveEndTime}
-				environments={environments}
-			/>
 			<MetricsGrid
 				items={metrics}
 				waiting={!!isWaiting}
