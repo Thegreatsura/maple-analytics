@@ -111,8 +111,8 @@ function AlertsOverviewContent({
 	data: AlertsOverviewReady
 	/** The model's rule enable/disable Mutation, bound to a fire callback. */
 	onToggleRule: (rule: AlertRuleDocument) => void
-	/** The shared in-flight state of {@link onToggleRule}. */
-	toggleState: AsyncResult.AsyncResult<AlertRuleDocument, unknown>
+	/** The shared in-flight state of {@link onToggleRule} — only its phase is read. */
+	toggleState: AsyncResult.AsyncResult<unknown, unknown>
 }) {
 	const search = useSearch({ from: "/alerts/" })
 	const navigate = useNavigate({ from: "/alerts/" })

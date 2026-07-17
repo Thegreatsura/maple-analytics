@@ -25,7 +25,6 @@ import * as Stream from "effect/Stream"
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult"
 import { Reactivity } from "effect/unstable/reactivity/Reactivity"
 
-import { buildRuleToggleRequest } from "@/lib/alerts/form-utils"
 import { deriveRuleStatus, type DerivedRuleStatus, needsAttention } from "@/lib/alerts/rule-status"
 import {
 	type AlertIncidentRow,
@@ -38,6 +37,7 @@ import {
 import { getOrgCollections } from "@/lib/collections/org-collections"
 import { collectionFailureMessage, makeOrgCollectionsKey, orgIdOf } from "@/lib/models/org-collections-key"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
+import { MapleApiV2AtomClient } from "@/lib/services/common/v2-atom-client"
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -187,12 +187,12 @@ const buildOverview = (sources: OverviewSources): AlertsOverviewData => {
 export const toggleRuleHandler = (rule: AlertRuleDocument) =>
 	Effect.gen(function* () {
 		const reactivity = yield* Reactivity
-		const client = yield* MapleApiAtomClient
+		const client = yield* MapleApiV2AtomClient
 		return yield* reactivity.mutation(
 			["alertRules"],
-			client.alerts.updateRule({
-				params: { ruleId: rule.id },
-				payload: buildRuleToggleRequest(rule),
+			client.alertRules.update({
+				params: { id: rule.id },
+				payload: { enabled: !rule.enabled },
 			}),
 		)
 	})
@@ -219,6 +219,8 @@ export class AlertsOverviewModel extends Model.Service<AlertsOverviewModel>()("m
 
 			// Delivery events stay an HTTP read (no Electric shape) — refetched on
 			// org/generation change via the dependency store, manually via `refresh`.
+			// TODO(v2): also the last v1 alerts endpoint the web app calls — no v2
+			// equivalent exists; the follow-up is an alert_delivery_events Electric shape.
 			const deliveryEvents = yield* Query.make({
 				stores: { orgKey },
 				handler: () =>

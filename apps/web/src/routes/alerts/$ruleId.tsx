@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import { formatBackendError } from "@/lib/error-messages"
-import { Result, useAtomRefresh, useAtomSet, useAtomValue } from "@/lib/effect-atom"
+import { Result, useAtomSet, useAtomValue } from "@/lib/effect-atom"
 import { effectRoute } from "@effect-router/core"
 import { Exit, Schema } from "effect"
 import { Fragment, useMemo, useState } from "react"
@@ -8,6 +8,8 @@ import { toast } from "sonner"
 
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
+import { MapleApiV2AtomClient } from "@/lib/services/common/v2-atom-client"
+import { useAlertRuleChecks } from "@/hooks/use-alert-rule-checks"
 import { useEffectiveTimeRange } from "@/hooks/use-effective-time-range"
 import { TimeRangeHeaderControls } from "@/components/time-range-picker/time-range-header-controls"
 import { PageRefreshProvider } from "@/components/time-range-picker/page-refresh-context"
@@ -28,7 +30,6 @@ import {
 	formatAlertDateTimeFull,
 	formatAlertDuration,
 	computeIncidentStats,
-	buildRuleToggleRequest,
 	getExitErrorMessage,
 } from "@/lib/alerts/form-utils"
 import { RuleDiagnosisPanel } from "@/components/alerts/rule-detail/rule-diagnosis-panel"
@@ -132,21 +133,17 @@ function RuleDetailContent() {
 	const { result: incidentsResult, refresh: refreshIncidents } = useAlertIncidentsList()
 	const ruleStates = useAlertRuleStates(ruleId)
 	const { result: destinationsResult } = useAlertDestinationsList()
+	// TODO(v2): delivery events have no v2 endpoint (internal delivery-audit
+	// schema); the proper follow-up is an Electric shape for alert_delivery_events.
 	const deliveryEventsResult = useAtomValue(
 		MapleApiAtomClient.query("alerts", "listDeliveryEvents", {
 			reactivityKeys: ["alertDeliveryEvents"],
 		}),
 	)
-	const updateRule = useAtomSet(MapleApiAtomClient.mutation("alerts", "updateRule"), {
+	const updateRule = useAtomSet(MapleApiV2AtomClient.mutation("alertRules", "update"), {
 		mode: "promiseExit",
 	})
-	const checksQueryAtom = MapleApiAtomClient.query("alerts", "listRuleChecks", {
-		params: { ruleId },
-		query: { since, until },
-		reactivityKeys: ["alertChecks", ruleId, since, until],
-	})
-	const checksResult = useAtomValue(checksQueryAtom)
-	const refreshChecks = useAtomRefresh(checksQueryAtom)
+	const { result: checksResult, refresh: refreshChecks } = useAlertRuleChecks(ruleId, since, until)
 
 	const rules = Result.builder(rulesResult)
 		.onSuccess((response) => response.rules)
@@ -325,8 +322,8 @@ function RuleDetailContent() {
 	async function handleToggleEnabled() {
 		if (!rule) return
 		const result = await updateRule({
-			params: { ruleId: rule.id },
-			payload: buildRuleToggleRequest(rule),
+			params: { id: rule.id },
+			payload: { enabled: !rule.enabled },
 			reactivityKeys: ["alertRules"],
 		})
 		if (!Exit.isSuccess(result)) {

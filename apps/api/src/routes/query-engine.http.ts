@@ -37,6 +37,7 @@ import {
 	ServicePlatformsResponse,
 	ServiceWorkloadsResponse,
 	ServiceUsageResponse,
+	ServiceOperationsResponse,
 	ListLogsResponse,
 	GetLogResponse,
 	ListMetricsResponse,
@@ -1490,6 +1491,94 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 						60,
 					)
 					return new ServiceUsageResponse({ data: rows })
+				}),
+			)
+			.handle("serviceOperations", ({ payload }) =>
+				Effect.gen(function* () {
+					const tenant = yield* CurrentTenant.Context
+					const toNumber = (value: unknown) => Number(value ?? 0)
+					const data = yield* queryEngine.cachedDirect(
+						tenant,
+						"serviceOperations",
+						payload,
+						Effect.gen(function* () {
+							const params = {
+								orgId: tenant.orgId,
+								startTime: payload.startTime,
+								endTime: payload.endTime,
+							}
+							const summaryCompiled = CH.compile(
+								CH.serviceOperationsSummaryQuery({
+									serviceName: payload.serviceName,
+									environments: payload.environments,
+									limit: payload.limit,
+								}),
+								params,
+								{ rowSchema: CH.serviceOperationsSummaryRowSchema },
+							)
+							const summaryRows = yield* mapExecError(
+								warehouse.compiledQuery(tenant, summaryCompiled, {
+									profile: "aggregation",
+									context: "serviceOperations",
+								}),
+								"serviceOperations query failed",
+							)
+							if (summaryRows.length === 0) {
+								return []
+							}
+
+							const spanNames = summaryRows.map((row) => String(row.spanName))
+							// Fallback bucket sizing mirrors the client's chart-grid density
+							// (~50 buckets), floored at 1 minute.
+							const windowSeconds = Math.max(
+								0,
+								(Date.parse(`${payload.endTime.replace(" ", "T")}Z`) -
+									Date.parse(`${payload.startTime.replace(" ", "T")}Z`)) /
+									1000,
+							)
+							const bucketSeconds =
+								payload.bucketSeconds ?? Math.max(60, Math.floor(windowSeconds / 50))
+							const timeseriesCompiled = CH.compile(
+								CH.serviceOperationsTimeseriesQuery({
+									serviceName: payload.serviceName,
+									environments: payload.environments,
+									spanNames,
+								}),
+								{ ...params, bucketSeconds },
+								{ rowSchema: CH.serviceOperationsTimeseriesRowSchema },
+							)
+							const timeseriesRows = yield* mapExecError(
+								warehouse.compiledQuery(tenant, timeseriesCompiled, {
+									profile: "aggregation",
+									context: "serviceOperationsTimeseries",
+								}),
+								"serviceOperationsTimeseries query failed",
+							)
+
+							const sparklines = new Map<string, Array<{ bucket: string; count: number }>>()
+							for (const row of timeseriesRows) {
+								const key = String(row.spanName)
+								const points = sparklines.get(key) ?? []
+								points.push({ bucket: String(row.bucket), count: toNumber(row.count) })
+								sparklines.set(key, points)
+							}
+
+							return summaryRows.map((row) => ({
+								spanName: String(row.spanName),
+								spanCount: toNumber(row.spanCount),
+								estimatedSpanCount: toNumber(row.estimatedSpanCount),
+								errorCount: toNumber(row.errorCount),
+								estimatedErrorCount: toNumber(row.estimatedErrorCount),
+								errorRate: toNumber(row.errorRate),
+								avgDurationMs: toNumber(row.avgDurationMs),
+								p50DurationMs: toNumber(row.p50DurationMs),
+								p95DurationMs: toNumber(row.p95DurationMs),
+								sparkline: sparklines.get(String(row.spanName)) ?? [],
+							}))
+						}),
+						30,
+					)
+					return new ServiceOperationsResponse({ data })
 				}),
 			)
 			.handle("listLogs", ({ payload }) =>
