@@ -123,12 +123,8 @@ export const resolveMcpTenantContext = Effect.fn("resolveMcpTenantContext")(func
 	)
 
 	if (Option.isSome(apiKeyResolved)) {
-		if (apiKeyResolved.value.kind !== "mcp") {
-			return yield* new McpAuthInvalidError({
-				message: "This API key is only valid for the HTTP API",
-				reason: "key_kind",
-			})
-		}
+		// Both standard and mcp-kind keys may use the MCP server; only
+		// scope-restricted v2 keys are rejected (MCP tools assume full access).
 		if (apiKeyResolved.value.scopes !== null) {
 			return yield* new McpAuthInvalidError({
 				message: "Restricted API keys are not supported by the MCP server",
