@@ -3,6 +3,7 @@ import { CurrentTenant, RoleName, UnauthorizedError } from "@maple/domain/http"
 import { Effect, Layer, Option, Schema } from "effect"
 import { ApiKeysService } from "./ApiKeysService"
 import { makeResolveTenant } from "./AuthService"
+import { annotateAuthSpan } from "../lib/auth-span"
 import { Env } from "../lib/Env"
 
 const decodeRoleNameSync = Schema.decodeUnknownSync(RoleName)
@@ -39,6 +40,11 @@ export const ApiAuthorizationLayer = Layer.effect(
 					)
 
 					if (Option.isSome(apiKeyResolved)) {
+						yield* annotateAuthSpan("api_key", {
+							orgId: apiKeyResolved.value.orgId,
+							userId: apiKeyResolved.value.userId,
+							keyId: apiKeyResolved.value.keyId,
+						})
 						const tenant = new CurrentTenant.TenantSchema({
 							orgId: apiKeyResolved.value.orgId,
 							userId: apiKeyResolved.value.userId,
@@ -49,6 +55,7 @@ export const ApiAuthorizationLayer = Layer.effect(
 					}
 
 					const tenant = yield* resolveTenant(request.headers)
+					yield* annotateAuthSpan("session", { orgId: tenant.orgId, userId: tenant.userId })
 					return yield* Effect.provideService(
 						httpEffect,
 						CurrentTenant.Context,

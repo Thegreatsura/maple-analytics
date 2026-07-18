@@ -10,6 +10,7 @@ import {
 import { Effect, Layer, Option, Schema } from "effect"
 import { ApiKeysService } from "./ApiKeysService"
 import { makeResolveTenant } from "./AuthService"
+import { annotateAuthSpan } from "../lib/auth-span"
 import { Env } from "../lib/Env"
 
 const decodeRoleNameSync = Schema.decodeUnknownSync(RoleName)
@@ -57,6 +58,14 @@ export const ApiAuthorizationV2Layer = Layer.effect(
 					if (Option.isSome(apiKeyResolved)) {
 						const resolved = apiKeyResolved.value
 
+						// Attribute before the scope check so scope-rejected
+						// requests are still counted as API-key traffic.
+						yield* annotateAuthSpan("api_key", {
+							orgId: resolved.orgId,
+							userId: resolved.userId,
+							keyId: resolved.keyId,
+						})
+
 						const required = requiredScopeForRequest(request.method, requestPath(request.url))
 						if (required !== null && !scopeAllows(resolved.scopes, required)) {
 							return yield* Effect.fail(
@@ -85,6 +94,7 @@ export const ApiAuthorizationV2Layer = Layer.effect(
 							),
 						),
 					)
+					yield* annotateAuthSpan("session", { orgId: tenant.orgId, userId: tenant.userId })
 					return yield* Effect.provideService(
 						httpEffect,
 						CurrentTenant.Context,
