@@ -38,6 +38,15 @@ export interface ServerOptions {
 	readonly assets?: AssetResolver
 }
 
+export class ServerBindError extends Schema.TaggedErrorClass<ServerBindError>()(
+	"@maple/cli/ServerBindError",
+	{
+		hostname: Schema.String,
+		port: Schema.Number,
+		message: Schema.String,
+	},
+) {}
+
 export const isBrowserOriginAllowed = (
 	requestUrl: URL,
 	origin: string | null,
@@ -383,7 +392,7 @@ const makeFetch =
  *  order). Resolves with the bound port once listening. */
 export const startServer = (
 	options: ServerOptions,
-): Effect.Effect<{ readonly port: number }, ChdbError, Scope.Scope> =>
+): Effect.Effect<{ readonly port: number }, ChdbError | ServerBindError, Scope.Scope> =>
 	Effect.gen(function* () {
 		const db = yield* acquireChdb({
 			dataDir: options.dataDir,
@@ -400,13 +409,20 @@ export const startServer = (
 		)
 		const runSpan: SpanRunner = (effect) => telemetry.runPromise(effect)
 		const server = yield* Effect.acquireRelease(
-			Effect.sync(() =>
-				Bun.serve({
-					port: options.port,
-					hostname: options.hostname,
-					fetch: makeFetch(db, options, runSpan),
-				}),
-			),
+			Effect.try({
+				try: () =>
+					Bun.serve({
+						port: options.port,
+						hostname: options.hostname,
+						fetch: makeFetch(db, options, runSpan),
+					}),
+				catch: (error) =>
+					new ServerBindError({
+						hostname: options.hostname,
+						port: options.port,
+						message: `failed to bind ${options.hostname}:${options.port}: ${error instanceof Error ? error.message : String(error)}`,
+					}),
+			}),
 			(s) => Effect.promise(() => s.stop(true)),
 		)
 		return { port: server.port ?? options.port }
