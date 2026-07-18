@@ -40,7 +40,9 @@ import { V2SchemaErrorsLive } from "./error-envelope"
 import {
 	AlertsServiceStubLayer,
 	AllV2GroupLayersLive,
+	ApiV2RateLimiterAllowAllLayer,
 	ConfigResourceServiceStubsLayer,
+	TelemetryServiceStubsLayer,
 } from "./v2-test-support"
 
 /**
@@ -203,6 +205,7 @@ const die = () => Effect.die(new Error("not exercised in this test harness"))
 const warehouseStub: WarehouseQueryServiceShape = {
 	query: die,
 	sqlQuery: () => Effect.succeed([]),
+	rawSqlQuery: () => Effect.succeed([]),
 	compiledQuery: (_tenant, compiled) => compiled.decodeRows([]).pipe(Effect.orDie),
 	compiledQueryFirst: () => Effect.succeed(Option.none()),
 	ingest: () => Effect.void,
@@ -343,7 +346,9 @@ const makeHarness = (warehouseService: WarehouseQueryServiceShape = warehouseStu
 		Layer.provide(V2SchemaErrorsLive),
 		Layer.provide(AlertsServiceStubLayer),
 		Layer.provide(ConfigResourceServiceStubsLayer),
+		Layer.provide(TelemetryServiceStubsLayer),
 		Layer.provideMerge(ApiAuthorizationV2Layer),
+		Layer.provideMerge(ApiV2RateLimiterAllowAllLayer),
 		Layer.provideMerge(servicesLive),
 	)
 
