@@ -1,6 +1,12 @@
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Schema } from "effect"
-import { AlertDestinationId, HazelChannelId, HazelOrganizationId } from "../../primitives"
+import {
+	AlertDestinationId,
+	HazelChannelId,
+	HazelOrganizationId,
+	PostgresTransactionId,
+	UserId,
+} from "../../primitives"
 import { AlertDestinationType, MAX_EMAIL_RECIPIENTS } from "../alerts"
 import { AuthorizationV2, V2SchemaErrors } from "./auth"
 import { ListOf, ListQuery, Timestamp } from "./envelopes"
@@ -10,6 +16,7 @@ import {
 	V2NotFoundError,
 	V2PermissionError,
 	V2ServiceUnavailableError,
+	V2UpstreamError,
 } from "./errors"
 import { PublicId, PublicIdPrefixes } from "./public-id"
 
@@ -28,7 +35,7 @@ const OptionalNonEmptyString = Schema.optionalKey(NonEmptyString)
  * each id to the member's email via the auth provider at save time, so API
  * consumers can never route alerts to arbitrary addresses.
  */
-const MemberUserIdList = Schema.Array(NonEmptyString).check(
+const MemberUserIdList = Schema.Array(UserId).check(
 	Schema.isMinLength(1),
 	Schema.isMaxLength(MAX_EMAIL_RECIPIENTS),
 )
@@ -66,7 +73,8 @@ export const V2AlertDestination = Schema.Struct({
 		examples: ["slack"],
 	}),
 	enabled: Schema.Boolean.annotate({
-		description: "Whether the destination receives notifications. Disabled destinations are skipped at delivery time.",
+		description:
+			"Whether the destination receives notifications. Disabled destinations are skipped at delivery time.",
 		examples: [true],
 	}),
 	summary: Schema.String.annotate({
@@ -86,7 +94,8 @@ export const V2AlertDestination = Schema.Struct({
 		description: "When a test notification was last sent to this destination, or `null` if never tested.",
 	}),
 	last_test_error: Schema.NullOr(Schema.String).annotate({
-		description: "The failure message from the most recent test delivery, or `null` if it succeeded (or was never run).",
+		description:
+			"The failure message from the most recent test delivery, or `null` if it succeeded (or was never run).",
 	}),
 	created_at: Timestamp.annotate({ description: "When the destination was created." }),
 	updated_at: Timestamp.annotate({ description: "When the destination was last updated." }),
@@ -98,6 +107,17 @@ export const V2AlertDestination = Schema.Struct({
 	examples: [wireExample(alertDestinationExample)],
 })
 export type V2AlertDestination = Schema.Schema.Type<typeof V2AlertDestination>
+
+export const V2AlertDestinationMutationResponse = Schema.Struct({
+	...V2AlertDestination.fields,
+	txid: Schema.optionalKey(PostgresTransactionId),
+}).annotate({
+	identifier: "AlertDestinationMutationResponse",
+	title: "Alert destination mutation response",
+	description: "An alert destination returned by a create or update mutation, with optional sync metadata.",
+	examples: [wireExample({ ...alertDestinationExample, txid: "81234" })],
+})
+export type V2AlertDestinationMutationResponse = Schema.Schema.Type<typeof V2AlertDestinationMutationResponse>
 
 // --- Create params: discriminated union on `type`, one arm per channel. ---
 
@@ -276,7 +296,10 @@ export const V2AlertDestinationUpdateParams = Schema.Union([
 		hazel_channel_id: Schema.optionalKey(HazelChannelId),
 		hazel_channel_name: Schema.optionalKey(Schema.String),
 		enabled: Schema.optionalKey(Schema.Boolean),
-	}).annotate({ identifier: "AlertDestinationUpdateHazelOauth", title: "Hazel (OAuth) destination update" }),
+	}).annotate({
+		identifier: "AlertDestinationUpdateHazelOauth",
+		title: "Hazel (OAuth) destination update",
+	}),
 	Schema.Struct({
 		type: Schema.Literal("discord"),
 		name: optionalNameField,
@@ -306,12 +329,18 @@ export const V2AlertDestinationDeleteResponse = Schema.Struct({
 	deleted: Schema.Literal(true).annotate({
 		description: "Always `true` — the destination no longer exists.",
 	}),
+	txid: Schema.optionalKey(PostgresTransactionId),
 }).annotate({
 	identifier: "AlertDestinationDeleteResponse",
 	title: "Alert destination delete response",
 	description: "Confirmation that an alert destination was deleted.",
 	examples: [
-		wireExample({ id: "dest_oybbpTBhtSFGShMjjLiCrh", object: "alert_destination", deleted: true }),
+		wireExample({
+			id: "dest_oybbpTBhtSFGShMjjLiCrh",
+			object: "alert_destination",
+			deleted: true,
+			txid: "81234",
+		}),
 	],
 })
 export type V2AlertDestinationDeleteResponse = Schema.Schema.Type<typeof V2AlertDestinationDeleteResponse>
@@ -333,12 +362,16 @@ export const V2AlertDestinationTestResult = Schema.Struct({
 	title: "Alert destination test result",
 	description: "The outcome of sending a test notification to a destination.",
 	examples: [
-		wireExample({ object: "alert_destination.test_result", success: true, message: "Test notification sent" }),
+		wireExample({
+			object: "alert_destination.test_result",
+			success: true,
+			message: "Test notification sent",
+		}),
 	],
 })
 export type V2AlertDestinationTestResult = Schema.Schema.Type<typeof V2AlertDestinationTestResult>
 
-const commonErrors = [V2InvalidRequestError, V2ServiceUnavailableError] as const
+const commonErrors = [V2InvalidRequestError, V2ServiceUnavailableError, V2UpstreamError] as const
 
 const AlertDestinationList = ListOf(V2AlertDestination).annotate({
 	identifier: "AlertDestinationList",
@@ -364,7 +397,7 @@ export class V2AlertDestinationsApiGroup extends HttpApiGroup.make("alertDestina
 	.add(
 		HttpApiEndpoint.post("create", "/", {
 			payload: V2AlertDestinationCreateParams,
-			success: V2AlertDestination,
+			success: V2AlertDestinationMutationResponse,
 			error: [...commonErrors, V2PermissionError],
 		}).annotateMerge(
 			OpenApi.annotations({
@@ -393,7 +426,7 @@ export class V2AlertDestinationsApiGroup extends HttpApiGroup.make("alertDestina
 		HttpApiEndpoint.patch("update", "/:id", {
 			params: { id: AlertDestinationPublicId },
 			payload: V2AlertDestinationUpdateParams,
-			success: V2AlertDestination,
+			success: V2AlertDestinationMutationResponse,
 			error: [...commonErrors, V2PermissionError, V2NotFoundError],
 		}).annotateMerge(
 			OpenApi.annotations({

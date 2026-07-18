@@ -135,7 +135,7 @@ export const V2ApiKeyWithSecret = Schema.Struct({
 })
 export type V2ApiKeyWithSecret = Schema.Schema.Type<typeof V2ApiKeyWithSecret>
 
-/** Returned by revoke: the final resource plus the Electric reconciliation token. */
+/** Returned by revoke: the final resource plus optional Electric reconciliation metadata. */
 export const V2ApiKeyMutationResponse = Schema.Struct({
 	...V2ApiKey.fields,
 	...MutationTxidFields,
@@ -143,7 +143,7 @@ export const V2ApiKeyMutationResponse = Schema.Struct({
 	identifier: "ApiKeyMutationResponse",
 	title: "API Key mutation response",
 	description:
-		"The final API key state after a mutation. The optional `txid` is an internal dashboard reconciliation token; API consumers should ignore it.",
+		"The final API key state after a mutation. `txid` is optional reconciliation metadata for ElectricSQL-integrated clients; other public API consumers do not need it.",
 	examples: [
 		wireExample({
 			...apiKeyExample,
@@ -263,7 +263,7 @@ export class V2ApiKeysApiGroup extends HttpApiGroup.make("apiKeys")
 				identifier: "rollApiKey",
 				summary: "Roll an API key",
 				description:
-					"Invalidates the key's current secret and issues a new one for the same key, returning it **with the new one-time `secret`**. Requires an org-admin role and the `api_keys:write` scope.",
+					"Revokes the existing key and creates a replacement with a new `key_…` ID and one-time `secret`, preserving its name, description, kind, and scopes. Requires an org-admin role and the `api_keys:write` scope.",
 			}),
 		),
 	)

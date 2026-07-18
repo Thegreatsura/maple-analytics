@@ -7,7 +7,7 @@ The **executable contract is the spec**: `MapleApiV2` in `packages/domain/src/ht
 ## Architecture: two tiers
 
 | Tier             | Transport                                                       | Consumers                            | Docs                        | Stability                                    |
-|---|---|---|---|---|
+| ---------------- | --------------------------------------------------------------- | ------------------------------------ | --------------------------- | -------------------------------------------- |
 | **Public API**   | `MapleApiV2` HttpApi at `/v2/...`                               | Customers, agents/MCP, the dashboard | `/v2/docs` (OpenAPI/Scalar) | Committed; changes are additive or versioned |
 | **Internal RPC** | Effect RPC (`effect/unstable/rpc`) `RpcGroup`s served at `/rpc` | The dashboard only                   | none (private)              | None; changes freely                         |
 
@@ -25,8 +25,7 @@ Resources are snake_case plural nouns directly under `/v2`:
 GET    /v2/api_keys              list
 POST   /v2/api_keys              create
 GET    /v2/api_keys/{id}         retrieve
-PATCH  /v2/api_keys/{id}         update
-DELETE /v2/api_keys/{id}         delete (or revoke — returns the final object)
+DELETE /v2/api_keys/{id}         revoke (returns the final object)
 POST   /v2/api_keys/{id}/roll    non-CRUD verbs are sub-resource POSTs
 POST   /v2/traces/search         complex reads are POST .../search
 ```
@@ -35,7 +34,7 @@ POST   /v2/traces/search         complex reads are POST .../search
 
 Every v2 object has a prefixed public ID (`key_4CzLmR…`, `dash_…`, `alrt_…`). Public IDs are opaque; internally they are a reversible base58 encoding of the internal ID, computed at the API boundary (`packages/domain/src/http/v2/public-id.ts` — the prefix registry lives there and is the single source of truth). No database migration: rows keep their raw UUIDs / internal strings.
 
-Prefixes: `key` (API key), `ingk` (ingest key), `dash` (dashboard), `dbv` (dashboard version), `dtpl` (dashboard template), `alrt` (alert rule), `dest` (alert destination), `inc` (alert incident), `iss` (error issue), `inv` (investigation), `anom` (anomaly incident), `scrp` (scrape target), `rec` (recommendation), `amap` (attribute mapping); `evt` and `we` are reserved for events/webhooks.
+Prefixes: `key` (API key), `ingk` (ingest key), `dash` (dashboard), `dbv` (dashboard version), `dtpl` (dashboard template), `alrt` (alert rule), `dest` (alert destination), `inc` (alert incident), `einc` (error incident), `iss` (error issue), `inv` (investigation), `anom` (anomaly incident), `scrp` (scrape target), `rec` (recommendation), `amap` (attribute mapping), and `srep` (session replay); `evt` and `we` are reserved for events/webhooks.
 
 Exception: Clerk-issued `org_…` / `user_…` IDs are already prefixed public IDs and pass through unchanged.
 
@@ -63,6 +62,8 @@ Every list endpoint accepts `limit` (1–100, default 20) and an opaque `cursor`
 
 `next_cursor` is `null` on the last page. Cursors are opaque — clients must not parse them. (Endpoints backed by keyset pagination and endpoints backed by materialized arrays use different cursor payloads; the wire contract is identical.)
 
+Offset-backed endpoints fetch `limit + 1` rows from their backing store to determine `has_more`; they do not load a fixed history window and paginate it in memory. Every ordering has a deterministic tie-breaker.
+
 ### Errors
 
 Every error response body is exactly:
@@ -71,7 +72,7 @@ Every error response body is exactly:
 {
 	"error": {
 		"type": "not_found_error",
-		"code": "resource_missing",
+		"code": "api_key_not_found",
 		"message": "API key not found",
 		"param": "id"
 	}
@@ -79,11 +80,12 @@ Every error response body is exactly:
 ```
 
 - `type` is closed: `invalid_request_error` (400), `authentication_error` (401), `permission_error` (403), `not_found_error` (404), `conflict_error` (409), `rate_limit_error` (429), `api_error` (5xx).
-- `code` is a stable machine-readable string (`resource_missing`, `insufficient_scope`, `parameter_invalid`, `service_unavailable`, …). Codes are append-only.
+- `code` is a stable machine-readable string (`api_key_not_found`, `alert_destination_in_use`, `api_key_lookup_unavailable`, `insufficient_scope`, `parameter_invalid`, …). Resource and dependency failures identify the affected resource and operation. Codes are append-only.
 - `param` names the offending parameter when applicable; `doc_url` may link to reference docs.
 - No internal tags or stack traces ever appear on the wire.
+- Expected internal failures use operation-specific tagged errors. Unexpected defects are logged with the group and operation, then returned as a sanitized `api_error` / `internal_error`; dependency messages are never copied to public 5xx responses.
 
-Implementation: `packages/domain/src/http/v2/errors.ts`; request-decode failures are rewritten into the envelope by the `V2SchemaErrors` middleware (`apps/api/src/routes/v2/error-envelope.ts`, via `HttpApiMiddleware.layerSchemaErrorTransform`).
+Implementation: `packages/domain/src/http/v2/errors.ts`; request-decode failures are rewritten into the envelope with a structured `param` by `V2SchemaErrors`, and `V2UnexpectedErrors` provides the defect boundary (`apps/api/src/routes/v2/error-envelope.ts`).
 
 ### Authentication and scopes
 
@@ -94,7 +96,7 @@ Authorization: Bearer maple_ak_…
 v2 accepts the same credentials as v1: API keys (`maple_ak_…`) and dashboard session tokens (Clerk or self-hosted JWT). API keys can be **restricted with scopes** at creation:
 
 - Grammar: `<family>:read`, `<family>:write`, or `*`. The family is the first path segment under `/v2` (`api_keys`, `dashboards`, `alerts`, `error_issues`, `traces`, …).
-- Enforcement is mechanical: `GET`/`HEAD` requires `<family>:read`, everything else `<family>:write`. `write` implies `read`.
+- Enforcement is mechanical: `GET`/`HEAD` and explicitly declared read-only query POSTs (such as session-replay search, trace lookup, and alert preview) require `<family>:read`; mutations require `<family>:write`. `write` implies `read`.
 - Keys with no scopes (all pre-v2 keys) have full access. Session tokens are never scope-checked — the dashboard's authorization comes from org roles, like Stripe's own dashboard.
 - Failing the check returns `permission_error` / `insufficient_scope`.
 
@@ -122,35 +124,35 @@ Stripe-style `expand[]` is deliberately omitted: responses embed the small, alwa
 
 Implemented in phases; the pilot (`api_keys`) ships first and proves every convention.
 
-| Resource             | Endpoints                                                                                          | Backing v1 group / service               |
-|---|---|---|
-| `api_keys` ✅ pilot  | list/create/retrieve/roll/revoke, `scopes` param                                                   | `apiKeys` / `ApiKeysService`             |
-| `ingest_keys` ✅     | retrieve, `POST …/public/roll`, `POST …/private/roll`                                              | `ingestKeys`                             |
-| `dashboards` ✅      | CRUD + `versions` (list/retrieve/restore) + `templates` (list/instantiate) + Perses import         | `dashboards`                             |
-| `alerts/rules` ✅   | CRUD + `test` + `preview` + `checks`                                                               | `alerts`                                 |
-| `alerts/destinations` ✅ | CRUD + `test`                                                                                      | `alerts`                                 |
-| `alerts/incidents` ✅ | list/retrieve                                                                                      | `alerts`                                 |
-| `error_issues`       | list/retrieve + `events`, `incidents`, `comments`, `transitions`, `assignee`, `severity`           | `errors`                                 |
-| `investigations`     | list/retrieve/create/status                                                                        | `investigations`                         |
-| `anomalies`          | incidents list/retrieve/resolve/link-issue + settings                                              | `anomalies`                              |
-| `recommendations` ✅ | list + dismiss/reopen                                                                              | `recommendationIssues`                   |
-| `scrape_targets` ✅  | CRUD + `probe` + `checks`                                                                          | `scrapeTargets`                          |
-| `attribute_mappings` ✅ | CRUD                                                                                               | `ingestAttributeMappings`                |
-| `session_replays`    | list/retrieve + events/transcript/for-trace                                                        | `sessionReplays`                         |
-| `organization`       | retrieve/update settings (incl. ClickHouse BYOC), delete                                           | `organizations`, `orgClickHouseSettings` |
-| `traces`             | `POST /v2/traces/search`, `GET /v2/traces/{trace_id}`, `GET /v2/traces/{trace_id}/spans/{span_id}` | `queryEngine`, `observability`           |
-| `logs`               | `POST /v2/logs/search`, `GET /v2/logs/{id}`                                                        | `queryEngine`                            |
-| `metrics`            | `GET /v2/metrics`, `POST /v2/metrics/timeseries`                                                   | `queryEngine`                            |
-| `services`           | `GET /v2/services`, `GET /v2/services/{name}`, `GET /v2/service_map`                               | `queryEngine`                            |
-| `query`              | `POST /v2/query` — query-builder execution; raw SQL org-gated                                      | `queryEngine`                            |
+| Resource                             | Endpoints                                                                                          | Backing v1 group / service               |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `api_keys` ✅ pilot                  | list/create/retrieve/roll/revoke, `scopes` param                                                   | `apiKeys` / `ApiKeysService`             |
+| `ingest_keys` ✅                     | retrieve, `POST …/public/roll`, `POST …/private/roll`                                              | `ingestKeys`                             |
+| `dashboards` ✅                      | CRUD + `versions` (list/retrieve/restore) + `templates` (list/instantiate) + Perses import         | `dashboards`                             |
+| `alerts/rules` ✅                    | CRUD + `test` + `preview` + `checks`                                                               | `alerts`                                 |
+| `alerts/destinations` ✅             | CRUD + `test`                                                                                      | `alerts`                                 |
+| `alerts/incidents` ✅                | list/retrieve                                                                                      | `alerts`                                 |
+| `error_issues`                       | list/retrieve + `events`, `incidents`, `comments`, `transitions`, `assignee`, `severity`           | `errors`                                 |
+| `investigations` ✅                  | list/retrieve/create/status                                                                        | `investigations`                         |
+| `anomalies` ✅                       | incidents list/retrieve/timeseries/resolve/link-issue + `PATCH` settings                           | `anomalies`                              |
+| `instrumentation/recommendations` ✅ | list + dismiss/reopen                                                                              | `recommendationIssues`                   |
+| `scrape_targets` ✅                  | CRUD + `probe` + `checks`                                                                          | `scrapeTargets`                          |
+| `attribute_mappings` ✅              | CRUD                                                                                               | `ingestAttributeMappings`                |
+| `session_replays` ✅                 | `search`/retrieve + events/transcript/`for_trace` (reduced; `facets`/`trace-summaries` deferred)   | `sessionReplays`                         |
+| `organization` 🟡                    | retrieve (GET only shipped); update settings (incl. ClickHouse BYOC) + delete deferred             | `organizations`, `orgClickHouseSettings` |
+| `traces`                             | `POST /v2/traces/search`, `GET /v2/traces/{trace_id}`, `GET /v2/traces/{trace_id}/spans/{span_id}` | `queryEngine`, `observability`           |
+| `logs`                               | `POST /v2/logs/search`, `GET /v2/logs/{id}`                                                        | `queryEngine`                            |
+| `metrics`                            | `GET /v2/metrics`, `POST /v2/metrics/timeseries`                                                   | `queryEngine`                            |
+| `services`                           | `GET /v2/services`, `GET /v2/services/{name}`, `GET /v2/service_map`                               | `queryEngine`                            |
+| `query`                              | `POST /v2/query` — query-builder execution; raw SQL org-gated                                      | `queryEngine`                            |
 
 The long tail of ~40 query-engine RPC endpoints (facets, infra hosts/pods/nodes/workloads, Cloudflare/PlanetScale infra) starts in the internal RPC tier and is promoted into `/v2` individually as shapes stabilize.
 
 Not in v2: org membership and invitations (delegated to Clerk; revisit if/when a members API is needed).
 
-### ElectricSQL `txid` constraint
+### Optional ElectricSQL `txid` metadata
 
-The dashboard reconciles optimistic writes against ElectricSQL synced shapes using the Postgres `txid` returned by mutation responses (dashboards, alert rules/destinations, error issues). v2 mutation responses for those resources **must keep the `txid` field**. It is documented as an internal reconciliation token; API consumers should ignore it.
+The dashboard can reconcile optimistic writes against ElectricSQL synced shapes using a Postgres `txid` on mutation responses (dashboards, alert rules/destinations, error issues). The field is optional because v2 is a public API: callers neither provide nor require it, and non-ElectricSQL consumers can ignore it. When the persistence path exposes a transaction ID, Maple includes it as opaque reconciliation metadata.
 
 ## Rollout phases
 
@@ -163,7 +165,7 @@ The dashboard reconciles optimistic writes against ElectricSQL synced shapes usi
 
 ## Adding a v2 resource (checklist)
 
-1. Contract in `packages/domain/src/http/v2/<resource>.ts`: snake_case `Schema.Class` wire models with `object` literal and `Timestamp` fields; public IDs via `PublicId(prefix, InternalId)` (register the prefix in `public-id.ts`); lists use `ListQuery` + `ListOf`; errors from `v2/errors.ts` only; group `.prefix("/v2/<resource>")` + `.middleware(AuthorizationV2)` + `.middleware(V2SchemaErrors)`.
+1. Contract in `packages/domain/src/http/v2/<resource>.ts`: snake_case wire schemas with an `object` literal and validated `Timestamp` fields; public IDs via `PublicId(prefix, InternalId)` (register the prefix in `public-id.ts`); lists use `ListQuery` + `ListOf`; errors from `v2/errors.ts` only; group `.prefix("/v2/<resource>")` + `.middleware(AuthorizationV2)` + `.middleware(V2SchemaErrors)`.
 2. Add the group to `MapleApiV2` in `v2/api.ts` and export from `v2/index.ts`.
 3. Handlers in `apps/api/src/routes/v2/<resource>.http.ts`: thin adapters over the existing service — map camelCase/epoch-ms service responses to the wire model, map service tagged errors to envelope errors. Register the layer in `ApiV2Routes` (`apps/api/src/app.ts`).
 4. Tests: wire-shape encode (snake_case, public ID, envelope), error mapping, and a PGlite service test if the service changed.

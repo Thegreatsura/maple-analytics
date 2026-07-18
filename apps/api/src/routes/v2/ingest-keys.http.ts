@@ -1,7 +1,7 @@
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import type { IngestKeysResponse } from "@maple/domain/http"
 import { CurrentTenant } from "@maple/domain/http"
-import { MapleApiV2, permissionError, serviceUnavailable } from "@maple/domain/http/v2"
+import { dependencyUnavailable, MapleApiV2, permissionError } from "@maple/domain/http/v2"
 import type { V2IngestKeys } from "@maple/domain/http/v2"
 import { Effect } from "effect"
 import { OrgIngestKeysService } from "../../services/OrgIngestKeysService"
@@ -19,7 +19,8 @@ const toV2IngestKeys = (keys: IngestKeysResponse): V2IngestKeys => ({
 })
 
 /** Persistence/encryption failures → retryable v2 `service_unavailable`. */
-const mapServiceError = (error: { readonly message: string }) => serviceUnavailable(error.message)
+const mapServiceError = (operation: string) => () =>
+	dependencyUnavailable(`ingest_key_${operation}_unavailable`)
 
 export const HttpV2IngestKeysLive = HttpApiBuilder.group(MapleApiV2, "ingestKeys", (handlers) =>
 	Effect.gen(function* () {
@@ -32,7 +33,7 @@ export const HttpV2IngestKeysLive = HttpApiBuilder.group(MapleApiV2, "ingestKeys
 					yield* requireAdmin(tenant.roles, adminOnly("view"))
 					const keys = yield* ingestKeys
 						.getOrCreate(tenant.orgId, tenant.userId)
-						.pipe(Effect.mapError(mapServiceError))
+						.pipe(Effect.mapError(mapServiceError("retrieve")))
 					return toV2IngestKeys(keys)
 				}),
 			)
@@ -42,7 +43,7 @@ export const HttpV2IngestKeysLive = HttpApiBuilder.group(MapleApiV2, "ingestKeys
 					yield* requireAdmin(tenant.roles, adminOnly("roll"))
 					const keys = yield* ingestKeys
 						.rerollPublic(tenant.orgId, tenant.userId)
-						.pipe(Effect.mapError(mapServiceError))
+						.pipe(Effect.mapError(mapServiceError("roll_public")))
 					return toV2IngestKeys(keys)
 				}),
 			)
@@ -52,7 +53,7 @@ export const HttpV2IngestKeysLive = HttpApiBuilder.group(MapleApiV2, "ingestKeys
 					yield* requireAdmin(tenant.roles, adminOnly("roll"))
 					const keys = yield* ingestKeys
 						.rerollPrivate(tenant.orgId, tenant.userId)
-						.pipe(Effect.mapError(mapServiceError))
+						.pipe(Effect.mapError(mapServiceError("roll_private")))
 					return toV2IngestKeys(keys)
 				}),
 			)
