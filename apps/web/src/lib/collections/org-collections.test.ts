@@ -193,6 +193,41 @@ describe("org-collections bounded self-heal", () => {
 		expect(asStub(after.dashboards).cleanup).not.toHaveBeenCalled()
 	})
 
+	it("stuck-loading recreates share the schema-heal budget", async () => {
+		const { mod, runFork } = await freshModule()
+		const start = mod.getCollectionsGeneration()
+
+		// Mixed triggers draw from ONE budget: two schema errors + endless stuck
+		// reports still cap at MAX_SCHEMA_HEAL_ATTEMPTS total recreations.
+		mod.handleSchemaError()
+		vi.advanceTimersByTime(6_000)
+		mod.handleCollectionStuck()
+		vi.advanceTimersByTime(6_000)
+		for (let i = 0; i < 10; i++) {
+			mod.handleCollectionStuck()
+			vi.advanceTimersByTime(6_000)
+		}
+
+		expect(mod.getCollectionsGeneration()).toBe(start + 3)
+		// Each stuck recreate logs a warning (2 of the 3 recreations here), plus
+		// exactly one give-up log.
+		expect(runFork).toHaveBeenCalledTimes(3)
+	})
+
+	it("collapses a burst of stuck reports into a single recreation", async () => {
+		const { mod } = await freshModule()
+		const start = mod.getCollectionsGeneration()
+
+		// Several stores hitting their stuck timeout at once (three collections in
+		// one model) must not each schedule their own recreation.
+		mod.handleCollectionStuck()
+		mod.handleCollectionStuck()
+		mod.handleCollectionStuck()
+		vi.advanceTimersByTime(6_000)
+
+		expect(mod.getCollectionsGeneration()).toBe(start + 1)
+	})
+
 	it("resets the heal budget on a genuine org switch", async () => {
 		const { mod } = await freshModule()
 

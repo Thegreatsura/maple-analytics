@@ -434,7 +434,7 @@ function OverviewTab({
 			/>
 			<div className="grid gap-3 lg:grid-cols-2">
 				<ServiceErrorsPanel serviceName={serviceName} />
-				<ServiceRecentDeploys releases={releases} />
+				<ServiceRecentDeploys releases={releases} isLoading={isDetailLoading} />
 				<ServiceUsagePanel
 					serviceName={serviceName}
 					effectiveStartTime={effectiveStartTime}
