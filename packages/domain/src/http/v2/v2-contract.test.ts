@@ -5,6 +5,7 @@ import { V2AlertIncident } from "./alert-incidents"
 import { V2AlertRule, V2AlertRuleMutationResponse } from "./alert-rules"
 import { V2ApiKey, V2ApiKeyMutationResponse, V2ApiKeyWithSecret } from "./api-keys"
 import { V2DashboardMutation } from "./dashboards"
+import { V2ErrorIssue, V2ErrorIssueDetail } from "./error-issues"
 import { requiredScopeForRequest, scopeAllows, V2Scope } from "./auth"
 import {
 	decodeOffsetCursor,
@@ -98,6 +99,66 @@ describe("V2ApiKey wire format", () => {
 				txid: "not-a-txid",
 			}),
 		).toThrow()
+	})
+})
+
+describe("V2ErrorIssue wire format", () => {
+	const issueWire = {
+		id: encodePublicId("iss", UUID),
+		object: "error_issue" as const,
+		kind: "error" as const,
+		fingerprint_hash: "1234",
+		service_name: "checkout-api",
+		exception_type: "TimeoutError",
+		exception_message: "upstream timed out",
+		error_label: "TimeoutError: upstream timed out",
+		top_frame: "handler.ts:42",
+		workflow_state: "triage" as const,
+		priority: 0,
+		severity: "critical" as const,
+		severity_source: "detector" as const,
+		source_ref: null,
+		assigned_actor: null,
+		lease_holder: null,
+		lease_expires_at: null,
+		claimed_at: null,
+		notes: null,
+		first_seen_at: "2026-07-15T00:00:00.000Z",
+		last_seen_at: "2026-07-15T01:00:00.000Z",
+		occurrence_count: 12,
+		resolved_at: null,
+		snooze_until: null,
+		archived_at: null,
+		has_open_incident: true,
+	}
+
+	it("encodes the resource with snake_case fields and an iss_ public ID", () => {
+		const decoded = Schema.decodeUnknownSync(V2ErrorIssue)(issueWire)
+		expect(decoded.id).toBe(UUID)
+		const wire = Schema.encodeSync(V2ErrorIssue)(decoded)
+		expect(wire.id).toBe(encodePublicId("iss", UUID))
+		expect(wire.service_name).toBe("checkout-api")
+		expect("serviceName" in wire).toBe(false)
+	})
+
+	it("decodes the rich retrieve representation", () => {
+		const detail = Schema.decodeUnknownSync(V2ErrorIssueDetail)({
+			...issueWire,
+			timeseries: [{ bucket: "2026-07-15T01:00:00.000Z", count: 4 }],
+			sample_traces: [
+				{
+					trace_id: "0123456789abcdef0123456789abcdef",
+					span_id: "0123456789abcdef",
+					service_name: "checkout-api",
+					timestamp: "2026-07-15T01:00:00.000Z",
+					exception_message: "upstream timed out",
+					duration_micros: 1200,
+				},
+			],
+			incidents: [],
+		})
+		expect(detail.timeseries[0]?.count).toBe(4)
+		expect(detail.sample_traces[0]?.trace_id).toBe("0123456789abcdef0123456789abcdef")
 	})
 })
 

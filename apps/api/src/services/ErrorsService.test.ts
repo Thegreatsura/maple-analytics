@@ -7,6 +7,7 @@ import {
 	IssueEscalationPolicyRule,
 	IssueEscalationPolicyUpsertRequest,
 	IssueListCursor,
+	IssueSeverityListCursor,
 	OrgId,
 	UserId,
 } from "@maple/domain/http"
@@ -586,6 +587,56 @@ describe("ErrorsService.setSeverity", () => {
 			// Every issue appears exactly once across pages — no skips, no repeats.
 			assert.deepStrictEqual([...seen].sort(), [...ids].sort())
 			assert.strictEqual(new Set(seen).size, ids.length)
+		}).pipe(Effect.provide(makeErrorsLayer())),
+	)
+
+	it.effect("listIssues returns bounded actionable issues in severity order", () =>
+		Effect.gen(function* () {
+			const errors = yield* ErrorsService
+			const now = yield* Clock.currentTimeMillis
+			const critical = asIssueId("00000000-0000-4000-8000-000000000001")
+			const high = asIssueId("00000000-0000-4000-8000-000000000002")
+			const medium = asIssueId("00000000-0000-4000-8000-000000000003")
+			const done = asIssueId("00000000-0000-4000-8000-000000000004")
+			const otherService = asIssueId("00000000-0000-4000-8000-000000000005")
+			const otherOrg = asIssueId("00000000-0000-4000-8000-000000000006")
+
+			yield* seedIssue(critical, {
+				severity: "critical",
+				workflowState: "triage",
+				lastSeenAt: new Date(now - 60_000),
+			})
+			yield* seedIssue(high, { severity: "high", workflowState: "in_progress" })
+			yield* seedIssue(medium, { severity: "medium", workflowState: "todo" })
+			yield* seedIssue(done, { severity: "critical", workflowState: "done" })
+			yield* seedIssue(otherService, { severity: "critical", serviceName: "catalog-api" })
+			yield* seedIssue(otherOrg, { orgId: asOrgId("org_errors_service_foreign"), severity: "critical" })
+
+			const first = yield* errors.listIssues(ORG, {
+				service: "checkout-api",
+				actionable: true,
+				sort: "severity",
+				limit: 2,
+			})
+			assert.deepStrictEqual(
+				first.issues.map((issue) => issue.id),
+				[critical, high],
+			)
+			assert.match(first.nextCursor ?? "", /^sev_/)
+
+			const cursor = Schema.decodeUnknownSync(IssueSeverityListCursor)(first.nextCursor?.slice(4))
+			const second = yield* errors.listIssues(ORG, {
+				service: "checkout-api",
+				actionable: true,
+				sort: "severity",
+				limit: 2,
+				cursor,
+			})
+			assert.deepStrictEqual(
+				second.issues.map((issue) => issue.id),
+				[medium],
+			)
+			assert.isUndefined(second.nextCursor)
 		}).pipe(Effect.provide(makeErrorsLayer())),
 	)
 })

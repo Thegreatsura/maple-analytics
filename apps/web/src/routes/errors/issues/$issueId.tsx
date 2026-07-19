@@ -24,6 +24,8 @@ import { IssueTimeline } from "@/components/errors/issue-timeline"
 import { SectionHeader } from "@/components/layout/section-header"
 import { WorkflowBadge } from "@/components/errors/workflow-badge"
 import { MapleApiAtomClient } from "@/lib/services/common/atom-client"
+import { MapleApiV2AtomClient } from "@/lib/services/common/v2-atom-client"
+import { errorIssueDetailFromV2 } from "@/lib/services/error-issues"
 import { Badge } from "@maple/ui/components/ui/badge"
 import { Skeleton } from "@maple/ui/components/ui/skeleton"
 import { ErrorState } from "@/components/common/error-state"
@@ -44,8 +46,8 @@ function IssueDetailPage() {
 	const { issueId: rawIssueId } = Route.useParams()
 	const issueId = decodeIssueId(rawIssueId)
 
-	const detailQueryAtom = MapleApiAtomClient.query("errors", "getIssue", {
-		params: { issueId },
+	const detailQueryAtom = MapleApiV2AtomClient.query("errorIssues", "retrieve", {
+		params: { id: issueId },
 		query: {},
 		reactivityKeys: ["errorIssues", `errorIssue:${issueId}`],
 	})
@@ -190,7 +192,8 @@ function IssueDetailPage() {
 				<ErrorState error={error} title="Failed to load issue" onRetry={refreshDetail} />
 			</DashboardLayout>
 		))
-		.onSuccess((detail) => {
+		.onSuccess((v2Detail) => {
+			const detail = errorIssueDetailFromV2(v2Detail)
 			const { issue, timeseries, sampleTraces, incidents } = detail
 			const totalInWindow = timeseries.reduce((sum, b) => sum + b.count, 0)
 

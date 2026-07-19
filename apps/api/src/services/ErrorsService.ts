@@ -31,6 +31,8 @@ import {
 	type IssueEscalationPolicyUpsertRequest,
 	IssueListCursor,
 	type IssueListCursorFields,
+	IssueSeverityListCursor,
+	type IssueSeverityListCursorFields,
 	type IssueKind,
 	type IssueSeverity,
 	type IssueSeveritySource,
@@ -81,6 +83,9 @@ import { EdgeCacheService } from "@maple/query-engine/caching"
 
 const decodeErrorIssueIdSync = Schema.decodeUnknownSync(ErrorIssueDocument.fields.id)
 const encodeIssueListCursor = Schema.encodeSync(IssueListCursor)
+const encodeIssueSeverityListCursorRaw = Schema.encodeSync(IssueSeverityListCursor)
+const encodeIssueSeverityListCursor = (fields: IssueSeverityListCursorFields): string =>
+	`sev_${encodeIssueSeverityListCursorRaw(fields)}`
 const decodeErrorIncidentIdSync = Schema.decodeUnknownSync(ErrorIncidentDocument.fields.id)
 const decodeActorIdSync = Schema.decodeUnknownSync(ActorIdSchema)
 const decodeEventIdSync = Schema.decodeUnknownSync(ErrorIssueEventIdSchema)
@@ -121,6 +126,36 @@ const DAY_MS = 24 * 60 * 60 * 1000
 const DEFAULT_LEASE_DURATION_MS = 30 * 60_000
 const SYSTEM_AGENT_NAME = "system-errors-tick"
 const D1_INARRAY_CHUNK_SIZE = 90
+const ACTIONABLE_WORKFLOW_STATES: ReadonlyArray<WorkflowState> = [
+	"triage",
+	"todo",
+	"in_progress",
+	"in_review",
+]
+
+/** Shared SQL ordering expression for the UI's critical-first issue ordering. */
+const issueSeverityOrder = sql<number>`CASE ${errorIssues.severity}
+	WHEN 'critical' THEN 0
+	WHEN 'high' THEN 1
+	WHEN 'medium' THEN 2
+	WHEN 'low' THEN 3
+	ELSE 4
+END`
+
+const severitySortRank = (severity: IssueSeverity | null): number => {
+	switch (severity) {
+		case "critical":
+			return 0
+		case "high":
+			return 1
+		case "medium":
+			return 2
+		case "low":
+			return 3
+		case null:
+			return 4
+	}
+}
 
 export const describeCause = (cause: unknown): string | undefined => {
 	if (cause == null) return undefined
@@ -211,7 +246,9 @@ export interface ErrorsServiceShape {
 			readonly startTime?: string
 			readonly endTime?: string
 			readonly limit?: number
-			readonly cursor?: IssueListCursorFields
+			readonly cursor?: IssueListCursorFields | IssueSeverityListCursorFields
+			readonly actionable?: boolean
+			readonly sort?: "last_seen" | "severity"
 		},
 	) => Effect.Effect<ErrorIssuesListResponse, ErrorPersistenceError>
 	readonly getIssue: (
@@ -1009,13 +1046,17 @@ const make: Effect.Effect<
 
 	const listIssues: ErrorsServiceShape["listIssues"] = Effect.fn("ErrorsService.listIssues")(
 		function* (orgId, opts) {
+			const sort = opts.sort ?? "last_seen"
 			yield* Effect.annotateCurrentSpan({
 				orgId,
 				workflowState: opts.workflowState ?? "all",
 				limit: opts.limit ?? 100,
+				sort,
 			})
 			const conditions = [eq(errorIssues.orgId, orgId)]
 			if (opts.workflowState) conditions.push(eq(errorIssues.workflowState, opts.workflowState))
+			if (opts.actionable)
+				conditions.push(inArray(errorIssues.workflowState, ACTIONABLE_WORKFLOW_STATES))
 			if (opts.severity === "unset") conditions.push(isNull(errorIssues.severity))
 			else if (opts.severity) conditions.push(eq(errorIssues.severity, opts.severity))
 			if (opts.kind) conditions.push(eq(errorIssues.kind, opts.kind))
@@ -1031,26 +1072,50 @@ const make: Effect.Effect<
 				if (Number.isFinite(startMs)) conditions.push(gt(errorIssues.lastSeenAt, new Date(startMs)))
 			}
 			if (opts.cursor) {
-				// Keyset continuation: strictly after the last row of the previous
-				// page in (lastSeenAt desc, id desc) order.
 				const cursorSeenAt = new Date(opts.cursor.lastSeenAt)
-				const keyset = or(
-					lt(errorIssues.lastSeenAt, cursorSeenAt),
-					and(eq(errorIssues.lastSeenAt, cursorSeenAt), lt(errorIssues.id, opts.cursor.id)),
-				)
+				// Keyset continuation must mirror the selected ordering exactly.
+				const keyset =
+					sort === "severity" && "severityRank" in opts.cursor
+						? or(
+								gt(issueSeverityOrder, opts.cursor.severityRank),
+								and(
+									eq(issueSeverityOrder, opts.cursor.severityRank),
+									or(
+										lt(errorIssues.lastSeenAt, cursorSeenAt),
+										and(
+											eq(errorIssues.lastSeenAt, cursorSeenAt),
+											lt(errorIssues.id, opts.cursor.id),
+										),
+									),
+								),
+							)
+						: or(
+								lt(errorIssues.lastSeenAt, cursorSeenAt),
+								and(
+									eq(errorIssues.lastSeenAt, cursorSeenAt),
+									lt(errorIssues.id, opts.cursor.id),
+								),
+							)
 				if (keyset) conditions.push(keyset)
 			}
 
 			const limit = Math.min(Math.max(opts.limit ?? 100, 1), 500)
 			// Fetch one extra row: its presence means another page exists.
-			const fetched = yield* dbExecute((db) =>
-				db
+			const fetched = yield* dbExecute((db) => {
+				const query = db
 					.select()
 					.from(errorIssues)
 					.where(and(...conditions))
-					.orderBy(desc(errorIssues.lastSeenAt), desc(errorIssues.id))
-					.limit(limit + 1),
-			)
+				return (
+					sort === "severity"
+						? query.orderBy(
+								issueSeverityOrder,
+								desc(errorIssues.lastSeenAt),
+								desc(errorIssues.id),
+							)
+						: query.orderBy(desc(errorIssues.lastSeenAt), desc(errorIssues.id))
+				).limit(limit + 1)
+			})
 			const hasMore = fetched.length > limit
 			const rows = hasMore ? fetched.slice(0, limit) : fetched
 
@@ -1064,16 +1129,21 @@ const make: Effect.Effect<
 			const issuesResult = rows.map((r) => rowToIssue(r, openSet.has(r.id), actorMap))
 			yield* Effect.annotateCurrentSpan({ issueCount: issuesResult.length, hasMore })
 			const lastRow = rows.at(-1)
-			return new ErrorIssuesListResponse(
+			const nextCursor =
 				hasMore && lastRow
-					? {
-							issues: issuesResult,
-							nextCursor: encodeIssueListCursor({
+					? sort === "severity"
+						? encodeIssueSeverityListCursor({
+								severityRank: severitySortRank(lastRow.severity),
 								lastSeenAt: lastRow.lastSeenAt.getTime(),
 								id: decodeErrorIssueIdSync(lastRow.id),
-							}),
-						}
-					: { issues: issuesResult },
+							})
+						: encodeIssueListCursor({
+								lastSeenAt: lastRow.lastSeenAt.getTime(),
+								id: decodeErrorIssueIdSync(lastRow.id),
+							})
+					: undefined
+			return new ErrorIssuesListResponse(
+				nextCursor === undefined ? { issues: issuesResult } : { issues: issuesResult, nextCursor },
 			)
 		},
 	)

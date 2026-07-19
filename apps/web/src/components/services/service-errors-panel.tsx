@@ -1,20 +1,13 @@
-import { useMemo } from "react"
 import { Link } from "@tanstack/react-router"
-import type { ErrorIssueDocument, WorkflowState } from "@maple/domain/http"
-import { Unitflow, View } from "@maple/unitflow/react"
+import type { ErrorIssueDocument } from "@maple/domain/http"
 import { Skeleton } from "@maple/ui/components/ui/skeleton"
 
-import { SeverityBadge, severityRank } from "@/components/errors/severity-badge"
-import { ErrorIssuesModel } from "@/lib/models/error-issues-model"
-import { unitflowRuntime } from "@/lib/models/runtime"
+import { SeverityBadge } from "@/components/errors/severity-badge"
+import { Result, useAtomValue } from "@/lib/effect-atom"
+import { MapleApiV2AtomClient } from "@/lib/services/common/v2-atom-client"
+import { buildServiceOpenIssuesQuery, errorIssueFromV2 } from "@/lib/services/error-issues"
 import { formatNumber } from "@/lib/format"
 import { formatTimeAgo, SectionCard } from "./section-card"
-
-const PANEL_LIMIT = 5
-
-// "Open" for this panel = still needs attention. Resolved/dismissed states are
-// what the full issues page is for.
-const OPEN_STATES: ReadonlySet<WorkflowState> = new Set(["triage", "todo", "in_progress", "in_review"])
 
 interface ServiceErrorsPanelProps {
 	serviceName: string
@@ -73,43 +66,14 @@ function IssueLine({ issue }: { issue: ErrorIssueDocument }) {
 	)
 }
 
-const PanelBody = View.make(ErrorIssuesModel, ({ overview }, props: ServiceErrorsPanelProps) => {
-	if (overview.phase === "loading") return <PanelSkeleton />
-	if (overview.phase === "error") {
-		return (
-			<PanelFrame>
-				<PanelMessage>Issues could not be loaded.</PanelMessage>
-			</PanelFrame>
-		)
-	}
-	return <PanelReady issues={overview.issues} serviceName={props.serviceName} />
-})
-
-function PanelReady({
-	issues,
-	serviceName,
-}: {
-	issues: ReadonlyArray<ErrorIssueDocument>
-	serviceName: string
-}) {
-	// The derived list arrives newest-seen-first; keep that as the tiebreaker and
-	// bubble the worst severities up so the panel reads as "most urgent first".
-	const serviceIssues = useMemo(
-		() =>
-			issues
-				.filter((issue) => issue.serviceName === serviceName && OPEN_STATES.has(issue.workflowState))
-				.toSorted((a, b) => severityRank(a.severity) - severityRank(b.severity))
-				.slice(0, PANEL_LIMIT),
-		[issues, serviceName],
-	)
-
+function PanelReady({ issues }: { issues: ReadonlyArray<ErrorIssueDocument> }) {
 	return (
 		<PanelFrame>
-			{serviceIssues.length === 0 ? (
+			{issues.length === 0 ? (
 				<PanelMessage>No open issues for this service.</PanelMessage>
 			) : (
 				<div className="space-y-px p-2">
-					{serviceIssues.map((issue) => (
+					{issues.map((issue) => (
 						<IssueLine key={issue.id} issue={issue} />
 					))}
 				</div>
@@ -119,18 +83,19 @@ function PanelReady({
 }
 
 export function ServiceErrorsPanel({ serviceName }: ServiceErrorsPanelProps) {
-	return (
-		<Unitflow
-			runtime={unitflowRuntime}
-			rootModel={ErrorIssuesModel}
-			building={<PanelSkeleton />}
-			failed={() => (
-				<PanelFrame>
-					<PanelMessage>Issues could not be loaded.</PanelMessage>
-				</PanelFrame>
-			)}
-		>
-			{(unit) => <PanelBody unit={unit} serviceName={serviceName} />}
-		</Unitflow>
+	const result = useAtomValue(
+		MapleApiV2AtomClient.query("errorIssues", "list", {
+			query: buildServiceOpenIssuesQuery(serviceName),
+			reactivityKeys: ["errorIssues"],
+		}),
 	)
+	if (Result.isInitial(result)) return <PanelSkeleton />
+	if (Result.isFailure(result)) {
+		return (
+			<PanelFrame>
+				<PanelMessage>Issues could not be loaded.</PanelMessage>
+			</PanelFrame>
+		)
+	}
+	return <PanelReady issues={result.value.data.map(errorIssueFromV2)} />
 }
