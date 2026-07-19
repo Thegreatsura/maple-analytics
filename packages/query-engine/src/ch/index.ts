@@ -145,6 +145,8 @@ export {
 export {
 	serviceOverviewQuery,
 	serviceCatalogQuery,
+	serviceHealthSnapshotQuery,
+	serviceHealthSnapshotRowSchema,
 	serviceHealthBaselineQuery,
 	serviceReleasesTimelineQuery,
 	serviceEnvironmentsQuery,
@@ -156,6 +158,8 @@ export {
 	type ServiceOverviewOutput,
 	type ServiceCatalogOpts,
 	type ServiceCatalogOutput,
+	type ServiceHealthSnapshotOpts,
+	type ServiceHealthSnapshotOutput,
 	type ServiceHealthBaselineOpts,
 	type ServiceHealthBaselineOutput,
 	type ServiceReleasesTimelineOpts,
