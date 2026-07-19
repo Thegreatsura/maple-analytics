@@ -222,19 +222,17 @@ function ServiceDetailContent() {
 							</TabsTrigger>
 						</TabsList>
 					</Tabs>
-					{/* Env scope drives every tab except Dependencies (whose bundle query
-					    has its own deploymentEnv semantics); hide it there so it can't
-					    imply a filter it doesn't drive. */}
-					{activeTab !== "dependencies" && (
-						<ServiceEnvironmentSwitcher
-							serviceName={serviceName}
-							startTime={effectiveStartTime}
-							endTime={effectiveEndTime}
-							environments={search.environments}
-							value={search.environments?.[0]}
-							onChange={handleEnvironmentChange}
-						/>
-					)}
+					{/* Env scope drives every tab — the Dependencies bundle takes the same
+					    single-select value via its deploymentEnv field (see
+					    toSingleDeploymentEnv). */}
+					<ServiceEnvironmentSwitcher
+						serviceName={serviceName}
+						startTime={effectiveStartTime}
+						endTime={effectiveEndTime}
+						environments={search.environments}
+						value={search.environments?.[0]}
+						onChange={handleEnvironmentChange}
+					/>
 					<div className="flex items-center gap-2">
 						<TimeRangeHeaderControls
 							startTime={search.startTime}
@@ -283,6 +281,7 @@ function ServiceDetailContent() {
 					timePreset={search.timePreset}
 					effectiveStartTime={effectiveStartTime}
 					effectiveEndTime={effectiveEndTime}
+					environments={search.environments}
 				/>
 			)}
 		</DashboardLayout>
@@ -433,23 +432,34 @@ function OverviewTab({
 				onViewAll={onShowOperations}
 			/>
 			<div className="grid gap-3 lg:grid-cols-2">
-				<ServiceErrorsPanel serviceName={serviceName} />
+				<ServiceErrorsPanel
+					serviceName={serviceName}
+					effectiveStartTime={effectiveStartTime}
+					effectiveEndTime={effectiveEndTime}
+					environments={environments}
+				/>
 				<ServiceRecentDeploys releases={releases} isLoading={isDetailLoading} />
+				{/* Usage + workloads are env-agnostic by design (rollup keyed
+				    org/hour/service; workload identity carries no env) — they flag
+				    themselves "all environments" when the page filter is active. */}
 				<ServiceUsagePanel
 					serviceName={serviceName}
 					effectiveStartTime={effectiveStartTime}
 					effectiveEndTime={effectiveEndTime}
+					envFilterActive={!!environments?.length}
 				/>
 				<ServiceWorkloadsPanel
 					serviceName={serviceName}
 					effectiveStartTime={effectiveStartTime}
 					effectiveEndTime={effectiveEndTime}
+					envFilterActive={!!environments?.length}
 				/>
 			</div>
 			<ServiceDependencyStrip
 				serviceName={serviceName}
 				effectiveStartTime={effectiveStartTime}
 				effectiveEndTime={effectiveEndTime}
+				environments={environments}
 				onViewAll={onShowDependencies}
 			/>
 		</div>

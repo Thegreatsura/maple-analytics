@@ -151,6 +151,7 @@ const testConfig = () =>
 const makeWarehouseStub = (
 	scanRows: () => ReadonlyArray<Record<string, unknown>> = () => [],
 	onScan?: () => void,
+	fingerprintRows?: () => ReadonlyArray<Record<string, unknown>>,
 ): WarehouseQueryServiceShape => ({
 	query: () => Effect.die(new Error("unexpected warehouse query")),
 	sqlQuery: () => Effect.succeed([]),
@@ -160,6 +161,10 @@ const makeWarehouseStub = (
 			if (options?.context === "errorIssuesScan") {
 				onScan?.()
 				return compiled.castRows(scanRows())
+			}
+			// listIssues' deployment-environment filter (shaped like ErrorFingerprintsOutput).
+			if (options?.context === "errorIssueEnvFingerprints") {
+				return compiled.castRows(fingerprintRows?.() ?? [])
 			}
 			// Active-org discovery reads the same data the scan does, so model that
 			// consistency: surface the org iff it currently has error rows.
@@ -180,6 +185,7 @@ const makeErrorsLayer = (
 	scanRows?: () => ReadonlyArray<Record<string, unknown>>,
 	onScan?: () => void,
 	edgeBackend?: ReturnType<typeof makeMemoryBackend>,
+	fingerprintRows?: () => ReadonlyArray<Record<string, unknown>>,
 ) => {
 	const testDb = createTestDb(createdDbs)
 	const envLive = Env.layer.pipe(Layer.provide(testConfig()))
@@ -192,7 +198,7 @@ const makeErrorsLayer = (
 			Layer.mergeAll(
 				envLive,
 				databaseLive,
-				Layer.succeed(WarehouseQueryService, makeWarehouseStub(scanRows, onScan)),
+				Layer.succeed(WarehouseQueryService, makeWarehouseStub(scanRows, onScan, fingerprintRows)),
 				Layer.succeed(EdgeCacheService, makeEdgeCacheService(edgeBackend ?? makeMemoryBackend())),
 				dispatcherStub,
 			),
@@ -523,6 +529,43 @@ describe("ErrorsService.setSeverity", () => {
 			)
 			assert.strictEqual(alerts.issues[0]?.kind, "alert")
 		}).pipe(Effect.provide(makeErrorsLayer())),
+	)
+
+	it.effect("listIssues deploymentEnv filter keeps only warehouse-observed fingerprints", () =>
+		Effect.gen(function* () {
+			const errors = yield* ErrorsService
+			const prodIssueId = asIssueId(randomUUID())
+			const otherIssueId = asIssueId(randomUUID())
+			yield* seedIssue(prodIssueId, { fingerprintHash: "111" })
+			yield* seedIssue(otherIssueId, { fingerprintHash: "222" })
+
+			const filtered = yield* errors.listIssues(ORG, { deploymentEnv: "production" })
+			assert.deepStrictEqual(
+				filtered.issues.map((i) => i.id),
+				[prodIssueId],
+			)
+
+			// The unfiltered list still returns both.
+			const all = yield* errors.listIssues(ORG, {})
+			assert.strictEqual(all.issues.length, 2)
+		}).pipe(
+			// The warehouse saw only fingerprint 111 in the selected environment.
+			Effect.provide(makeErrorsLayer(undefined, undefined, undefined, () => [{ fingerprintHash: "111" }])),
+		),
+	)
+
+	it.effect("listIssues deploymentEnv filter short-circuits when no fingerprints match", () =>
+		Effect.gen(function* () {
+			const errors = yield* ErrorsService
+			yield* seedIssue(asIssueId(randomUUID()))
+
+			const filtered = yield* errors.listIssues(ORG, { deploymentEnv: "staging" })
+			assert.deepStrictEqual(filtered.issues, [])
+			assert.strictEqual(filtered.nextCursor, undefined)
+		}).pipe(
+			// Default stub: the fingerprint lookup returns no rows for this env.
+			Effect.provide(makeErrorsLayer()),
+		),
 	)
 
 	it.effect("listIssues paginates with a keyset cursor", () =>

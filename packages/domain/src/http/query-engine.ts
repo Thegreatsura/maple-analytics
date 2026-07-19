@@ -556,6 +556,9 @@ export class ServiceDetailOverviewResponse extends Schema.Class<ServiceDetailOve
 			bucket: Schema.String,
 			commitSha: CommitSha,
 			count: Schema.Number,
+			// Error-status spans for this commit in this bucket. Optional so a web
+			// build deployed ahead of the API tolerates its absence (defaults to 0).
+			errorCount: Schema.optional(Schema.Number),
 		}),
 	),
 	// Distinct non-empty deployment environments this service reports in the

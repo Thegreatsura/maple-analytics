@@ -188,6 +188,7 @@ export {
 	errorsSummaryQuery,
 	errorDetailTracesQuery,
 	errorIssuesQuery,
+	errorFingerprintsQuery,
 	errorIssueTimeseriesQuery,
 	errorIssueSampleTracesQuery,
 	type ErrorsByTypeOpts,
@@ -211,6 +212,8 @@ export {
 	type ErrorDetailTracesOutput,
 	type ErrorIssuesOpts,
 	type ErrorIssuesOutput,
+	type ErrorFingerprintsOpts,
+	type ErrorFingerprintsOutput,
 	type ErrorIssueTimeseriesOutput,
 	type ErrorIssueSampleTracesOutput,
 } from "./queries/errors"

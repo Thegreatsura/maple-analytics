@@ -103,6 +103,14 @@ export const V2ErrorIssueListQuery = Schema.Struct({
 	severity: Schema.optional(Schema.Union([IssueSeverity, Schema.Literal("unset")])),
 	kind: Schema.optional(IssueKind),
 	service_name: Schema.optional(Schema.String),
+	// Only issues observed in this deployment environment (resolved against the
+	// warehouse's error events, scoped by start_time/end_time when provided).
+	// Alert-kind issues carry no environment and are excluded when this is set.
+	deployment_environment: Schema.optional(Schema.String),
+	// Activity window: last_seen_at > start_time and first_seen_at < end_time.
+	// Also bounds the deployment_environment lookup.
+	start_time: Schema.optional(Timestamp),
+	end_time: Schema.optional(Timestamp),
 	actionable: Schema.optional(Schema.Literal("true")),
 	sort: Schema.optional(Schema.Literals(["last_seen", "severity"])),
 }).annotate({

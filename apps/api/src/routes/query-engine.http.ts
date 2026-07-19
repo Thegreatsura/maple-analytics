@@ -1251,6 +1251,7 @@ export const HttpQueryEngineLive = HttpApiBuilder.group(MapleApi, "queryEngine",
 							bucket: String(row.bucket),
 							commitSha: decodeCommitSha(row.commitSha),
 							count: Number(row.count),
+							errorCount: Number(row.errorCount),
 						})),
 						environments: environmentRows
 							.map((row) => String(row.environment ?? ""))

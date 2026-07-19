@@ -162,16 +162,16 @@ function LoadingState() {
 	return (
 		<div className="space-y-4">
 			<div className="hidden rounded-md border overflow-auto md:block">
-				<Table>
+				<Table className="w-full table-fixed">
 					<TableHeader>
 						<TableRow>
 							<TableHead>Service</TableHead>
-							<TableHead className="w-[90px]">P50</TableHead>
-							<TableHead className="w-[90px]">P95</TableHead>
-							<TableHead className="w-[90px]">P99</TableHead>
-							<TableHead className="w-[180px]">Error Rate</TableHead>
-							<TableHead className="w-[180px]">Throughput</TableHead>
-							<TableHead className="w-[140px]">Commit</TableHead>
+							<TableHead className="w-[8%]">P50</TableHead>
+							<TableHead className="w-[8%]">P95</TableHead>
+							<TableHead className="w-[8%]">P99</TableHead>
+							<TableHead className="w-[16%]">Error Rate</TableHead>
+							<TableHead className="w-[16%]">Throughput</TableHead>
+							<TableHead className="w-[12%]">Commit</TableHead>
 						</TableRow>
 					</TableHeader>
 					<TableBody>
@@ -295,20 +295,25 @@ export function ServicesTable({ filters }: ServicesTableProps) {
 						{/* Desktop: full metrics table. Below md the fixed-width columns and
 					    in-cell sparklines force horizontal scroll, so we swap to a list. */}
 						<div className="hidden md:block rounded-md border overflow-auto">
-							<Table aria-label="Services">
+							{/* Fixed layout: the metric columns keep their set widths and the
+							    Service column absorbs whatever remains, truncating long names —
+							    so the table always fits the viewport instead of scrolling
+							    horizontally. */}
+							<Table aria-label="Services" className="w-full table-fixed">
 								<TableHeader>
 									<TableRow>
+										{/* Explicit width so the fixed layout scales every column
+										    proportionally — leaving Service auto would let the fixed
+										    metric columns squeeze it to nothing on narrow viewports. */}
 										<TableHead>Service</TableHead>
-										<TableHead className="hidden lg:table-cell w-[90px]">P50</TableHead>
-										<TableHead className="hidden lg:table-cell w-[90px]">P95</TableHead>
-										<TableHead className="w-[90px]">P99</TableHead>
-										<TableHead className="w-[180px]">Error Rate</TableHead>
-										<TableHead className="hidden md:table-cell w-[180px]">
+										<TableHead className="hidden lg:table-cell w-[8%]">P50</TableHead>
+										<TableHead className="hidden lg:table-cell w-[8%]">P95</TableHead>
+										<TableHead className="w-[8%]">P99</TableHead>
+										<TableHead className="w-[16%]">Error Rate</TableHead>
+										<TableHead className="hidden md:table-cell w-[16%]">
 											Throughput
 										</TableHead>
-										<TableHead className="hidden lg:table-cell w-[140px]">
-											Commit
-										</TableHead>
+										<TableHead className="hidden lg:table-cell w-[12%]">Commit</TableHead>
 									</TableRow>
 								</TableHeader>
 								<TableBody>
@@ -391,16 +396,19 @@ export function ServicesTable({ filters }: ServicesTableProps) {
 																		filters,
 																		service.environment,
 																	)}
-																	className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline"
+																	className="flex max-w-full items-center gap-1.5 font-medium text-primary hover:underline"
 																	onClick={(e) => e.stopPropagation()}
+																	title={service.serviceName}
 																>
 																	<ServiceDot
 																		serviceName={service.serviceName}
 																	/>
-																	{service.serviceName}
+																	<span className="min-w-0 truncate">
+																		{service.serviceName}
+																	</span>
 																</Link>
 																{service.serviceNamespace ? (
-																	<div className="text-xs text-muted-foreground">
+																	<div className="truncate text-xs text-muted-foreground">
 																		{service.serviceNamespace}
 																	</div>
 																) : null}
@@ -416,7 +424,7 @@ export function ServicesTable({ filters }: ServicesTableProps) {
 															</TableCell>
 															<TableCell>
 																<div
-																	className="relative w-[120px] h-8"
+																	className="relative h-8 w-full max-w-[120px]"
 																	role="img"
 																	aria-label={`Error rate: ${formatErrorRate(service.errorRate)}`}
 																>
@@ -437,7 +445,7 @@ export function ServicesTable({ filters }: ServicesTableProps) {
 															<TableCell className="hidden md:table-cell">
 																<Tooltip>
 																	<TooltipTrigger
-																		className="relative w-[120px] h-8 block"
+																		className="relative block h-8 w-full max-w-[120px]"
 																		aria-label={`Throughput: ${formatThroughput(service.throughput)}`}
 																	>
 																		<Sparkline

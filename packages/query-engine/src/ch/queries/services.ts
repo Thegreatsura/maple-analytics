@@ -254,6 +254,7 @@ export interface ServiceReleasesTimelineOutput {
 	readonly bucket: string
 	readonly commitSha: string
 	readonly count: number
+	readonly errorCount: number
 }
 
 export function serviceReleasesTimelineQuery(opts: ServiceReleasesTimelineOpts) {
@@ -262,6 +263,7 @@ export function serviceReleasesTimelineQuery(opts: ServiceReleasesTimelineOpts) 
 			bucket: CH.toStartOfInterval($.Timestamp, param.int("bucketSeconds")),
 			commitSha: $.CommitSha,
 			count: CH.count(),
+			errorCount: CH.countIf($.StatusCode.eq("Error")),
 		}))
 		.where(($) => [
 			$.OrgId.eq(param.string("orgId")),

@@ -16,6 +16,7 @@ import {
 	type V2ErrorIssueActor,
 	type V2ErrorIssueDetail,
 } from "@maple/domain/http/v2"
+import { warehouseDateTimeToIso } from "@maple/query-engine"
 import { Schema } from "effect"
 
 const asIso = Schema.decodeUnknownSync(IsoDateTimeString)
@@ -36,11 +37,36 @@ export const buildErrorIssueListQuery = (filters: {
 	...(filters.kind === undefined || filters.kind === "all" ? {} : { kind: filters.kind }),
 })
 
-export const buildServiceOpenIssuesQuery = (serviceName: string): ErrorIssueListQuery => ({
+export interface ServiceOpenIssuesScope {
+	/**
+	 * Deployment environment to scope the list to (the service list's display
+	 * label — the synthetic `"unknown"` is remapped to the raw empty-string
+	 * warehouse value here, mirroring `toEnvFilter` in custom-charts.ts).
+	 */
+	readonly environment?: string
+	/** Warehouse-format ("YYYY-MM-DD HH:mm:ss") or ISO datetimes. */
+	readonly startTime?: string
+	readonly endTime?: string
+}
+
+export const buildServiceOpenIssuesQuery = (
+	serviceName: string,
+	scope?: ServiceOpenIssuesScope,
+): ErrorIssueListQuery => ({
 	service_name: serviceName,
 	actionable: "true",
 	sort: "severity",
 	limit: 5,
+	// The env filter is resolved against the warehouse's error events, so it is
+	// inherently window-scoped — the page's time range rides along only when an
+	// environment is selected. The unfiltered panel stays all-time.
+	...(scope?.environment === undefined
+		? {}
+		: {
+				deployment_environment: scope.environment === "unknown" ? "" : scope.environment,
+				...(scope.startTime ? { start_time: warehouseDateTimeToIso(scope.startTime) } : {}),
+				...(scope.endTime ? { end_time: warehouseDateTimeToIso(scope.endTime) } : {}),
+			}),
 })
 
 /** Append a fetched page while keeping the first occurrence of each issue ID. */

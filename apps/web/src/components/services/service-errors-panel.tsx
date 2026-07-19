@@ -11,6 +11,10 @@ import { formatTimeAgo, SectionCard } from "./section-card"
 
 interface ServiceErrorsPanelProps {
 	serviceName: string
+	effectiveStartTime: string
+	effectiveEndTime: string
+	/** Page-level env filter (single-element by convention, see the route). */
+	environments?: string[]
 }
 
 function PanelFrame({ children }: { children: React.ReactNode }) {
@@ -82,10 +86,24 @@ function PanelReady({ issues }: { issues: ReadonlyArray<ErrorIssueDocument> }) {
 	)
 }
 
-export function ServiceErrorsPanel({ serviceName }: ServiceErrorsPanelProps) {
+export function ServiceErrorsPanel({
+	serviceName,
+	effectiveStartTime,
+	effectiveEndTime,
+	environments,
+}: ServiceErrorsPanelProps) {
+	// Only a single selected environment scopes the list (matching the switcher's
+	// single-select semantics); the page window rides along so the filter means
+	// "issues seen in this environment in this window".
+	const environment = environments?.length === 1 ? environments[0] : undefined
 	const result = useAtomValue(
 		MapleApiV2AtomClient.query("errorIssues", "list", {
-			query: buildServiceOpenIssuesQuery(serviceName),
+			query: buildServiceOpenIssuesQuery(
+				serviceName,
+				environment === undefined
+					? undefined
+					: { environment, startTime: effectiveStartTime, endTime: effectiveEndTime },
+			),
 			reactivityKeys: ["errorIssues"],
 		}),
 	)

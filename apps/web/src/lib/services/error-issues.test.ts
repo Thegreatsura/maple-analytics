@@ -26,6 +26,35 @@ describe("error issue v2 queries", () => {
 			limit: 5,
 		})
 	})
+
+	it("scopes to an environment + window only when an environment is selected", () => {
+		expect(
+			buildServiceOpenIssuesQuery("checkout-api", {
+				environment: "production",
+				startTime: "2026-07-18 00:00:00",
+				endTime: "2026-07-19 00:00:00",
+			}),
+		).toEqual({
+			service_name: "checkout-api",
+			actionable: "true",
+			sort: "severity",
+			limit: 5,
+			deployment_environment: "production",
+			start_time: "2026-07-18T00:00:00Z",
+			end_time: "2026-07-19T00:00:00Z",
+		})
+		// No environment selected → the window does not ride along (all-time panel).
+		expect(
+			buildServiceOpenIssuesQuery("checkout-api", {
+				startTime: "2026-07-18 00:00:00",
+				endTime: "2026-07-19 00:00:00",
+			}),
+		).toEqual({ service_name: "checkout-api", actionable: "true", sort: "severity", limit: 5 })
+		// The synthetic "unknown" label maps back to the raw empty-string env.
+		expect(buildServiceOpenIssuesQuery("checkout-api", { environment: "unknown" })).toMatchObject({
+			deployment_environment: "",
+		})
+	})
 })
 
 describe("errorIssueFromV2", () => {

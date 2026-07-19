@@ -103,6 +103,9 @@ const decodeStoredJsonRecord = Schema.decodeUnknownOption(
 const decodeStoredJsonArray = Schema.decodeUnknownOption(Schema.Array(Schema.Unknown))
 
 const DEFAULT_DETAIL_WINDOW_MS = 24 * 60 * 60 * 1000
+/** Fallback fingerprint-scan window for the issue list's env filter when the
+ *  caller provides no time range (30d ≈ the issue-list retention horizon). */
+const ENV_FINGERPRINT_DEFAULT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
 const DEFAULT_EVENTS_LIMIT = 100
 const AUTO_RESOLVE_MINUTES = 30
 const TICK_WINDOW_MS = 2 * 60_000
@@ -240,6 +243,10 @@ export interface ErrorsServiceShape {
 			readonly severity?: IssueSeverity | "unset"
 			readonly kind?: IssueKind
 			readonly service?: string
+			/** Only issues whose fingerprint the warehouse observed in this
+			 *  deployment environment (within startTime/endTime, defaulting to the
+			 *  trailing 30d). Costs one warehouse round-trip; excludes alert-kind
+			 *  issues (synthetic fingerprints carry no environment). */
 			readonly deploymentEnv?: string
 			readonly assignedActorId?: ActorId
 			readonly includeArchived?: boolean
@@ -1052,6 +1059,7 @@ const make: Effect.Effect<
 				workflowState: opts.workflowState ?? "all",
 				limit: opts.limit ?? 100,
 				sort,
+				...(opts.deploymentEnv ? { deploymentEnv: opts.deploymentEnv } : {}),
 			})
 			const conditions = [eq(errorIssues.orgId, orgId)]
 			if (opts.workflowState) conditions.push(eq(errorIssues.workflowState, opts.workflowState))
@@ -1061,6 +1069,44 @@ const make: Effect.Effect<
 			else if (opts.severity) conditions.push(eq(errorIssues.severity, opts.severity))
 			if (opts.kind) conditions.push(eq(errorIssues.kind, opts.kind))
 			if (opts.service) conditions.push(eq(errorIssues.serviceName, opts.service))
+			// `""` is a real filter (the raw value spans without a deployment env
+			// carry — the UI's synthetic "unknown" label), so check for undefined.
+			if (opts.deploymentEnv !== undefined) {
+				// Issue rows carry no environment (a fingerprint spans environments), so
+				// the env filter intersects against the fingerprints the warehouse saw in
+				// the selected environment over the requested window. Alert-kind issues
+				// have synthetic fingerprints that never match warehouse rows, so an env
+				// filter implicitly narrows the list to error-kind issues.
+				const nowMs = yield* Clock.currentTimeMillis
+				const endMs = opts.endTime ? parseWarehouseDateTime(opts.endTime) : Number.NaN
+				const startMs = opts.startTime ? parseWarehouseDateTime(opts.startTime) : Number.NaN
+				const scanEndMs = Number.isFinite(endMs) ? endMs : nowMs
+				const scanStartMs = Number.isFinite(startMs)
+					? startMs
+					: scanEndMs - ENV_FINGERPRINT_DEFAULT_WINDOW_MS
+				const compiled = CH.compile(
+					CH.errorFingerprintsQuery({
+						services: opts.service ? [opts.service] : undefined,
+						deploymentEnvs: [opts.deploymentEnv],
+					}),
+					{
+						orgId,
+						startTime: toTinybirdDateTime(scanStartMs),
+						endTime: toTinybirdDateTime(scanEndMs),
+					},
+				)
+				const fingerprintRows = yield* warehouse
+					.compiledQuery(systemTenant(orgId), compiled, { context: "errorIssueEnvFingerprints" })
+					.pipe(Effect.mapError((error) => makePersistenceError(error)))
+				const hashes = fingerprintRows
+					.map((row) => row.fingerprintHash)
+					.filter((hash) => hash.length > 0)
+				if (hashes.length === 0) {
+					yield* Effect.annotateCurrentSpan({ issueCount: 0, hasMore: false })
+					return new ErrorIssuesListResponse({ issues: [] })
+				}
+				conditions.push(inArray(errorIssues.fingerprintHash, hashes))
+			}
 			if (opts.assignedActorId) conditions.push(eq(errorIssues.assignedActorId, opts.assignedActorId))
 			if (!opts.includeArchived) conditions.push(isNull(errorIssues.archivedAt))
 			if (opts.endTime) {

@@ -182,6 +182,7 @@ describe("serviceReleasesTimelineQuery", () => {
 		expect(sql).toContain("CommitSha != ''")
 		expect(sql).toContain("CommitSha AS commitSha")
 		expect(sql).toContain("count() AS count")
+		expect(sql).toContain("countIf(StatusCode = 'Error') AS errorCount")
 		expect(sql).toContain("GROUP BY bucket, commitSha")
 		expect(sql).toContain("ORDER BY bucket ASC")
 		expect(sql).toContain("LIMIT 1000")
