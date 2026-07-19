@@ -10,7 +10,7 @@ import { useAlertIncidentsList, useAlertRulesList } from "@/hooks/use-alerts-lis
 import { QueryErrorState } from "@/components/common/query-error-state"
 import { AlertFiringHero } from "@/components/alerts/alert-stat-card"
 import { StatRail, StatRailItem, StatRailLoading } from "@/components/infra/primitives/stat-rail"
-import { ArrowRightIcon } from "@/components/icons"
+import { ArrowRightIcon, ArrowTrendDownIcon, ArrowTrendUpIcon } from "@/components/icons"
 import type { ServiceHealthSnapshot } from "@/api/warehouse/services"
 import type { AlertIncidentDocument, AnomalyIncidentDocument, AnomalySignalType } from "@maple/domain/http"
 
@@ -22,6 +22,7 @@ import { cn } from "@maple/ui/utils"
 
 import {
 	deriveServiceHealthFromCauses,
+	anomalyDirection,
 	healthRank,
 	primaryServiceHealthCause,
 	type ServiceHealthCause,
@@ -93,6 +94,10 @@ const HEALTH_DOT_COLOR: Record<ServiceHealth, string> = {
 	unhealthy: "var(--severity-error)",
 }
 
+function metricTone(cause: ServiceHealthCause | undefined): "ok" | "warn" | "crit" {
+	return cause === undefined ? "ok" : cause.severity === "critical" ? "crit" : "warn"
+}
+
 /**
  * Shared data layer for both halves of the dashboard's service-health feature.
  * The snapshot and anomaly atoms are stable, so subscribing from two
@@ -149,6 +154,7 @@ function enrichServices(
 					severity: incident.severity,
 					label: ANOMALY_LABEL[incident.signalType],
 					metric: ANOMALY_METRIC[incident.signalType],
+					direction: anomalyDirection(incident.signalType),
 				}))
 			const causes = [...alertCauses, ...anomalyCauses].sort((a, b) =>
 				a.severity === b.severity ? 0 : a.severity === "critical" ? -1 : 1,
@@ -355,8 +361,18 @@ function ServiceHealthRow({
 	const errorCause = causes.find((cause) => cause.metric === "error")
 	const latencyCause = causes.find((cause) => cause.metric === "latency")
 	const trafficCause = causes.find((cause) => cause.metric === "traffic")
-	const metricTone = (cause: ServiceHealthCause | undefined) =>
-		cause === undefined ? "ok" : cause.severity === "critical" ? "crit" : "warn"
+	const DirectionIcon =
+		primaryCause?.direction === "up"
+			? ArrowTrendUpIcon
+			: primaryCause?.direction === "down"
+				? ArrowTrendDownIcon
+				: null
+	const primaryCauseDescription =
+		primaryCause?.direction === "up"
+			? `${primaryCause.label}: increased above baseline`
+			: primaryCause?.direction === "down"
+				? `${primaryCause.label}: decreased below baseline`
+				: primaryCause?.label
 
 	return (
 		<li>
@@ -383,8 +399,11 @@ function ServiceHealthRow({
 						<Badge
 							variant={primaryCause.severity === "critical" ? "error" : "warning"}
 							size="sm"
-							className="shrink-0"
+							className={cn("shrink-0", DirectionIcon && "pr-1 pl-0.5")}
+							title={primaryCauseDescription}
+							aria-label={primaryCauseDescription}
 						>
+							{DirectionIcon && <DirectionIcon size={12} aria-hidden />}
 							{primaryCause.label}
 						</Badge>
 					)}
