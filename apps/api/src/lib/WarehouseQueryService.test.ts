@@ -702,6 +702,69 @@ describe("createTinybirdSdkSqlClient.insert wire framing (the production insert 
 	})
 })
 
+describe("createTinybirdSdkSqlClient.sql FORMAT normalization", () => {
+	// DSL-compiled queries already end with `FORMAT JSON` (optionally followed by
+	// profile SETTINGS). Appending a second FORMAT clause is a ClickHouse syntax
+	// error ("Syntax error at (FORMAT) ... Expected: SETTINGS, end of query") that
+	// broke every alerting query against managed Tinybird — pin the normalization.
+	const tbConfig = {
+		kind: "tinybird" as const,
+		host: "https://api.tinybird.co",
+		token: "tok_123",
+	}
+
+	const captureSql = async (sql: string): Promise<string> => {
+		const sent: string[] = []
+		const realFetch = globalThis.fetch
+		globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+			const url = String(input)
+			const fromParam = new URL(url).searchParams.get("q")
+			const body = typeof init?.body === "string" ? init.body : ""
+			sent.push(fromParam ?? body)
+			return new Response(JSON.stringify({ meta: [], data: [], rows: 0 }), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			})
+		}) as typeof fetch
+
+		try {
+			const client = __testables.createTinybirdSdkSqlClient(tbConfig)
+			await client.sql(sql, undefined)
+		} finally {
+			globalThis.fetch = realFetch
+		}
+
+		assert.strictEqual(sent.length, 1)
+		return sent[0]!
+	}
+
+	const countFormats = (sql: string) => (sql.match(/FORMAT JSON/g) ?? []).length
+
+	it("does not double-append when the query already ends with FORMAT JSON", async () => {
+		const sent = await captureSql("SELECT 1\nFORMAT JSON")
+		assert.strictEqual(countFormats(sent), 1)
+		assert.match(sent, /FORMAT JSON$/)
+	})
+
+	it("does not double-append when FORMAT JSON is followed by profile SETTINGS", async () => {
+		const sent = await captureSql(
+			"SELECT 1\nFORMAT JSON SETTINGS max_execution_time=15, max_memory_usage=1500000000",
+		)
+		assert.strictEqual(countFormats(sent), 1)
+		assert.match(sent, /FORMAT JSON SETTINGS max_execution_time=15, max_memory_usage=1500000000$/)
+	})
+
+	it("appends FORMAT JSON to raw SQL without a FORMAT clause", async () => {
+		const sent = await captureSql("SELECT 1")
+		assert.strictEqual(sent, "SELECT 1\nFORMAT JSON")
+	})
+
+	it("strips a trailing semicolon before appending", async () => {
+		const sent = await captureSql("SELECT 1;")
+		assert.strictEqual(sent, "SELECT 1\nFORMAT JSON")
+	})
+})
+
 describe("ingest routes writes to the managed pipeline, not a per-org read override", () => {
 	const clickhouseReadOverride = {
 		config: {
