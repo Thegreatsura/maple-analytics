@@ -116,19 +116,41 @@ function CommitsList({ commits }: { commits: CommitBreakdown[] }) {
 		)
 	}
 
-	// Each SHA gets its own hover card — avoids nesting a popup inside a popup.
+	// Several versions served traffic: keep the row ONE line — the dominant
+	// commit (hover-resolvable) plus a "+N" chip whose tooltip holds the full
+	// breakdown. Rendering every sha inline stacked the cell several rows tall
+	// and made the table unreadable for services mid-rollout.
+	const ordered = commits.toSorted((a, b) => b.percentage - a.percentage)
+	const [dominant, ...rest] = ordered
 	return (
-		<div className="flex flex-wrap items-center gap-1.5">
-			{commits.map((c) => (
-				<span key={c.commitSha} className="inline-flex items-center gap-0.5">
-					<CommitShaHoverCard sha={c.commitSha} className="font-mono">
-						{truncateCommitSha(c.commitSha)}
-					</CommitShaHoverCard>
-					<Badge variant="secondary" className="px-1 py-0 text-[10px] leading-tight">
-						{c.percentage}%
-					</Badge>
-				</span>
-			))}
+		<div className="flex items-center gap-1">
+			<CommitShaHoverCard sha={dominant.commitSha} className="font-mono">
+				{truncateCommitSha(dominant.commitSha)}
+			</CommitShaHoverCard>
+			<Badge variant="secondary" className="px-1 py-0 text-[10px] leading-tight">
+				{dominant.percentage}%
+			</Badge>
+			<Tooltip>
+				<TooltipTrigger
+					className="cursor-default rounded bg-muted px-1 py-0 font-mono text-[10px] leading-tight text-muted-foreground"
+					aria-label={`${rest.length} more versions`}
+				>
+					+{rest.length}
+				</TooltipTrigger>
+				<TooltipContent side="left" className="p-2">
+					<div className="flex flex-col gap-1">
+						{rest.map((c) => (
+							<div
+								key={c.commitSha}
+								className="flex items-center justify-between gap-3 font-mono text-xs"
+							>
+								<span>{truncateCommitSha(c.commitSha)}</span>
+								<span className="tabular-nums text-muted-foreground">{c.percentage}%</span>
+							</div>
+						))}
+					</div>
+				</TooltipContent>
+			</Tooltip>
 		</div>
 	)
 }
@@ -169,9 +191,9 @@ function LoadingState() {
 							<TableHead className="w-[8%]">P50</TableHead>
 							<TableHead className="w-[8%]">P95</TableHead>
 							<TableHead className="w-[8%]">P99</TableHead>
-							<TableHead className="w-[16%]">Error Rate</TableHead>
-							<TableHead className="w-[16%]">Throughput</TableHead>
-							<TableHead className="w-[12%]">Commit</TableHead>
+							<TableHead className="w-[14%]">Error Rate</TableHead>
+							<TableHead className="w-[14%]">Throughput</TableHead>
+							<TableHead className="w-[16%]">Commit</TableHead>
 						</TableRow>
 					</TableHeader>
 					<TableBody>
@@ -309,11 +331,11 @@ export function ServicesTable({ filters }: ServicesTableProps) {
 										<TableHead className="hidden lg:table-cell w-[8%]">P50</TableHead>
 										<TableHead className="hidden lg:table-cell w-[8%]">P95</TableHead>
 										<TableHead className="w-[8%]">P99</TableHead>
-										<TableHead className="w-[16%]">Error Rate</TableHead>
-										<TableHead className="hidden md:table-cell w-[16%]">
+										<TableHead className="w-[14%]">Error Rate</TableHead>
+										<TableHead className="hidden md:table-cell w-[14%]">
 											Throughput
 										</TableHead>
-										<TableHead className="hidden lg:table-cell w-[12%]">Commit</TableHead>
+										<TableHead className="hidden lg:table-cell w-[16%]">Commit</TableHead>
 									</TableRow>
 								</TableHeader>
 								<TableBody>
