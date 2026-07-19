@@ -75,7 +75,7 @@ interface EnrichedService {
 const ANOMALY_LABEL: Record<AnomalySignalType, string> = {
 	error_rate: "Error rate anomaly",
 	latency_p95: "Latency anomaly",
-	throughput: "Traffic anomaly",
+	throughput: "Traffic outage",
 	error_spike: "Error spike",
 	log_volume: "Log volume anomaly",
 }
