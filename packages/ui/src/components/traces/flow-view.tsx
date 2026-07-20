@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useEffect } from "react"
+import { useMemo, useCallback, useEffect, useRef, useState } from "react"
 import {
 	ReactFlow,
 	Controls,
@@ -8,6 +8,7 @@ import {
 	useNodesState,
 	useEdgesState,
 	type Node,
+	type ReactFlowInstance,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 
@@ -19,7 +20,14 @@ import { getServiceColor } from "../../lib/colors"
 import { describeSpan, SPAN_CATEGORIES } from "../../lib/span-category"
 import { ServiceDot } from "../service-dot"
 import { FlowSpanNode } from "./flow-node"
-import { transformSpansToFlow, getLayoutedElements, findSpanById, type FlowNodeData } from "./flow-utils"
+import {
+	transformSpansToFlow,
+	getLayoutedElements,
+	findSpanById,
+	type FlowNodeData,
+	type FlowNode,
+	type FlowEdge,
+} from "./flow-utils"
 import type { SpanNode } from "../../lib/types"
 
 interface TraceFlowViewProps {
@@ -51,11 +59,13 @@ export function TraceFlowView({
 	selectedSpanId,
 	onSelectSpan,
 }: TraceFlowViewProps) {
+	// Selection is intentionally NOT part of this memo — it's applied by the
+	// effect below, so a selection change never re-layouts or refits the view.
 	const { initialNodes, initialEdges } = useMemo(() => {
-		const { nodes, edges } = transformSpansToFlow(rootSpans, services, totalDurationMs, selectedSpanId)
+		const { nodes, edges } = transformSpansToFlow(rootSpans, services, totalDurationMs)
 		const layouted = getLayoutedElements(nodes, edges, rootSpans)
 		return { initialNodes: layouted.nodes, initialEdges: layouted.edges }
-	}, [rootSpans, services, totalDurationMs, selectedSpanId])
+	}, [rootSpans, services, totalDurationMs])
 
 	// Only legend categories that actually occur in this trace
 	const presentCategories = useMemo(() => {
@@ -68,14 +78,45 @@ export function TraceFlowView({
 	}, [initialNodes])
 
 	const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
-	const [edges] = useEdgesState(initialEdges)
+	const [edges, setEdges] = useEdgesState(initialEdges)
+	const [rfInstance, setRfInstance] = useState<ReactFlowInstance<FlowNode, FlowEdge> | null>(null)
+	const paneRef = useRef<HTMLDivElement | null>(null)
+	// Once the user pans/zooms themselves, stop auto-refitting under them.
+	const userMovedRef = useRef(false)
+
+	// Keep graph state in sync when the trace data arrives/changes after mount,
+	// and refit the viewport so the whole trace is visible without manual zooming.
+	useEffect(() => {
+		setNodes(initialNodes)
+		setEdges(initialEdges)
+		userMovedRef.current = false
+		if (!rfInstance) return
+		const frame = requestAnimationFrame(() => {
+			void rfInstance.fitView({ padding: 0.2, maxZoom: 1.5 })
+		})
+		return () => cancelAnimationFrame(frame)
+	}, [initialNodes, initialEdges, rfInstance, setNodes, setEdges])
+
+	// The pane's size settles after mount (tab activation, side panels, window
+	// resizes) — refit on resize until the user takes over the viewport.
+	useEffect(() => {
+		if (!rfInstance || !paneRef.current) return
+		const observer = new ResizeObserver(() => {
+			if (userMovedRef.current) return
+			requestAnimationFrame(() => {
+				if (!userMovedRef.current) void rfInstance.fitView({ padding: 0.2, maxZoom: 1.5 })
+			})
+		})
+		observer.observe(paneRef.current)
+		return () => observer.disconnect()
+	}, [rfInstance])
 
 	useEffect(() => {
 		setNodes((nds) =>
 			nds.map((node) => {
 				const nodeData = node.data as FlowNodeData
 				const isSelected =
-					nodeData.combinedSpans?.some((s) => s.spanId === selectedSpanId) ??
+					nodeData.combinedSpans.some((s) => s.spanId === selectedSpanId) ||
 					node.id === selectedSpanId
 				return {
 					...node,
@@ -112,10 +153,8 @@ export function TraceFlowView({
 					size="sm"
 					className="h-6 gap-1 text-xs"
 					onClick={() => {
-						const fitButton = document.querySelector(
-							".react-flow__controls-fitview",
-						) as HTMLButtonElement | null
-						fitButton?.click()
+						userMovedRef.current = false
+						void rfInstance?.fitView({ padding: 0.2, maxZoom: 1.5 })
 					}}
 				>
 					<EyeIcon size={12} />
@@ -123,12 +162,18 @@ export function TraceFlowView({
 				</Button>
 			</div>
 
-			<div className="flex-1 min-h-0">
+			<div ref={paneRef} className="flex-1 min-h-0">
 				<ReactFlow
 					nodes={nodes}
 					edges={edges}
 					onNodesChange={onNodesChange}
 					onNodeClick={handleNodeClick}
+					onInit={setRfInstance}
+					onMoveStart={(event) => {
+						// A user-initiated pan/zoom carries a source event;
+						// programmatic fitView moves pass null.
+						if (event) userMovedRef.current = true
+					}}
 					nodeTypes={nodeTypes}
 					defaultEdgeOptions={defaultEdgeOptions}
 					nodesDraggable={false}
