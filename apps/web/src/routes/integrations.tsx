@@ -9,6 +9,7 @@ import { PlanetScaleIntegrationCard } from "@/components/integrations/planetscal
 import {
 	IntegrationCatalog,
 	IntegrationIconPlate,
+	IntegrationsSummary,
 	catalogEntry,
 	useIntegrationStatuses,
 	type IntegrationId,
@@ -52,6 +53,7 @@ function IntegrationsPage() {
 				breadcrumbs={[{ label: "Settings", href: "/settings" }, { label: "Integrations" }]}
 				title="Integrations"
 				description="Connect external data sources and services to Maple."
+				headerActions={<IntegrationsSummary />}
 				filterSidebar={settingsSidebar}
 			>
 				<IntegrationCatalog onSelect={(id) => navigate({ search: { integration: id } })} />
