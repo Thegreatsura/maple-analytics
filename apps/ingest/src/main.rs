@@ -2106,14 +2106,13 @@ async fn handle_replay_blob_inner(
         .replay_session_budget
         .add(&org_id, &session_id, byte_size)
         .await;
-    if session_bytes >= state.config.replay_max_session_bytes
-        && state.config.replay_max_session_bytes > 0
-    {
+    let limit = state.config.replay_max_session_bytes;
+    if limit > 0 && session_bytes >= limit {
         warn!(
             org_id = %org_id,
             session_id = %session_id,
             session_bytes,
-            limit = state.config.replay_max_session_bytes,
+            limit,
             "session replay hit its byte ceiling; truncating recording"
         );
         Span::current().record("maple.replay.truncated", true);
@@ -4954,6 +4953,7 @@ mod tests {
                 autumn_check_cache_ttl_secs: 60,
                 ingest_key_cache_ttl_secs: 60,
                 org_routing_cache_ttl_secs: 5,
+                replay_max_session_bytes: 1024 * 1024 * 1024,
             },
             http_client,
             telemetry_pipeline: Some(telemetry_pipeline),
@@ -4992,7 +4992,44 @@ mod tests {
             },
             autumn_tracker: None,
             autumn_entitlements: None,
+            replay_session_budget: ReplaySessionBudget::new(1024 * 1024 * 1024),
         }
+    }
+
+    #[tokio::test]
+    async fn replay_budget_truncates_session_at_its_ceiling() {
+        let budget = ReplaySessionBudget::new(1_000);
+
+        // Under the ceiling: the session keeps accepting chunks.
+        assert_eq!(budget.add("org_a", "s1", 400).await, 400);
+        assert!(!budget.is_exhausted("org_a", "s1").await);
+        assert_eq!(budget.add("org_a", "s1", 400).await, 800);
+        assert!(!budget.is_exhausted("org_a", "s1").await);
+
+        // The chunk that crosses is still accepted, so the recording truncates on
+        // a chunk boundary rather than mid-payload.
+        assert_eq!(budget.add("org_a", "s1", 400).await, 1_200);
+        assert!(budget.is_exhausted("org_a", "s1").await);
+    }
+
+    #[tokio::test]
+    async fn replay_budget_scopes_totals_per_session_and_org() {
+        let budget = ReplaySessionBudget::new(1_000);
+        budget.add("org_a", "s1", 1_200).await;
+
+        // A different session in the same org is unaffected...
+        assert!(!budget.is_exhausted("org_a", "s2").await);
+        // ...as is the same session id belonging to a different org, so one
+        // tenant cannot exhaust another's budget by guessing session ids.
+        assert!(!budget.is_exhausted("org_b", "s1").await);
+        assert!(budget.is_exhausted("org_a", "s1").await);
+    }
+
+    #[tokio::test]
+    async fn replay_budget_disabled_when_limit_is_zero() {
+        let budget = ReplaySessionBudget::new(0);
+        budget.add("org_a", "s1", u64::MAX / 2).await;
+        assert!(!budget.is_exhausted("org_a", "s1").await);
     }
 
     #[tokio::test]
