@@ -495,15 +495,7 @@ export const customers_eyebrow = () => `Trusted by teams at`
  * @returns {string}
  */
 /* @__NO_SIDE_EFFECTS__ */
-export const ingest_stats_label = () => `traces / month`
-
-
-/**
- * 
- * @returns {string}
- */
-/* @__NO_SIDE_EFFECTS__ */
-export const stat_github = () => `on GitHub`
+export const ingest_stats_label = () => `traces ingested / month`
 
 
 /**
@@ -4768,3 +4760,11 @@ export const language_ja = () => `日本語`
  */
 /* @__NO_SIDE_EFFECTS__ */
 export const language_ko = () => `한국어`
+
+
+/**
+ * 
+ * @returns {string}
+ */
+/* @__NO_SIDE_EFFECTS__ */
+export const stat_github = () => `on GitHub`
