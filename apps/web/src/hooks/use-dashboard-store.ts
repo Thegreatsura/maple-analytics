@@ -169,6 +169,11 @@ function toDashboardDocument(dashboard: Dashboard): DashboardDocument {
 	})
 }
 
+// Deep-clone via JSON so present-`undefined` keys are dropped, not preserved
+// (structuredClone keeps them, and the v2 `optionalKey` encode rejects them —
+// see the note in `mutateDashboard`).
+const jsonClone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
+
 function toPortableDashboardDocument(dashboard: PortableDashboard): PortableDashboardDocument {
 	// See `toDashboardDocument`: omit the optionalKey `description`/`tags`/`variables`
 	// rather than forwarding a present `undefined`, which the Schema.Class constructor rejects.
@@ -177,8 +182,8 @@ function toPortableDashboardDocument(dashboard: PortableDashboard): PortableDash
 		...rest,
 		...(description !== undefined && { description }),
 		...(tags !== undefined && { tags: [...tags] }),
-		...(variables !== undefined && { variables: structuredClone(variables) }),
-		widgets: structuredClone(dashboard.widgets),
+		...(variables !== undefined && { variables: jsonClone(variables) }),
+		widgets: jsonClone(dashboard.widgets),
 		timeRange:
 			dashboard.timeRange.type === "absolute"
 				? {
@@ -557,10 +562,17 @@ export function useDashboardMutations() {
 			const updated = updater(current)
 			if (updated === current) return // no-op
 
-			// Store a plain (structurally-cloned) document so Immer's draft proxy
-			// never wraps a Schema.Class instance; onUpdate re-decodes it.
+			// Store a plain JSON-round-tripped document so Immer's draft proxy never
+			// wraps a Schema.Class instance; onUpdate re-decodes it. JSON (not
+			// structuredClone) on purpose: widget builders spread optional fields as
+			// present-`undefined` keys (e.g. `transform: undefined`), which
+			// structuredClone preserves — and the v2 PATCH encode (`optionalKey`
+			// fields) rejects a present undefined, failing the whole save
+			// ("Expected object, got undefined at [widgets][i][dataSource][transform]").
+			// The JSON round-trip drops them, exactly matching what the server's
+			// jsonb storage would keep anyway.
 			const nextDoc = toDashboardDocument(updated)
-			const plainDoc = structuredClone(nextDoc) as unknown
+			const plainDoc = JSON.parse(JSON.stringify(nextDoc)) as unknown
 
 			const tx = active.update(dashboardId, (draft) => {
 				draft.payload_json = plainDoc
