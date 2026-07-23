@@ -487,6 +487,14 @@ export const hero_subtitle = () => `Traces, logs, and metrics over OpenTelemetry
  * @returns {string}
  */
 /* @__NO_SIDE_EFFECTS__ */
+export const customers_eyebrow = () => `Trusted by teams at`
+
+
+/**
+ * 
+ * @returns {string}
+ */
+/* @__NO_SIDE_EFFECTS__ */
 export const sov_eyebrow = () => `01 · Sovereignty`
 
 

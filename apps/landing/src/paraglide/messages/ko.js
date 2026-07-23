@@ -487,6 +487,14 @@ export const hero_subtitle = () => `OpenTelemetry로 받는 트레이스, 로그
  * @returns {string}
  */
 /* @__NO_SIDE_EFFECTS__ */
+export const customers_eyebrow = () => `다음 팀들이 신뢰합니다`
+
+
+/**
+ * 
+ * @returns {string}
+ */
+/* @__NO_SIDE_EFFECTS__ */
 export const sov_eyebrow = () => `01 · Sovereignty`
 
 
