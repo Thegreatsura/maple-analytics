@@ -495,6 +495,22 @@ export const customers_eyebrow = () => `다음 팀들이 신뢰합니다`
  * @returns {string}
  */
 /* @__NO_SIDE_EFFECTS__ */
+export const ingest_stats_label = () => `트레이스 / 월`
+
+
+/**
+ * 
+ * @returns {string}
+ */
+/* @__NO_SIDE_EFFECTS__ */
+export const stat_github = () => `GitHub`
+
+
+/**
+ * 
+ * @returns {string}
+ */
+/* @__NO_SIDE_EFFECTS__ */
 export const sov_eyebrow = () => `01 · Sovereignty`
 
 

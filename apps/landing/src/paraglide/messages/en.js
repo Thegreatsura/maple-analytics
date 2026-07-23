@@ -495,6 +495,22 @@ export const customers_eyebrow = () => `Trusted by teams at`
  * @returns {string}
  */
 /* @__NO_SIDE_EFFECTS__ */
+export const ingest_stats_label = () => `traces / month`
+
+
+/**
+ * 
+ * @returns {string}
+ */
+/* @__NO_SIDE_EFFECTS__ */
+export const stat_github = () => `on GitHub`
+
+
+/**
+ * 
+ * @returns {string}
+ */
+/* @__NO_SIDE_EFFECTS__ */
 export const sov_eyebrow = () => `01 · Sovereignty`
 
 
